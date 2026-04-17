@@ -980,13 +980,14 @@ onMounted(() => {
 .hero__inner {
   min-height: calc(100svh - 7rem);
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(290px, 0.85fr);
+  grid-template-columns: minmax(0, 1.35fr) minmax(250px, 0.65fr);
   align-items: center;
-  gap: 3rem;
+  gap: clamp(2rem, 4vw, 4.5rem);
 }
 
 .hero__copy {
-  max-width: 40rem;
+  max-width: 46rem;
+  padding-right: clamp(0rem, 2vw, 1.75rem);
   animation: rise-in 700ms ease both;
 }
 
@@ -1010,9 +1011,10 @@ onMounted(() => {
 }
 
 .hero h1 {
-  max-width: 11ch;
-  font-size: clamp(3.1rem, 7vw, 6.5rem);
-  line-height: 0.95;
+  max-width: 13ch;
+  font-size: clamp(2.7rem, 5.4vw, 5.15rem);
+  line-height: 0.92;
+  text-wrap: balance;
 }
 
 .hero__lede,
@@ -1029,9 +1031,9 @@ onMounted(() => {
 }
 
 .hero__lede {
-  max-width: 34rem;
+  max-width: 38rem;
   margin: 1.35rem 0 0;
-  font-size: 1.1rem;
+  font-size: 1.04rem;
 }
 
 .hero__actions {
@@ -1091,14 +1093,14 @@ onMounted(() => {
 
 .hero__poster {
   display: flex;
-  justify-content: center;
+  justify-content: flex-end;
   animation: poster-in 860ms ease 60ms both;
 }
 
 .poster {
   position: relative;
-  width: min(30rem, 100%);
-  padding: 1.8rem;
+  width: min(27rem, 100%);
+  padding: 1.55rem;
   border-radius: 2rem;
   background: linear-gradient(160deg, rgba(255, 250, 243, 0.96), rgba(244, 234, 216, 0.92)), #fff;
   border: 1px solid rgba(40, 58, 45, 0.08);
@@ -1139,7 +1141,7 @@ onMounted(() => {
 
 .poster__headline strong {
   font-family: 'DM Serif Display', serif;
-  font-size: clamp(3rem, 8vw, 4.6rem);
+  font-size: clamp(2.7rem, 6vw, 4rem);
   line-height: 0.95;
   color: #17231b;
 }
