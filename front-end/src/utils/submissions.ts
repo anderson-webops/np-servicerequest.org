@@ -1,3 +1,5 @@
+import { getApiEndpoint } from './api'
+
 export const submissionKinds = {
   itemLending: 'item-lending',
   itemRequest: 'item-request',
@@ -7,7 +9,5 @@ export const submissionKinds = {
 export type SubmissionKind = (typeof submissionKinds)[keyof typeof submissionKinds]
 
 export function getSubmissionEndpoint(apiBaseUrl: string, kind: SubmissionKind) {
-  const normalizedBaseUrl = apiBaseUrl.replace(/\/$/, '')
-
-  return `${normalizedBaseUrl}/api/submissions/${kind}`
+  return getApiEndpoint(apiBaseUrl, `submissions/${kind}`)
 }

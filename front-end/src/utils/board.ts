@@ -1,4 +1,5 @@
 import type { SubmissionKind } from './submissions'
+import { getApiEndpoint } from './api'
 
 export interface AntiBotChallenge {
   action: string
@@ -86,8 +87,7 @@ export interface AuthResponse {
 }
 
 export function getBoardEndpoint(apiBaseUrl: string, path: string) {
-  const normalizedBaseUrl = apiBaseUrl.replace(/\/$/, '')
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  const normalizedPath = path.replace(/^\/+/, '').replace(/^board\/+/, '').replace(/^api\/board\/+/, '')
 
-  return `${normalizedBaseUrl}${normalizedPath}`
+  return getApiEndpoint(apiBaseUrl, `board/${normalizedPath}`)
 }

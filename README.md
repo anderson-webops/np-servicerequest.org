@@ -44,7 +44,7 @@ The landing page now exposes:
 The board and intake forms call the separate back-end API instead of relying on inline Nuxt routes or static form hosting.
 The previous PWA/service-worker runtime is intentionally disabled right now so clients do not keep serving stale cached form logic across deploys.
 
-Set `NUXT_PUBLIC_API_BASE_URL` when the front-end should target a non-default API host.
+Set `NUXT_PUBLIC_API_BASE_URL` when the front-end should target a non-default API host. This value should be the full API base, for example `https://np-servicerequest.org/api`.
 
 ## Back-End
 

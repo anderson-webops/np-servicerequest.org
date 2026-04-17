@@ -93,7 +93,7 @@ export function useBoardSubmission(kind: keyof typeof submissionKinds) {
   }
 
   async function loadBootstrap() {
-    const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, '/api/board/bootstrap')
+    const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'bootstrap')
 
     try {
       const response = await $fetch<BoardBootstrapResponse>(endpoint, {

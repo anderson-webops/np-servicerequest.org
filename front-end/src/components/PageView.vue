@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { getApiEndpoint } from '~/utils/api'
+
 const runtimeConfig = useRuntimeConfig()
 
 const pageview = ref<number | null>(null)
@@ -10,7 +12,7 @@ const time = useTimeAgo(() => startAt.value)
 
 onMounted(async () => {
   try {
-    const data = await $fetch<{ pageview: number, startAt: number }>(`${runtimeConfig.public.apiBaseUrl}/api/pageview`)
+    const data = await $fetch<{ pageview: number, startAt: number }>(getApiEndpoint(runtimeConfig.public.apiBaseUrl, 'pageview'))
     pageview.value = data.pageview
     startAt.value = data.startAt
   }

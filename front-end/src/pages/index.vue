@@ -308,7 +308,7 @@ function getApiErrorState(error: unknown, endpoint: string, fallbackMessage: str
 }
 
 async function loadBootstrap() {
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, '/api/board/bootstrap')
+  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'bootstrap')
 
   try {
     const response = await $fetch<BoardBootstrapResponse>(endpoint, {
@@ -324,7 +324,7 @@ async function loadBootstrap() {
 }
 
 async function loadBoardItems() {
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, '/api/board/items')
+  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'items')
   boardPending.value = true
   boardError.value = null
 
@@ -369,7 +369,7 @@ async function protectedPost<T>(endpoint: string, body: Record<string, string>) 
 async function submitBoardReply(item: BoardItem) {
   const draft = getReplyDraft(item.id)
   const status = getReplyStatus(item.id)
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `/api/board/items/${item.id}/interactions`)
+  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `items/${item.id}/interactions`)
   status.pending = true
   status.success = false
   status.error = null
@@ -396,7 +396,7 @@ async function submitBoardReply(item: BoardItem) {
 async function revealItemContact(item: BoardItem) {
   const key = getRevealKey(item.id)
   ensureRevealState(key)
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `/api/board/items/${item.id}/contact`)
+  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `items/${item.id}/contact`)
   revealPending[key] = true
   revealErrors[key] = null
 
@@ -419,7 +419,7 @@ async function revealItemContact(item: BoardItem) {
 async function revealInteractionContact(itemId: string, interactionId: string) {
   const key = getRevealKey(itemId, interactionId)
   ensureRevealState(key)
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `/api/board/items/${itemId}/interactions/${interactionId}/contact`)
+  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `items/${itemId}/interactions/${interactionId}/contact`)
   revealPending[key] = true
   revealErrors[key] = null
 
@@ -440,7 +440,7 @@ async function revealInteractionContact(itemId: string, interactionId: string) {
 }
 
 async function registerAccount() {
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, '/api/board/account/register')
+  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'account/register')
   authPending.value = true
   authError.value = null
   authNotice.value = ''
@@ -461,7 +461,7 @@ async function registerAccount() {
 }
 
 async function loginAccount() {
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, '/api/board/account/login')
+  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'account/login')
   authPending.value = true
   authError.value = null
   authNotice.value = ''
@@ -482,7 +482,7 @@ async function loginAccount() {
 }
 
 async function logoutAccount() {
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, '/api/board/account/logout')
+  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'account/logout')
   logoutPending.value = true
   authError.value = null
   authNotice.value = ''
@@ -1240,7 +1240,6 @@ onMounted(() => {
 
 .live-board__layout {
   display: grid;
-  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
   gap: 1.35rem;
   align-items: start;
 }
@@ -1255,8 +1254,7 @@ onMounted(() => {
 }
 
 .account-panel {
-  position: sticky;
-  top: 6.25rem;
+  position: static;
 }
 
 .account-panel h3 {
@@ -1757,13 +1755,8 @@ onMounted(() => {
 }
 
 @media (max-width: 1080px) {
-  .live-board__layout,
   .hero__inner {
     grid-template-columns: 1fr;
-  }
-
-  .account-panel {
-    position: static;
   }
 }
 
