@@ -1,9 +1,15 @@
 <script setup lang="ts">
-type SubmissionKind = 'service-request' | 'item-request' | 'item-lending'
+import { getSubmissionEndpoint, submissionKinds } from '~/utils/submissions'
+
 type FormStatusKey = 'service' | 'itemRequest' | 'itemLending'
 
+interface FormErrorState {
+  detail: string
+  message: string
+}
+
 interface FormStatus {
-  error: string
+  error: FormErrorState | null
   pending: boolean
   success: boolean
 }
@@ -21,52 +27,76 @@ const runtimeConfig = useRuntimeConfig()
 
 const formStatuses = reactive<Record<FormStatusKey, FormStatus>>({
   service: {
-    error: '',
+    error: null,
     pending: false,
     success: false,
   },
   itemRequest: {
-    error: '',
+    error: null,
     pending: false,
     success: false,
   },
   itemLending: {
-    error: '',
+    error: null,
     pending: false,
     success: false,
   },
 })
 
-function getSubmissionErrorMessage(error: unknown) {
-  const fallbackMessage = 'We could not send your submission right now. Please try again in a moment.'
+function getSubmissionErrorState(error: unknown, endpoint: string): FormErrorState {
+  const fallbackMessage = 'We could not send your submission right now.'
+  const fallbackDetail = `Request URL: ${endpoint}. Please try again in a moment.`
+  let statusCode: number | null = null
+  let serverMessage = ''
 
   if (error && typeof error === 'object' && 'data' in error) {
     const data = (error as { data?: unknown }).data
 
     if (data && typeof data === 'object' && 'message' in data && typeof data.message === 'string')
-      return data.message
+      serverMessage = data.message
   }
 
-  return fallbackMessage
+  if (error && typeof error === 'object' && 'status' in error && typeof error.status === 'number')
+    statusCode = error.status
+
+  if (statusCode === 404) {
+    return {
+      message: serverMessage || 'The server did not recognize this submission URL.',
+      detail: `POST ${endpoint} returned 404. This usually means the browser is still running stale cached app files. Hard refresh this page and try again.`,
+    }
+  }
+
+  if (statusCode != null) {
+    return {
+      message: serverMessage || `Submission failed with HTTP ${statusCode}.`,
+      detail: `Request URL: ${endpoint}.`,
+    }
+  }
+
+  return {
+    message: serverMessage || fallbackMessage,
+    detail: serverMessage ? `Request URL: ${endpoint}.` : fallbackDetail,
+  }
 }
 
-async function submitSubmission(formKey: FormStatusKey, kind: SubmissionKind, event: Event) {
+async function submitSubmission(formKey: FormStatusKey, kind: keyof typeof submissionKinds, event: Event) {
   const form = event.currentTarget
 
   if (!(form instanceof HTMLFormElement))
     return
 
   const status = formStatuses[formKey]
+  const endpoint = getSubmissionEndpoint(runtimeConfig.public.apiBaseUrl, submissionKinds[kind])
   status.pending = true
   status.success = false
-  status.error = ''
+  status.error = null
 
   const payload = Object.fromEntries(
     Array.from(new FormData(form).entries()).map(([key, value]) => [key, typeof value === 'string' ? value : '']),
   )
 
   try {
-    await $fetch(`${runtimeConfig.public.apiBaseUrl}/api/submissions/${kind}`, {
+    await $fetch(endpoint, {
       body: payload,
       method: 'POST',
     })
@@ -75,7 +105,7 @@ async function submitSubmission(formKey: FormStatusKey, kind: SubmissionKind, ev
     status.success = true
   }
   catch (error) {
-    status.error = getSubmissionErrorMessage(error)
+    status.error = getSubmissionErrorState(error, endpoint)
   }
   finally {
     status.pending = false
@@ -227,15 +257,20 @@ const boardGroups = [
         <p v-if="formStatuses.service.success" class="success-note" role="status">
           Thank you. Your service project request is ready for follow-up.
         </p>
-        <p v-if="formStatuses.service.error" class="error-note" role="alert">
-          {{ formStatuses.service.error }}
-        </p>
+        <div v-if="formStatuses.service.error" class="error-panel" role="alert">
+          <p class="error-note">
+            {{ formStatuses.service.error.message }}
+          </p>
+          <p class="error-note-detail">
+            {{ formStatuses.service.error.detail }}
+          </p>
+        </div>
       </div>
 
       <form
         class="intake__form"
         :aria-busy="formStatuses.service.pending"
-        @submit.prevent="submitSubmission('service', 'service-request', $event)"
+        @submit.prevent="submitSubmission('service', 'service', $event)"
       >
         <p class="sr-only">
           <label>Do not fill this field if you are human. <input name="bot-field" type="text"></label>
@@ -310,15 +345,20 @@ const boardGroups = [
         <p v-if="formStatuses.itemRequest.success" class="success-note" role="status">
           Thank you. Your item request is ready for someone to respond to.
         </p>
-        <p v-if="formStatuses.itemRequest.error" class="error-note" role="alert">
-          {{ formStatuses.itemRequest.error }}
-        </p>
+        <div v-if="formStatuses.itemRequest.error" class="error-panel" role="alert">
+          <p class="error-note">
+            {{ formStatuses.itemRequest.error.message }}
+          </p>
+          <p class="error-note-detail">
+            {{ formStatuses.itemRequest.error.detail }}
+          </p>
+        </div>
       </div>
 
       <form
         class="intake__form"
         :aria-busy="formStatuses.itemRequest.pending"
-        @submit.prevent="submitSubmission('itemRequest', 'item-request', $event)"
+        @submit.prevent="submitSubmission('itemRequest', 'itemRequest', $event)"
       >
         <p class="sr-only">
           <label>Do not fill this field if you are human. <input name="bot-field" type="text"></label>
@@ -400,15 +440,20 @@ const boardGroups = [
         <p v-if="formStatuses.itemLending.success" class="success-note" role="status">
           Thank you. Your lending offer is ready for interested neighbors to review.
         </p>
-        <p v-if="formStatuses.itemLending.error" class="error-note" role="alert">
-          {{ formStatuses.itemLending.error }}
-        </p>
+        <div v-if="formStatuses.itemLending.error" class="error-panel" role="alert">
+          <p class="error-note">
+            {{ formStatuses.itemLending.error.message }}
+          </p>
+          <p class="error-note-detail">
+            {{ formStatuses.itemLending.error.detail }}
+          </p>
+        </div>
       </div>
 
       <form
         class="intake__form"
         :aria-busy="formStatuses.itemLending.pending"
-        @submit.prevent="submitSubmission('itemLending', 'item-lending', $event)"
+        @submit.prevent="submitSubmission('itemLending', 'itemLending', $event)"
       >
         <p class="sr-only">
           <label>Do not fill this field if you are human. <input name="bot-field" type="text"></label>
@@ -909,15 +954,24 @@ const boardGroups = [
   font-weight: 700;
 }
 
-.error-note {
-  display: inline-flex;
-  align-items: center;
+.error-panel {
   margin-top: 1.35rem;
-  padding: 0.8rem 1rem;
+  padding: 0.95rem 1rem;
   border-radius: 1rem;
   background: rgba(176, 70, 34, 0.1);
   color: #7a3119;
+}
+
+.error-note {
+  margin: 0;
   font-weight: 700;
+}
+
+.error-note-detail {
+  margin: 0.45rem 0 0;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  word-break: break-word;
 }
 
 .closing-note {
