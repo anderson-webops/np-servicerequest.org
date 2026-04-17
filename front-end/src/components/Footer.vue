@@ -5,14 +5,16 @@
         Neighbors helping neighbors
       </p>
       <p class="site-footer__text">
-        Request a project, borrow something useful, or offer items that another person can put to work.
+        Post to the live board, borrow something useful, offer what you can lend, and respond with or without an account.
       </p>
     </div>
 
     <div class="site-footer__links">
+      <a href="/#live-board">Live board</a>
       <a href="/#service-request">Service projects</a>
       <a href="/#item-request">Borrow an item</a>
       <a href="/#item-lending">Lend an item</a>
+      <a href="/#account-hub">Optional account</a>
     </div>
   </footer>
 </template>

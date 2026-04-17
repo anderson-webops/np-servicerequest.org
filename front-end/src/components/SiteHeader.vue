@@ -6,9 +6,11 @@
     </NuxtLink>
 
     <nav aria-label="Primary" class="site-header__nav">
+      <a href="/#live-board">Live board</a>
       <a href="/#service-request">Service projects</a>
       <a href="/#item-request">Borrow an item</a>
       <a href="/#item-lending">Lend an item</a>
+      <a href="/#account-hub">Optional account</a>
     </nav>
   </header>
 </template>

@@ -15,22 +15,22 @@ export const submissionKinds = [
 export type SubmissionKind = (typeof submissionKinds)[number]
 
 interface SubmissionConfig {
-  readonly requiredFields: readonly string[]
   readonly optionalFields?: readonly string[]
+  readonly requiredFields: readonly string[]
 }
 
 const submissionConfig: Record<SubmissionKind, SubmissionConfig> = {
   'service-request': {
     requiredFields: ['name', 'contact', 'project_type', 'location', 'timing', 'details'],
-    optionalFields: ['bot-field'],
+    optionalFields: ['challengeIssuedAt', 'challengeToken', 'bot-field'],
   },
   'item-request': {
     requiredFields: ['name', 'contact', 'item_needed', 'duration', 'pickup_plan', 'neighborhood', 'details'],
-    optionalFields: ['needed_by', 'bot-field'],
+    optionalFields: ['needed_by', 'challengeIssuedAt', 'challengeToken', 'bot-field'],
   },
   'item-lending': {
     requiredFields: ['name', 'contact', 'item_available', 'neighborhood', 'availability', 'condition', 'guidelines'],
-    optionalFields: ['bot-field'],
+    optionalFields: ['challengeIssuedAt', 'challengeToken', 'bot-field'],
   },
 }
 
@@ -41,24 +41,32 @@ export class SubmissionValidationError extends Error {
   }
 }
 
+export class AccountValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'AccountValidationError'
+  }
+}
+
 export interface SaveSubmissionInput {
+  ip?: string
   kind: SubmissionKind
   rawPayload: unknown
-  ip?: string
   userAgent?: string
 }
 
 export interface SaveSubmissionResult {
-  id: string
   accepted: boolean
   createdAt: string
+  fields: Record<string, string>
+  id: string
 }
 
 interface StoredSubmission {
-  id: string
-  kind: SubmissionKind
   createdAt: string
   fields: Record<string, string>
+  id: string
+  kind: SubmissionKind
   meta: {
     ip?: string
     userAgent?: string
@@ -70,21 +78,18 @@ export function isSubmissionKind(value: string): value is SubmissionKind {
 }
 
 function ensureRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new SubmissionValidationError('Submission payload must be a JSON object.')
-  }
 
   return value as Record<string, unknown>
 }
 
 function normalizeFieldValue(value: unknown): string {
-  if (value == null) {
+  if (value == null)
     return ''
-  }
 
-  if (typeof value !== 'string') {
+  if (typeof value !== 'string')
     throw new SubmissionValidationError('Submission fields must be sent as strings.')
-  }
 
   return value.trim()
 }
@@ -103,14 +108,15 @@ function validatePayload(kind: SubmissionKind, payload: Record<string, string>) 
   const config = submissionConfig[kind]
   const missingFieldNames = config.requiredFields.filter(fieldName => !payload[fieldName])
 
-  if (missingFieldNames.length > 0) {
+  if (missingFieldNames.length > 0)
     throw new SubmissionValidationError(`Missing required fields: ${missingFieldNames.join(', ')}`)
-  }
 
   for (const [fieldName, value] of Object.entries(payload)) {
-    if (value.length > 4000) {
+    if (value.length > 4000)
       throw new SubmissionValidationError(`Field "${fieldName}" is too long.`)
-    }
+
+    if ((value.match(/https?:\/\/|www\./gi)?.length || 0) > 2)
+      throw new SubmissionValidationError(`Field "${fieldName}" contains too many links.`)
   }
 }
 
@@ -132,13 +138,17 @@ export async function saveSubmission(input: SaveSubmissionInput): Promise<SaveSu
       id,
       accepted: false,
       createdAt,
+      fields: {},
     }
   }
 
   validatePayload(input.kind, payload)
 
   const fields = Object.fromEntries(
-    Object.entries(payload).filter(([fieldName, value]) => fieldName !== 'bot-field' && value.length > 0),
+    Object.entries(payload).filter(
+      ([fieldName, value]) =>
+        !['bot-field', 'challengeIssuedAt', 'challengeToken'].includes(fieldName) && value.length > 0,
+    ),
   )
 
   const submission: StoredSubmission = {
@@ -165,5 +175,6 @@ export async function saveSubmission(input: SaveSubmissionInput): Promise<SaveSu
     id,
     accepted: true,
     createdAt,
+    fields,
   }
 }

@@ -1,6 +1,6 @@
 import process from 'node:process'
 
-import { appDescription } from './app/constants/index'
+import { appDescription } from './src/constants/index'
 
 export default defineNuxtConfig({
   modules: [
@@ -41,6 +41,8 @@ export default defineNuxtConfig({
       apiBaseUrl: process.env.NUXT_PUBLIC_API_BASE_URL || 'http://localhost:3006',
     },
   },
+
+  srcDir: 'src',
 
   future: {
     compatibilityVersion: 4,

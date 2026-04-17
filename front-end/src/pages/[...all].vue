@@ -7,7 +7,7 @@
       That page is not part of the request board.
     </h1>
     <p>
-      Head back to the main page to request a service project, borrow an item, or offer something useful to lend.
+      Head back to the main page to browse the live board, request a service project, borrow an item, or offer something useful to lend.
     </p>
     <NuxtLink class="not-found__link" to="/">
       Return home
