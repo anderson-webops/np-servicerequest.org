@@ -3,8 +3,8 @@
 **/dist
 **/.output
 **/.nuxt
+**/*.tsbuildinfo
 .run
-back-end/.data
 
 # local env files
 **/.env

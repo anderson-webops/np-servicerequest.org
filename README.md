@@ -50,7 +50,7 @@ The API lives in `back-end` and exposes:
 
 Default port: `3006`
 
-Form submissions are written as JSON files under `back-end/.data/submissions` by default. Set `SUBMISSIONS_DATA_DIR` to store them elsewhere on the host.
+Form submissions are written under `SUBMISSIONS_DATA_DIR` when it is set. When it is not set, the back-end falls back to an OS temp directory under `np-servicerequest/submissions`, which is suitable for local development but not durable production storage.
 
 ## Git Remotes
 

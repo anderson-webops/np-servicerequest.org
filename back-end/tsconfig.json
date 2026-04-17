@@ -4,6 +4,7 @@
 		"incremental": true,
 		"module": "nodenext",
 		"moduleResolution": "nodenext",
+		"rootDir": "./src",
 		"sourceMap": true,
 		"outDir": "./dist",
 		"allowSyntheticDefaultImports": true,
