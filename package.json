@@ -1,10 +1,10 @@
 {
-	"name": "vitesse-nuxt-monorepo",
+	"name": "np-servicerequest-org-monorepo",
 	"type": "module",
 	"version": "1.0.0",
 	"private": true,
 	"packageManager": "npm@11.12.0",
-	"description": "Monorepo template based on antfu's vitesse-nuxt",
+	"description": "Monorepo for np-servicerequest.org",
 	"author": "Jacob Anderson",
 	"license": "ISC",
 	"keywords": [],

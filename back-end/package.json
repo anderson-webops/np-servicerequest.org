@@ -2,7 +2,7 @@
 	"name": "back-end",
 	"version": "1.0.0",
 	"private": true,
-	"description": "Minimal Express API for the vitesse-nuxt monorepo template.",
+	"description": "Minimal Express API for np-servicerequest.org.",
 	"type": "module",
 	"main": "dist/server.js",
 	"scripts": {

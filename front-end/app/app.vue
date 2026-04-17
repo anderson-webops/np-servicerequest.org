@@ -17,9 +17,19 @@ useHead({
 html,
 body,
 #__nuxt {
-  height: 100vh;
+  min-height: 100%;
   margin: 0;
   padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  background: #f5f0e5;
+}
+
+body,
+#__nuxt {
+  min-height: 100vh;
 }
 
 html.dark {

@@ -1,10 +1,10 @@
-# Vitesse Nuxt Monorepo Template
+# np-servicerequest.org
 
-This repo starts from [antfu/vitesse-nuxt](https://github.com/antfu/vitesse-nuxt) and reshapes it into the monorepo pattern used by the other sites in this directory.
+This repo is based on the local `vitesse-nuxt` monorepo template, which itself was adapted from [antfu/vitesse-nuxt](https://github.com/antfu/vitesse-nuxt).
 
 ## Structure
 
-- `front-end`: Nuxt 4 app derived from Vitesse Nuxt
+- `front-end`: Nuxt 4 app derived from the Vitesse Nuxt base
 - `back-end`: separate Express API package
 - root `package.json`: npm workspace entrypoint
 - root `tsconfig.base.json`: shared TypeScript settings
@@ -28,7 +28,7 @@ Useful root commands:
 
 ## Front-End
 
-The Nuxt app lives in `front-end` and keeps the upstream Vitesse Nuxt app structure:
+The Nuxt app lives in `front-end` and keeps the template app structure:
 
 - `front-end/app`
 - `front-end/public`
@@ -49,4 +49,4 @@ Default port: `3006`
 
 ## Git Remotes
 
-`antfu/vitesse-nuxt` is configured as the `upstream` remote so you can keep your own GitHub repo as `origin`.
+`antfu/vitesse-nuxt` is configured as the `upstream` remote so this repo can still track the original template lineage.
