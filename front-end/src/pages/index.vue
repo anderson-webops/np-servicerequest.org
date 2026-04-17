@@ -1276,18 +1276,6 @@ onMounted(() => {
         </button>
       </form>
     </section>
-
-    <section class="closing-note">
-      <p class="eyebrow">
-        Keep it practical
-      </p>
-      <h2>
-        Clear descriptions and deliberate contact reveals make this board more useful and harder for bots to abuse.
-      </h2>
-      <p>
-        If your request does not fit perfectly into one category, choose the closest form and explain the situation clearly so someone can act on it.
-      </p>
-    </section>
   </div>
 </template>
 
@@ -1304,8 +1292,7 @@ onMounted(() => {
 .process,
 .board-groups,
 .intake-intro,
-.intake,
-.closing-note {
+.intake {
   padding-inline: 5vw;
 }
 
@@ -1338,8 +1325,7 @@ onMounted(() => {
 .hero h1,
 .section-heading h2,
 .account-panel h3,
-.intake__copy h2,
-.closing-note h2 {
+.intake__copy h2 {
   margin: 0;
   font-family: 'DM Serif Display', serif;
   font-weight: 400;
@@ -1357,7 +1343,6 @@ onMounted(() => {
 .section-copy,
 .account-panel p,
 .intake__copy p,
-.closing-note p,
 .process__list p,
 .board-groups li,
 .board-card__summary,
@@ -2079,10 +2064,6 @@ onMounted(() => {
   margin-top: 0.35rem;
 }
 
-.closing-note {
-  padding-top: 0.5rem;
-}
-
 .sr-only {
   position: absolute;
   width: 1px;
@@ -2156,8 +2137,7 @@ onMounted(() => {
   .process,
   .board-groups,
   .intake-intro,
-  .intake,
-  .closing-note {
+  .intake {
     padding-inline: 1.25rem;
   }
 

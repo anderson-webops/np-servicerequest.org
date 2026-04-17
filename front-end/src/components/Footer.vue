@@ -1,14 +1,5 @@
 <template>
   <footer class="site-footer">
-    <div class="site-footer__copy">
-      <p class="site-footer__label">
-        Neighbors helping neighbors
-      </p>
-      <p class="site-footer__text">
-        Post to the live board, borrow something useful, offer what you can lend, and respond with or without an account.
-      </p>
-    </div>
-
     <div class="site-footer__links">
       <a href="/#live-board">Live board</a>
       <a href="/#service-request">Service projects</a>
@@ -22,29 +13,9 @@
 <style scoped>
 .site-footer {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1.5rem;
+  justify-content: flex-end;
   padding: 2.5rem 5vw 3rem;
   color: #3c4c42;
-}
-
-.site-footer__copy {
-  max-width: 34rem;
-}
-
-.site-footer__label {
-  margin: 0 0 0.45rem;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
-.site-footer__text {
-  margin: 0;
-  font-size: 0.98rem;
-  line-height: 1.65;
 }
 
 .site-footer__links {
