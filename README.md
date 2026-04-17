@@ -34,7 +34,7 @@ The Nuxt app lives in `front-end` and keeps the template app structure:
 - `front-end/public`
 - `front-end/nuxt.config.ts`
 
-The demo page-view widget now calls the separate back-end API instead of relying on an inline Nuxt server route.
+The landing-page forms and the page-view widget call the separate back-end API instead of relying on inline Nuxt routes or static form hosting.
 
 Set `NUXT_PUBLIC_API_BASE_URL` when the front-end should target a non-default API host.
 
@@ -44,8 +44,13 @@ The API lives in `back-end` and exposes:
 
 - `GET /api/health`
 - `GET /api/pageview`
+- `POST /api/submissions/service-request`
+- `POST /api/submissions/item-request`
+- `POST /api/submissions/item-lending`
 
 Default port: `3006`
+
+Form submissions are written as JSON files under `back-end/.data/submissions` by default. Set `SUBMISSIONS_DATA_DIR` to store them elsewhere on the host.
 
 ## Git Remotes
 

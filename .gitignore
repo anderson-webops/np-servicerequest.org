@@ -4,6 +4,7 @@
 **/.output
 **/.nuxt
 .run
+back-end/.data
 
 # local env files
 **/.env

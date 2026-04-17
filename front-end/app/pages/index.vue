@@ -1,4 +1,13 @@
 <script setup lang="ts">
+type SubmissionKind = 'service-request' | 'item-request' | 'item-lending'
+type FormStatusKey = 'service' | 'itemRequest' | 'itemLending'
+
+interface FormStatus {
+  error: string
+  pending: boolean
+  success: boolean
+}
+
 definePageMeta({
   layout: 'home',
 })
@@ -8,12 +17,70 @@ useSeoMeta({
   description: 'Request a service project, ask to borrow a household item, or lend tools, books, and kitchen gear to neighbors.',
 })
 
-const route = useRoute()
+const runtimeConfig = useRuntimeConfig()
 
-const submitted = computed(() => {
-  const value = route.query.submitted
-  return Array.isArray(value) ? value[0] ?? '' : value ?? ''
+const formStatuses = reactive<Record<FormStatusKey, FormStatus>>({
+  service: {
+    error: '',
+    pending: false,
+    success: false,
+  },
+  itemRequest: {
+    error: '',
+    pending: false,
+    success: false,
+  },
+  itemLending: {
+    error: '',
+    pending: false,
+    success: false,
+  },
 })
+
+function getSubmissionErrorMessage(error: unknown) {
+  const fallbackMessage = 'We could not send your submission right now. Please try again in a moment.'
+
+  if (error && typeof error === 'object' && 'data' in error) {
+    const data = (error as { data?: unknown }).data
+
+    if (data && typeof data === 'object' && 'message' in data && typeof data.message === 'string')
+      return data.message
+  }
+
+  return fallbackMessage
+}
+
+async function submitSubmission(formKey: FormStatusKey, kind: SubmissionKind, event: Event) {
+  const form = event.currentTarget
+
+  if (!(form instanceof HTMLFormElement))
+    return
+
+  const status = formStatuses[formKey]
+  status.pending = true
+  status.success = false
+  status.error = ''
+
+  const payload = Object.fromEntries(
+    Array.from(new FormData(form).entries()).map(([key, value]) => [key, typeof value === 'string' ? value : '']),
+  )
+
+  try {
+    await $fetch(`${runtimeConfig.public.apiBaseUrl}/api/submissions/${kind}`, {
+      body: payload,
+      method: 'POST',
+    })
+
+    form.reset()
+    status.success = true
+  }
+  catch (error) {
+    status.error = getSubmissionErrorMessage(error)
+  }
+  finally {
+    status.pending = false
+  }
+}
 
 const processSteps = [
   {
@@ -157,20 +224,19 @@ const boardGroups = [
           <li>Explain whether the project needs tools, lifting, transport, or a special skill.</li>
         </ul>
 
-        <p v-if="submitted === 'service'" class="success-note">
+        <p v-if="formStatuses.service.success" class="success-note" role="status">
           Thank you. Your service project request is ready for follow-up.
+        </p>
+        <p v-if="formStatuses.service.error" class="error-note" role="alert">
+          {{ formStatuses.service.error }}
         </p>
       </div>
 
       <form
-        action="/?submitted=service#service-request"
         class="intake__form"
-        data-netlify="true"
-        method="POST"
-        name="service-request"
-        netlify-honeypot="bot-field"
+        :aria-busy="formStatuses.service.pending"
+        @submit.prevent="submitSubmission('service', 'service-request', $event)"
       >
-        <input name="form-name" type="hidden" value="service-request">
         <p class="sr-only">
           <label>Do not fill this field if you are human. <input name="bot-field" type="text"></label>
         </p>
@@ -217,8 +283,8 @@ const boardGroups = [
           </label>
         </div>
 
-        <button class="submit-button" type="submit">
-          Send service request
+        <button class="submit-button" :disabled="formStatuses.service.pending" type="submit">
+          {{ formStatuses.service.pending ? 'Sending service request...' : 'Send service request' }}
         </button>
       </form>
     </section>
@@ -241,20 +307,19 @@ const boardGroups = [
           <li>Include whether you can pick it up yourself or need help getting it.</li>
         </ul>
 
-        <p v-if="submitted === 'item-request'" class="success-note">
+        <p v-if="formStatuses.itemRequest.success" class="success-note" role="status">
           Thank you. Your item request is ready for someone to respond to.
+        </p>
+        <p v-if="formStatuses.itemRequest.error" class="error-note" role="alert">
+          {{ formStatuses.itemRequest.error }}
         </p>
       </div>
 
       <form
-        action="/?submitted=item-request#item-request"
         class="intake__form"
-        data-netlify="true"
-        method="POST"
-        name="item-request"
-        netlify-honeypot="bot-field"
+        :aria-busy="formStatuses.itemRequest.pending"
+        @submit.prevent="submitSubmission('itemRequest', 'item-request', $event)"
       >
-        <input name="form-name" type="hidden" value="item-request">
         <p class="sr-only">
           <label>Do not fill this field if you are human. <input name="bot-field" type="text"></label>
         </p>
@@ -308,8 +373,8 @@ const boardGroups = [
           </label>
         </div>
 
-        <button class="submit-button" type="submit">
-          Send item request
+        <button class="submit-button" :disabled="formStatuses.itemRequest.pending" type="submit">
+          {{ formStatuses.itemRequest.pending ? 'Sending item request...' : 'Send item request' }}
         </button>
       </form>
     </section>
@@ -332,20 +397,19 @@ const boardGroups = [
           <li>Let people know the neighborhood and how to reach you.</li>
         </ul>
 
-        <p v-if="submitted === 'item-lending'" class="success-note">
+        <p v-if="formStatuses.itemLending.success" class="success-note" role="status">
           Thank you. Your lending offer is ready for interested neighbors to review.
+        </p>
+        <p v-if="formStatuses.itemLending.error" class="error-note" role="alert">
+          {{ formStatuses.itemLending.error }}
         </p>
       </div>
 
       <form
-        action="/?submitted=item-lending#item-lending"
         class="intake__form"
-        data-netlify="true"
-        method="POST"
-        name="item-lending"
-        netlify-honeypot="bot-field"
+        :aria-busy="formStatuses.itemLending.pending"
+        @submit.prevent="submitSubmission('itemLending', 'item-lending', $event)"
       >
-        <input name="form-name" type="hidden" value="item-lending">
         <p class="sr-only">
           <label>Do not fill this field if you are human. <input name="bot-field" type="text"></label>
         </p>
@@ -387,8 +451,8 @@ const boardGroups = [
           </label>
         </div>
 
-        <button class="submit-button" type="submit">
-          Share this item
+        <button class="submit-button" :disabled="formStatuses.itemLending.pending" type="submit">
+          {{ formStatuses.itemLending.pending ? 'Sharing this item...' : 'Share this item' }}
         </button>
       </form>
     </section>
@@ -828,6 +892,12 @@ const boardGroups = [
   cursor: pointer;
 }
 
+.submit-button:disabled {
+  cursor: wait;
+  opacity: 0.8;
+  transform: none;
+}
+
 .success-note {
   display: inline-flex;
   align-items: center;
@@ -836,6 +906,17 @@ const boardGroups = [
   border-radius: 999px;
   background: rgba(41, 70, 53, 0.08);
   color: #213127;
+  font-weight: 700;
+}
+
+.error-note {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 1.35rem;
+  padding: 0.8rem 1rem;
+  border-radius: 1rem;
+  background: rgba(176, 70, 34, 0.1);
+  color: #7a3119;
   font-weight: 700;
 }
 
