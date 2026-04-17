@@ -2,9 +2,15 @@
   <footer class="site-footer">
     <div class="site-footer__links">
       <a href="/#live-board">Live board</a>
-      <a href="/#service-request">Service projects</a>
-      <a href="/#item-request">Borrow an item</a>
-      <a href="/#item-lending">Lend an item</a>
+      <NuxtLink to="/service-request">
+        Service projects
+      </NuxtLink>
+      <NuxtLink to="/item-request">
+        Borrow an item
+      </NuxtLink>
+      <NuxtLink to="/item-lending">
+        Lend an item
+      </NuxtLink>
       <a href="/#account-hub">Optional account</a>
     </div>
   </footer>

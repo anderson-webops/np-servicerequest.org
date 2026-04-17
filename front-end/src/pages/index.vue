@@ -11,9 +11,8 @@ import type {
 } from '~/utils/board'
 import type { SubmissionKind } from '~/utils/submissions'
 import { getBoardEndpoint } from '~/utils/board'
-import { getSubmissionEndpoint, submissionKinds } from '~/utils/submissions'
+import { submissionKinds } from '~/utils/submissions'
 
-type FormStatusKey = 'service' | 'itemRequest' | 'itemLending'
 type BoardFilter = 'all' | SubmissionKind
 type AuthTab = 'login' | 'register'
 
@@ -61,24 +60,6 @@ const authPending = ref(false)
 const logoutPending = ref(false)
 const openReplyItemId = ref<string | null>(null)
 
-const formStatuses = reactive<Record<FormStatusKey, FormStatus>>({
-  service: {
-    error: null,
-    pending: false,
-    success: false,
-  },
-  itemRequest: {
-    error: null,
-    pending: false,
-    success: false,
-  },
-  itemLending: {
-    error: null,
-    pending: false,
-    success: false,
-  },
-})
-
 const registerForm = reactive({
   'bot-field': '',
   'displayName': '',
@@ -102,8 +83,8 @@ const revealPending = reactive<Record<string, boolean>>({})
 const processSteps = [
   {
     number: '01',
-    title: 'Post directly to the board',
-    description: 'Every service request, borrow request, or lending offer becomes a live board entry as soon as it passes the anti-bot checks.',
+    title: 'Choose the dedicated page',
+    description: 'Service projects, item requests, and lending offers each have their own page so posting stays focused and easier to scan.',
   },
   {
     number: '02',
@@ -203,13 +184,6 @@ function formatBoardDate(value: string) {
 
 function sortBoardItems(items: BoardItem[]) {
   return [...items].sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt))
-}
-
-function upsertBoardItem(item: BoardItem) {
-  boardItems.value = sortBoardItems([
-    item,
-    ...boardItems.value.filter(existingItem => existingItem.id !== item.id),
-  ])
 }
 
 function appendInteraction(itemId: string, interaction: BoardInteractionResponse['interaction']) {
@@ -390,40 +364,6 @@ async function protectedPost<T>(endpoint: string, body: Record<string, string>) 
     credentials: 'include',
     method: 'POST',
   })
-}
-
-async function submitSubmission(formKey: FormStatusKey, kind: keyof typeof submissionKinds, event: Event) {
-  const form = event.currentTarget
-
-  if (!(form instanceof HTMLFormElement))
-    return
-
-  const status = formStatuses[formKey]
-  const endpoint = getSubmissionEndpoint(runtimeConfig.public.apiBaseUrl, submissionKinds[kind])
-  status.pending = true
-  status.success = false
-  status.error = null
-
-  const payload = Object.fromEntries(
-    Array.from(new FormData(form).entries()).map(([key, value]) => [key, typeof value === 'string' ? value : '']),
-  )
-
-  try {
-    const response = await protectedPost<SubmissionResponse>(endpoint, payload)
-    applyServerContext(response)
-
-    if (response.boardItem)
-      upsertBoardItem(response.boardItem)
-
-    form.reset()
-    status.success = true
-  }
-  catch (error) {
-    status.error = getApiErrorState(error, endpoint, 'We could not send your submission right now.')
-  }
-  finally {
-    status.pending = false
-  }
 }
 
 async function submitBoardReply(item: BoardItem) {
@@ -609,8 +549,15 @@ onMounted(() => {
 
           <div class="hero__actions">
             <a href="#live-board">View the live board</a>
-            <a href="#request-tools">Post a new request</a>
-            <a href="#account-hub">Optional account</a>
+            <NuxtLink to="/service-request">
+              Service project
+            </NuxtLink>
+            <NuxtLink to="/item-request">
+              Borrow item
+            </NuxtLink>
+            <NuxtLink to="/item-lending">
+              Lend item
+            </NuxtLink>
           </div>
 
           <p class="hero__caption">
@@ -810,7 +757,19 @@ onMounted(() => {
 
           <div v-else-if="!filteredBoardItems.length" class="board-empty">
             <p>No posts match this filter yet.</p>
-            <p>Use one of the forms below to create the first entry in this lane.</p>
+            <p>
+              Create the first one from the dedicated
+              <NuxtLink to="/service-request">
+                service project
+              </NuxtLink>,
+              <NuxtLink to="/item-request">
+                item request
+              </NuxtLink>, or
+              <NuxtLink to="/item-lending">
+                item lending
+              </NuxtLink>
+              page.
+            </p>
           </div>
 
           <div v-else class="board-feed__list">
@@ -996,286 +955,6 @@ onMounted(() => {
         </article>
       </div>
     </section>
-
-    <section id="request-tools" class="intake-intro">
-      <div class="section-heading">
-        <p class="eyebrow">
-          Post something new
-        </p>
-        <h2>
-          Every submission below becomes a live board entry right away.
-        </h2>
-        <p class="section-copy">
-          The board is the primary public interaction surface for now. Email notifications are wired in at the backend but remain disabled by default.
-        </p>
-      </div>
-    </section>
-
-    <section id="service-request" class="intake intake--service">
-      <div class="intake__copy">
-        <p class="eyebrow">
-          Request a service project
-        </p>
-        <h2>
-          Describe the job, the timing, and the best way for someone to reach you.
-        </h2>
-        <p>
-          Use this for hands-on help: cleanups, repair tasks, home setup, small moves, accessibility work, or any project that needs volunteer time.
-        </p>
-
-        <ul class="intake__examples">
-          <li>Give a short title to the project.</li>
-          <li>Say where the work will happen and when it is needed.</li>
-          <li>Explain whether the project needs tools, lifting, transport, or a special skill.</li>
-        </ul>
-
-        <p v-if="formStatuses.service.success" class="success-note" role="status">
-          Posted. Your service project now appears on the live board.
-        </p>
-        <div v-if="formStatuses.service.error" class="error-panel" role="alert">
-          <p class="error-note">
-            {{ formStatuses.service.error.message }}
-          </p>
-          <p class="error-note-detail">
-            {{ formStatuses.service.error.detail }}
-          </p>
-        </div>
-      </div>
-
-      <form
-        class="intake__form"
-        :aria-busy="formStatuses.service.pending"
-        @submit.prevent="submitSubmission('service', 'service', $event)"
-      >
-        <p class="sr-only">
-          <label>Do not fill this field if you are human. <input name="bot-field" type="text"></label>
-        </p>
-
-        <div class="field-grid">
-          <label class="field">
-            <span>Your name</span>
-            <input autocomplete="name" name="name" placeholder="Jane Smith" required type="text">
-          </label>
-
-          <label class="field">
-            <span>Email or phone</span>
-            <input autocomplete="email" name="contact" placeholder="jane@email.com or 555-123-4567" required type="text">
-          </label>
-
-          <label class="field">
-            <span>Project type</span>
-            <select name="project_type" required>
-              <option value="">
-                Select one
-              </option>
-              <option>Cleanup</option>
-              <option>Repair</option>
-              <option>Accessibility</option>
-              <option>Moving help</option>
-              <option>Setup or teardown</option>
-              <option>Other</option>
-            </select>
-          </label>
-
-          <label class="field">
-            <span>Location or neighborhood</span>
-            <input autocomplete="street-address" name="location" placeholder="Where the project is happening" required type="text">
-          </label>
-
-          <label class="field field--wide">
-            <span>Timing</span>
-            <input name="timing" placeholder="Example: Saturday morning or sometime next week" required type="text">
-          </label>
-
-          <label class="field field--wide">
-            <span>Project details</span>
-            <textarea name="details" placeholder="Explain what needs to be done, what supplies are already available, and anything someone should know before responding." required rows="6" />
-          </label>
-        </div>
-
-        <button class="submit-button" :disabled="formStatuses.service.pending" type="submit">
-          {{ formStatuses.service.pending ? 'Posting service request...' : 'Post service request' }}
-        </button>
-      </form>
-    </section>
-
-    <section id="item-request" class="intake intake--request">
-      <div class="intake__copy">
-        <p class="eyebrow">
-          Request an item
-        </p>
-        <h2>
-          Ask for something specific that you want to borrow.
-        </h2>
-        <p>
-          This is the place for practical item requests such as an axe, a kitchen utensil, a certain book, a ladder, or another short-term household need.
-        </p>
-
-        <ul class="intake__examples">
-          <li>Name the exact item if you can.</li>
-          <li>Say how long you expect to borrow it.</li>
-          <li>Include whether you can pick it up yourself or need help getting it.</li>
-        </ul>
-
-        <p v-if="formStatuses.itemRequest.success" class="success-note" role="status">
-          Posted. Your item request now appears on the live board.
-        </p>
-        <div v-if="formStatuses.itemRequest.error" class="error-panel" role="alert">
-          <p class="error-note">
-            {{ formStatuses.itemRequest.error.message }}
-          </p>
-          <p class="error-note-detail">
-            {{ formStatuses.itemRequest.error.detail }}
-          </p>
-        </div>
-      </div>
-
-      <form
-        class="intake__form"
-        :aria-busy="formStatuses.itemRequest.pending"
-        @submit.prevent="submitSubmission('itemRequest', 'itemRequest', $event)"
-      >
-        <p class="sr-only">
-          <label>Do not fill this field if you are human. <input name="bot-field" type="text"></label>
-        </p>
-
-        <div class="field-grid">
-          <label class="field">
-            <span>Your name</span>
-            <input autocomplete="name" name="name" placeholder="Jane Smith" required type="text">
-          </label>
-
-          <label class="field">
-            <span>Email or phone</span>
-            <input autocomplete="email" name="contact" placeholder="jane@email.com or 555-123-4567" required type="text">
-          </label>
-
-          <label class="field field--wide">
-            <span>Item needed</span>
-            <input name="item_needed" placeholder="Axe, stock pot, cookbook, drill, folding table..." required type="text">
-          </label>
-
-          <label class="field">
-            <span>Need it by</span>
-            <input name="needed_by" type="date">
-          </label>
-
-          <label class="field">
-            <span>How long will you need it?</span>
-            <input name="duration" placeholder="A day, a weekend, two weeks..." required type="text">
-          </label>
-
-          <label class="field">
-            <span>Pickup plan</span>
-            <select name="pickup_plan" required>
-              <option value="">
-                Select one
-              </option>
-              <option>I can pick it up</option>
-              <option>I may need drop-off help</option>
-              <option>I am flexible</option>
-            </select>
-          </label>
-
-          <label class="field">
-            <span>Your neighborhood</span>
-            <input name="neighborhood" placeholder="Where you are located" required type="text">
-          </label>
-
-          <label class="field field--wide">
-            <span>Details</span>
-            <textarea name="details" placeholder="Share any size, edition, quantity, or use-case details that would help a lender know whether they have the right item." required rows="6" />
-          </label>
-        </div>
-
-        <button class="submit-button" :disabled="formStatuses.itemRequest.pending" type="submit">
-          {{ formStatuses.itemRequest.pending ? 'Posting item request...' : 'Post item request' }}
-        </button>
-      </form>
-    </section>
-
-    <section id="item-lending" class="intake intake--lend">
-      <div class="intake__copy">
-        <p class="eyebrow">
-          Volunteer an item to lend
-        </p>
-        <h2>
-          Offer something useful so another person can reach out and borrow it.
-        </h2>
-        <p>
-          List items you are willing to share, from tools and kitchen utensils to books and specialty equipment, so people know what is available.
-        </p>
-
-        <ul class="intake__examples">
-          <li>Say what the item is and what condition it is in.</li>
-          <li>Explain any borrowing rules, pickup limits, or return expectations.</li>
-          <li>Let people know the neighborhood and how to reach you.</li>
-        </ul>
-
-        <p v-if="formStatuses.itemLending.success" class="success-note" role="status">
-          Posted. Your lending offer now appears on the live board.
-        </p>
-        <div v-if="formStatuses.itemLending.error" class="error-panel" role="alert">
-          <p class="error-note">
-            {{ formStatuses.itemLending.error.message }}
-          </p>
-          <p class="error-note-detail">
-            {{ formStatuses.itemLending.error.detail }}
-          </p>
-        </div>
-      </div>
-
-      <form
-        class="intake__form"
-        :aria-busy="formStatuses.itemLending.pending"
-        @submit.prevent="submitSubmission('itemLending', 'itemLending', $event)"
-      >
-        <p class="sr-only">
-          <label>Do not fill this field if you are human. <input name="bot-field" type="text"></label>
-        </p>
-
-        <div class="field-grid">
-          <label class="field">
-            <span>Your name</span>
-            <input autocomplete="name" name="name" placeholder="Jane Smith" required type="text">
-          </label>
-
-          <label class="field">
-            <span>Email or phone</span>
-            <input autocomplete="email" name="contact" placeholder="jane@email.com or 555-123-4567" required type="text">
-          </label>
-
-          <label class="field field--wide">
-            <span>Item available to lend</span>
-            <input name="item_available" placeholder="Cordless drill, bundt pan, pruning shears, history book set..." required type="text">
-          </label>
-
-          <label class="field">
-            <span>Neighborhood</span>
-            <input name="neighborhood" placeholder="Where pickup can happen" required type="text">
-          </label>
-
-          <label class="field">
-            <span>Availability</span>
-            <input name="availability" placeholder="Weeknights, weekends, most afternoons..." required type="text">
-          </label>
-
-          <label class="field">
-            <span>Condition or notes</span>
-            <input name="condition" placeholder="New, gently used, heavy, fragile..." required type="text">
-          </label>
-
-          <label class="field field--wide">
-            <span>Borrowing guidelines</span>
-            <textarea name="guidelines" placeholder="Let people know how long they can borrow the item, whether you need a text before pickup, and anything else they should respect." required rows="6" />
-          </label>
-        </div>
-
-        <button class="submit-button" :disabled="formStatuses.itemLending.pending" type="submit">
-          {{ formStatuses.itemLending.pending ? 'Posting lending offer...' : 'Post lending offer' }}
-        </button>
-      </form>
-    </section>
   </div>
 </template>
 
@@ -1290,9 +969,7 @@ onMounted(() => {
 .hero,
 .live-board,
 .process,
-.board-groups,
-.intake-intro,
-.intake {
+.board-groups {
   padding-inline: 5vw;
 }
 
@@ -1324,8 +1001,7 @@ onMounted(() => {
 
 .hero h1,
 .section-heading h2,
-.account-panel h3,
-.intake__copy h2 {
+.account-panel h3 {
   margin: 0;
   font-family: 'DM Serif Display', serif;
   font-weight: 400;
@@ -1342,7 +1018,6 @@ onMounted(() => {
 .hero__lede,
 .section-copy,
 .account-panel p,
-.intake__copy p,
 .process__list p,
 .board-groups li,
 .board-card__summary,
@@ -1721,6 +1396,18 @@ onMounted(() => {
   margin-top: 0.55rem;
 }
 
+.board-empty a {
+  color: #294635;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.board-empty a:hover,
+.board-empty a:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
 .board-card {
   display: grid;
   gap: 1rem;
@@ -1965,37 +1652,6 @@ onMounted(() => {
   padding-left: 1.15rem;
 }
 
-.intake-intro {
-  padding-top: 0.25rem;
-}
-
-.intake {
-  display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
-  gap: 1.2rem;
-  align-items: start;
-}
-
-.intake__copy,
-.intake__form {
-  padding: 1.5rem;
-  border-radius: 1.7rem;
-  background: rgba(255, 250, 243, 0.82);
-  border: 1px solid rgba(40, 58, 45, 0.08);
-}
-
-.intake__examples {
-  margin: 1rem 0 0;
-  padding-left: 1.1rem;
-  color: #344239;
-  line-height: 1.7;
-}
-
-.intake__form {
-  display: grid;
-  gap: 1rem;
-}
-
 .field-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2102,7 +1758,6 @@ onMounted(() => {
 
 @media (max-width: 1080px) {
   .live-board__layout,
-  .intake,
   .hero__inner {
     grid-template-columns: 1fr;
   }
@@ -2135,9 +1790,7 @@ onMounted(() => {
   .hero,
   .live-board,
   .process,
-  .board-groups,
-  .intake-intro,
-  .intake {
+  .board-groups {
     padding-inline: 1.25rem;
   }
 
@@ -2151,9 +1804,7 @@ onMounted(() => {
   }
 
   .board-card,
-  .account-panel,
-  .intake__copy,
-  .intake__form {
+  .account-panel {
     padding: 1.2rem;
   }
 
