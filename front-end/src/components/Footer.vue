@@ -2,19 +2,19 @@
   <footer class="site-footer">
     <div class="site-footer__links">
       <a href="/#live-board">Live board</a>
-      <NuxtLink to="/service-request">
+      <NuxtLink prefetch-on="interaction" to="/service-request">
         Service projects
       </NuxtLink>
-      <NuxtLink to="/item-request">
+      <NuxtLink prefetch-on="interaction" to="/item-request">
         Borrow an item
       </NuxtLink>
-      <NuxtLink to="/item-lending">
+      <NuxtLink prefetch-on="interaction" to="/item-lending">
         Lend an item
       </NuxtLink>
-      <NuxtLink to="/account">
+      <NuxtLink prefetch-on="interaction" to="/account">
         Optional account
       </NuxtLink>
-      <NuxtLink to="/help">
+      <NuxtLink prefetch-on="interaction" to="/help">
         Help
       </NuxtLink>
     </div>

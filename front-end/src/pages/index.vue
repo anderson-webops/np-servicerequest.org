@@ -682,13 +682,13 @@ onMounted(() => {
 
           <div class="hero__actions">
             <a href="#live-board">View the live board</a>
-            <NuxtLink to="/service-request">
+            <NuxtLink prefetch-on="interaction" to="/service-request">
               Service project
             </NuxtLink>
-            <NuxtLink to="/item-request">
+            <NuxtLink prefetch-on="interaction" to="/item-request">
               Borrow item
             </NuxtLink>
-            <NuxtLink to="/item-lending">
+            <NuxtLink prefetch-on="interaction" to="/item-lending">
               Lend item
             </NuxtLink>
           </div>
@@ -795,13 +795,13 @@ onMounted(() => {
             <p>No posts match this filter yet.</p>
             <p>
               Create the first one from the dedicated
-              <NuxtLink to="/service-request">
+              <NuxtLink prefetch-on="interaction" to="/service-request">
                 service project
               </NuxtLink>,
-              <NuxtLink to="/item-request">
+              <NuxtLink prefetch-on="interaction" to="/item-request">
                 item request
               </NuxtLink>, or
-              <NuxtLink to="/item-lending">
+              <NuxtLink prefetch-on="interaction" to="/item-lending">
                 item lending
               </NuxtLink>
               page.

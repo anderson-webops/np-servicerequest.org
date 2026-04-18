@@ -39,6 +39,7 @@ definePageMeta({
 
     <div>
       <NuxtLink
+        prefetch-on="interaction"
         class="text-sm btn m-3"
         to="/"
       >

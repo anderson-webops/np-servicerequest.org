@@ -21,7 +21,7 @@ const emit = defineEmits<{
 <template>
   <div class="submission-page">
     <section class="submission-page__hero">
-      <NuxtLink class="submission-page__back" to="/#live-board">
+      <NuxtLink class="submission-page__back" prefetch-on="interaction" to="/#live-board">
         Back to live board
       </NuxtLink>
 

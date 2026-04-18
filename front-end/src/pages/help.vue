@@ -45,7 +45,7 @@ const boardGroups = [
 <template>
   <div class="help-page">
     <section class="help-page__hero">
-      <NuxtLink class="help-page__back" to="/#live-board">
+      <NuxtLink class="help-page__back" prefetch-on="interaction" to="/#live-board">
         Back to live board
       </NuxtLink>
 

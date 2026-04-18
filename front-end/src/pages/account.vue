@@ -241,7 +241,7 @@ onMounted(() => {
 <template>
   <div class="account-page">
     <section class="account-page__hero">
-      <NuxtLink class="account-page__back" to="/#live-board">
+      <NuxtLink class="account-page__back" prefetch-on="interaction" to="/#live-board">
         Back to live board
       </NuxtLink>
 

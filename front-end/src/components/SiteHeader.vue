@@ -1,6 +1,6 @@
 <template>
   <header class="site-header">
-    <NuxtLink class="site-header__brand" to="/">
+    <NuxtLink class="site-header__brand" prefetch-on="interaction" to="/">
       <span class="site-header__eyebrow">Community request board</span>
       <span class="site-header__name">np-servicerequest.org</span>
     </NuxtLink>
@@ -8,16 +8,16 @@
     <div class="site-header__actions">
       <nav aria-label="Primary" class="site-header__nav">
         <a href="/#live-board">Live board</a>
-        <NuxtLink to="/service-request">
+        <NuxtLink prefetch-on="interaction" to="/service-request">
           Service projects
         </NuxtLink>
-        <NuxtLink to="/item-request">
+        <NuxtLink prefetch-on="interaction" to="/item-request">
           Borrow an item
         </NuxtLink>
-        <NuxtLink to="/item-lending">
+        <NuxtLink prefetch-on="interaction" to="/item-lending">
           Lend an item
         </NuxtLink>
-        <NuxtLink to="/account">
+        <NuxtLink prefetch-on="interaction" to="/account">
           Optional account
         </NuxtLink>
       </nav>

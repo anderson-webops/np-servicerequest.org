@@ -9,7 +9,7 @@
     <p>
       Head back to the main page to browse the live board, request a service project, borrow an item, or offer something useful to lend.
     </p>
-    <NuxtLink class="not-found__link" to="/">
+    <NuxtLink class="not-found__link" prefetch-on="interaction" to="/">
       Return home
     </NuxtLink>
   </section>
