@@ -1,5 +1,9 @@
 <template>
   <footer class="site-footer">
+    <NuxtLink class="site-footer__help" prefetch-on="interaction" to="/help">
+      Help
+    </NuxtLink>
+
     <div class="site-footer__links">
       <a href="/#live-board">Live board</a>
       <NuxtLink prefetch-on="interaction" to="/service-request">
@@ -14,9 +18,6 @@
       <NuxtLink prefetch-on="interaction" to="/account">
         Optional account
       </NuxtLink>
-      <NuxtLink prefetch-on="interaction" to="/help">
-        Help
-      </NuxtLink>
     </div>
   </footer>
 </template>
@@ -24,7 +25,9 @@
 <style scoped>
 .site-footer {
   display: flex;
-  justify-content: flex-end;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
   padding: 2.5rem 5vw 3rem;
   color: var(--site-subtle);
 }
@@ -36,12 +39,15 @@
   gap: 0.75rem;
 }
 
+.site-footer__help,
 .site-footer__links a {
   color: var(--site-heading);
   text-decoration: none;
   font-weight: 600;
 }
 
+.site-footer__help:hover,
+.site-footer__help:focus-visible,
 .site-footer__links a:hover,
 .site-footer__links a:focus-visible {
   text-decoration: underline;
