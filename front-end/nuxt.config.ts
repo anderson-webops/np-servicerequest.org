@@ -54,6 +54,7 @@ export default defineNuxtConfig({
   experimental: {
     payloadExtraction: true,
     renderJsonPayloads: true,
+    serverAppConfig: false,
     typedPages: true,
   },
 
