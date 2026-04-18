@@ -974,15 +974,16 @@ onMounted(() => {
 }
 
 .hero {
-  padding-top: 1.75rem;
+  padding-top: 0.4rem;
 }
 
 .hero__inner {
   min-height: calc(100svh - 7rem);
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(250px, 0.65fr);
-  align-items: center;
+  align-items: start;
   gap: clamp(2rem, 4vw, 4.5rem);
+  padding-top: clamp(0.35rem, 1vw, 0.9rem);
 }
 
 .hero__copy {
