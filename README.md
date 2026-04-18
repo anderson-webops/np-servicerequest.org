@@ -44,6 +44,7 @@ The landing page now exposes:
 
 The board and intake forms call the separate back-end API instead of relying on inline Nuxt routes or static form hosting.
 The previous PWA/service-worker runtime is intentionally disabled right now so clients do not keep serving stale cached form logic across deploys.
+The live board and admin review filters now stay in the URL query string so refresh, back/forward navigation, and shared links preserve the current view. The optional account page also supports `?tab=login`.
 
 Set `NUXT_PUBLIC_API_BASE_URL` when the front-end should target a non-default API host. This value should be the full API base, for example `https://np-servicerequest.org/api`.
 

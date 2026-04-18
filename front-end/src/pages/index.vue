@@ -454,40 +454,19 @@ async function claimBoardManagementLink(itemId: string, managementToken: string)
     await router.replace({
       hash: '#live-board',
       path: route.path,
-      query: {},
+      query: {
+        ...route.query,
+        filter: boardFilter.value === 'all' ? undefined : boardFilter.value,
+        manageItem: undefined,
+        manageToken: undefined,
+        page: boardPagination.value.page > 1 ? String(boardPagination.value.page) : undefined,
+      },
     })
   }
 }
 
 function refreshStoredDeleteTokenIds() {
   storedDeleteTokenItemIds.value = listStoredBoardDeleteTokenIds()
-}
-
-function setBoardFilter(nextFilter: BoardFilter) {
-  if (boardFilter.value === nextFilter && boardPagination.value.page === 1)
-    return
-
-  boardFilter.value = nextFilter
-  boardPagination.value = {
-    ...boardPagination.value,
-    page: 1,
-  }
-
-  void loadBoardItems()
-}
-
-function changeBoardPage(nextPage: number) {
-  const normalizedPage = Math.min(Math.max(nextPage, 1), boardPagination.value.totalPages)
-
-  if (normalizedPage === boardPagination.value.page)
-    return
-
-  boardPagination.value = {
-    ...boardPagination.value,
-    page: normalizedPage,
-  }
-
-  void loadBoardItems()
 }
 
 function canDeleteItem(item: BoardItem) {
@@ -544,8 +523,86 @@ function removeInteractionFromBoard(itemId: string, interactionId: string) {
   }))
 }
 
-function getQueryValue(value: string | null | Array<string | null> | undefined) {
-  return Array.isArray(value) ? value[0] || '' : value || ''
+function getQueryValue(value: unknown) {
+  if (Array.isArray(value))
+    return getQueryValue(value[0])
+
+  return typeof value === 'string' ? value : ''
+}
+
+function parseBoardFilter(value: string): BoardFilter {
+  return value === submissionKinds.service || value === submissionKinds.itemRequest || value === submissionKinds.itemLending
+    ? value
+    : 'all'
+}
+
+function parsePositivePage(value: string) {
+  const parsedValue = Number.parseInt(value, 10)
+
+  if (!Number.isFinite(parsedValue) || parsedValue < 1)
+    return 1
+
+  return parsedValue
+}
+
+function syncBoardStateFromRoute() {
+  let changed = false
+  const nextBoardFilter = parseBoardFilter(getQueryValue(route.query.filter))
+  const nextPage = parsePositivePage(getQueryValue(route.query.page))
+
+  if (boardFilter.value !== nextBoardFilter) {
+    boardFilter.value = nextBoardFilter
+    changed = true
+  }
+
+  if (boardPagination.value.page !== nextPage) {
+    boardPagination.value = {
+      ...boardPagination.value,
+      page: nextPage,
+    }
+    changed = true
+  }
+
+  return changed
+}
+
+async function pushBoardRouteState(nextState?: {
+  filter?: BoardFilter
+  page?: number
+}) {
+  const nextFilter = nextState?.filter ?? boardFilter.value
+  const nextPage = Math.max(nextState?.page ?? boardPagination.value.page, 1)
+
+  await router.push({
+    hash: route.hash,
+    path: route.path,
+    query: {
+      ...route.query,
+      filter: nextFilter === 'all' ? undefined : nextFilter,
+      page: nextPage > 1 ? String(nextPage) : undefined,
+    },
+  })
+}
+
+function setBoardFilter(nextFilter: BoardFilter) {
+  if (boardFilter.value === nextFilter && boardPagination.value.page === 1)
+    return
+
+  void pushBoardRouteState({
+    filter: nextFilter,
+    page: 1,
+  })
+}
+
+function changeBoardPage(nextPage: number) {
+  const normalizedPage = Math.min(Math.max(nextPage, 1), boardPagination.value.totalPages)
+
+  if (normalizedPage === boardPagination.value.page)
+    return
+
+  void pushBoardRouteState({
+    page: normalizedPage,
+  })
 }
 
 async function submitBoardReply(item: BoardItem) {
@@ -676,10 +733,10 @@ async function deleteBoardPost(item: BoardItem) {
       openReplyItemId.value = null
 
     if (boardItems.value.length <= 1 && boardPagination.value.page > 1) {
-      boardPagination.value = {
-        ...boardPagination.value,
+      await pushBoardRouteState({
         page: boardPagination.value.page - 1,
-      }
+      })
+      return
     }
 
     await loadBoardItems()
@@ -750,6 +807,7 @@ watch(viewer, (nextViewer) => {
 onMounted(() => {
   hasHydrated.value = true
   refreshStoredDeleteTokenIds()
+  syncBoardStateFromRoute()
   const manageItem = getQueryValue(route.query.manageItem)
   const manageToken = getQueryValue(route.query.manageToken)
 
@@ -761,6 +819,22 @@ onMounted(() => {
     loadBoardItems(),
   ])
 })
+
+watch(
+  () => [
+    getQueryValue(route.query.filter),
+    getQueryValue(route.query.page),
+  ],
+  () => {
+    if (!hasHydrated.value)
+      return
+
+    const changed = syncBoardStateFromRoute()
+
+    if (changed)
+      void loadBoardItems()
+  },
+)
 </script>
 
 <template>

@@ -89,6 +89,8 @@ useSeoMeta({
 })
 
 const runtimeConfig = useRuntimeConfig()
+const route = useRoute()
+const router = useRouter()
 
 const hasHydrated = ref(false)
 const adminKeyInput = ref('')
@@ -152,6 +154,109 @@ const activityFilters = computed(() => {
     })),
   ]
 })
+
+function getQueryValue(value: unknown) {
+  if (Array.isArray(value))
+    return getQueryValue(value[0])
+
+  return typeof value === 'string' ? value : ''
+}
+
+function parseReviewFilter(value: string): ReviewFilter {
+  if (!value)
+    return 'pending'
+
+  if (value === 'all')
+    return 'all'
+
+  return reviewStatusLabels[value as AdminReviewStatus] ? value as AdminReviewStatus : 'pending'
+}
+
+function parseKindFilter(value: string): KindFilter {
+  return kindLabels[value as SubmissionKind] ? value as SubmissionKind : 'all'
+}
+
+function parseActivityFilter(value: string): ActivityFilter {
+  return activityCategoryLabels[value as Exclude<ActivityFilter, 'all'>] ? value as Exclude<ActivityFilter, 'all'> : 'all'
+}
+
+function parsePositivePage(value: string) {
+  const parsedValue = Number.parseInt(value, 10)
+
+  if (!Number.isFinite(parsedValue) || parsedValue < 1)
+    return 1
+
+  return parsedValue
+}
+
+function syncAdminStateFromRoute() {
+  let changed = false
+  const nextReviewFilter = parseReviewFilter(getQueryValue(route.query.review))
+  const nextKindFilter = parseKindFilter(getQueryValue(route.query.kind))
+  const nextActivityFilter = parseActivityFilter(getQueryValue(route.query.activity))
+  const nextSubmissionsPage = parsePositivePage(getQueryValue(route.query.submissionsPage))
+  const nextActivityPage = parsePositivePage(getQueryValue(route.query.activityPage))
+
+  if (reviewFilter.value !== nextReviewFilter) {
+    reviewFilter.value = nextReviewFilter
+    changed = true
+  }
+
+  if (kindFilter.value !== nextKindFilter) {
+    kindFilter.value = nextKindFilter
+    changed = true
+  }
+
+  if (activityFilter.value !== nextActivityFilter) {
+    activityFilter.value = nextActivityFilter
+    changed = true
+  }
+
+  if (submissionsPagination.value.page !== nextSubmissionsPage) {
+    submissionsPagination.value = {
+      ...submissionsPagination.value,
+      page: nextSubmissionsPage,
+    }
+    changed = true
+  }
+
+  if (activityPagination.value.page !== nextActivityPage) {
+    activityPagination.value = {
+      ...activityPagination.value,
+      page: nextActivityPage,
+    }
+    changed = true
+  }
+
+  return changed
+}
+
+async function pushAdminRouteState(nextState: {
+  activityFilter?: ActivityFilter
+  activityPage?: number
+  kindFilter?: KindFilter
+  reviewFilter?: ReviewFilter
+  submissionsPage?: number
+}) {
+  const nextReviewFilter = nextState.reviewFilter ?? reviewFilter.value
+  const nextKindFilter = nextState.kindFilter ?? kindFilter.value
+  const nextActivityFilter = nextState.activityFilter ?? activityFilter.value
+  const nextSubmissionsPage = Math.max(nextState.submissionsPage ?? submissionsPagination.value.page, 1)
+  const nextActivityPage = Math.max(nextState.activityPage ?? activityPagination.value.page, 1)
+
+  await router.push({
+    hash: route.hash,
+    path: route.path,
+    query: {
+      ...route.query,
+      activity: nextActivityFilter === 'all' ? undefined : nextActivityFilter,
+      activityPage: nextActivityPage > 1 ? String(nextActivityPage) : undefined,
+      kind: nextKindFilter === 'all' ? undefined : nextKindFilter,
+      review: nextReviewFilter === 'pending' ? undefined : nextReviewFilter,
+      submissionsPage: nextSubmissionsPage > 1 ? String(nextSubmissionsPage) : undefined,
+    },
+  })
+}
 
 function formatSubmissionDate(value: string) {
   return new Intl.DateTimeFormat('en-US', {
@@ -368,36 +473,33 @@ function signOutAdmin() {
 }
 
 function setReviewFilter(nextFilter: ReviewFilter) {
-  reviewFilter.value = nextFilter
-  submissionsPagination.value = {
-    ...submissionsPagination.value,
-    page: 1,
-  }
+  if (reviewFilter.value === nextFilter && submissionsPagination.value.page === 1)
+    return
 
-  if (isAuthenticated.value)
-    void loadAdminSubmissions(activeAdminKey.value, { showSessionNotice: false })
+  void pushAdminRouteState({
+    reviewFilter: nextFilter,
+    submissionsPage: 1,
+  })
 }
 
 function setKindFilter(nextFilter: KindFilter) {
-  kindFilter.value = nextFilter
-  submissionsPagination.value = {
-    ...submissionsPagination.value,
-    page: 1,
-  }
+  if (kindFilter.value === nextFilter && submissionsPagination.value.page === 1)
+    return
 
-  if (isAuthenticated.value)
-    void loadAdminSubmissions(activeAdminKey.value, { showSessionNotice: false })
+  void pushAdminRouteState({
+    kindFilter: nextFilter,
+    submissionsPage: 1,
+  })
 }
 
 function setActivityFilter(nextFilter: ActivityFilter) {
-  activityFilter.value = nextFilter
-  activityPagination.value = {
-    ...activityPagination.value,
-    page: 1,
-  }
+  if (activityFilter.value === nextFilter && activityPagination.value.page === 1)
+    return
 
-  if (isAuthenticated.value)
-    void loadAdminSubmissions(activeAdminKey.value, { showSessionNotice: false })
+  void pushAdminRouteState({
+    activityFilter: nextFilter,
+    activityPage: 1,
+  })
 }
 
 function changeSubmissionsPage(nextPage: number) {
@@ -406,13 +508,9 @@ function changeSubmissionsPage(nextPage: number) {
   if (normalizedPage === submissionsPagination.value.page)
     return
 
-  submissionsPagination.value = {
-    ...submissionsPagination.value,
-    page: normalizedPage,
-  }
-
-  if (isAuthenticated.value)
-    void loadAdminSubmissions(activeAdminKey.value, { showSessionNotice: false })
+  void pushAdminRouteState({
+    submissionsPage: normalizedPage,
+  })
 }
 
 function changeActivityPage(nextPage: number) {
@@ -421,13 +519,9 @@ function changeActivityPage(nextPage: number) {
   if (normalizedPage === activityPagination.value.page)
     return
 
-  activityPagination.value = {
-    ...activityPagination.value,
-    page: normalizedPage,
-  }
-
-  if (isAuthenticated.value)
-    void loadAdminSubmissions(activeAdminKey.value, { showSessionNotice: false })
+  void pushAdminRouteState({
+    activityPage: normalizedPage,
+  })
 }
 
 async function saveReview(submission: AdminSubmissionRecord, status: AdminReviewStatus) {
@@ -477,6 +571,7 @@ async function saveReview(submission: AdminSubmissionRecord, status: AdminReview
 
 onMounted(() => {
   hasHydrated.value = true
+  syncAdminStateFromRoute()
 
   const storedAdminKey = readStoredAdminKey()
 
@@ -487,6 +582,25 @@ onMounted(() => {
 
   void loadAdminSubmissions(storedAdminKey, { showSessionNotice: false })
 })
+
+watch(
+  () => [
+    getQueryValue(route.query.review),
+    getQueryValue(route.query.kind),
+    getQueryValue(route.query.activity),
+    getQueryValue(route.query.submissionsPage),
+    getQueryValue(route.query.activityPage),
+  ],
+  () => {
+    if (!hasHydrated.value)
+      return
+
+    const changed = syncAdminStateFromRoute()
+
+    if (changed && isAuthenticated.value)
+      void loadAdminSubmissions(activeAdminKey.value, { showSessionNotice: false })
+  },
+)
 </script>
 
 <template>

@@ -37,6 +37,8 @@ useSeoMeta({
 })
 
 const runtimeConfig = useRuntimeConfig()
+const route = useRoute()
+const router = useRouter()
 
 const hasHydrated = ref(false)
 const antiBotChallenge = ref<AntiBotChallenge | null>(null)
@@ -65,6 +67,41 @@ const loginForm = reactive({
 
 const accountUiReady = computed(() => hasHydrated.value && bootstrapLoaded.value)
 const showAdminSessionCard = computed(() => accountUiReady.value && adminSessionActive.value && !viewer.value)
+
+function getQueryValue(value: unknown) {
+  if (Array.isArray(value))
+    return getQueryValue(value[0])
+
+  return typeof value === 'string' ? value : ''
+}
+
+function parseAuthTab(value: string): AuthTab {
+  return value === 'login' ? 'login' : 'register'
+}
+
+function syncAuthTabFromRoute() {
+  const nextAuthTab = parseAuthTab(getQueryValue(route.query.tab))
+
+  if (nextAuthTab === authTab.value)
+    return false
+
+  authTab.value = nextAuthTab
+  return true
+}
+
+async function pushAuthTab(nextTab: AuthTab) {
+  if (nextTab === authTab.value && getQueryValue(route.query.tab) === (nextTab === 'register' ? '' : nextTab))
+    return
+
+  await router.push({
+    hash: route.hash,
+    path: route.path,
+    query: {
+      ...route.query,
+      tab: nextTab === 'register' ? undefined : nextTab,
+    },
+  })
+}
 
 function applyServerContext(payload: unknown) {
   if (!payload || typeof payload !== 'object')
@@ -238,7 +275,15 @@ async function logoutAccount() {
 onMounted(() => {
   hasHydrated.value = true
   adminSessionActive.value = Boolean(readStoredAdminKey())
+  syncAuthTabFromRoute()
   void loadBootstrap()
+})
+
+watch(() => getQueryValue(route.query.tab), () => {
+  if (!hasHydrated.value)
+    return
+
+  syncAuthTabFromRoute()
 })
 </script>
 
@@ -329,14 +374,14 @@ onMounted(() => {
             <button
               class="account-tabs__button" :class="[{ 'account-tabs__button--active': authTab === 'register' }]"
               type="button"
-              @click="authTab = 'register'"
+              @click="pushAuthTab('register')"
             >
               Create account
             </button>
             <button
               class="account-tabs__button" :class="[{ 'account-tabs__button--active': authTab === 'login' }]"
               type="button"
-              @click="authTab = 'login'"
+              @click="pushAuthTab('login')"
             >
               Sign in
             </button>
