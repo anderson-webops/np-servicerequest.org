@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AntiBotChallenge, AuthResponse, BoardBootstrapResponse, ViewerAccount } from '~/utils/board'
 
+import { readStoredAdminKey } from '~/utils/admin'
 import { isAntiBotChallenge, isAntiBotChallengeExpired, markAntiBotChallengeObserved, waitForAntiBotChallengeMinimumAge } from '~/utils/antiBot'
 import { getBoardEndpoint } from '~/utils/board'
 
@@ -40,6 +41,7 @@ const runtimeConfig = useRuntimeConfig()
 const hasHydrated = ref(false)
 const antiBotChallenge = ref<AntiBotChallenge | null>(null)
 const viewer = ref<ViewerAccount | null>(null)
+const adminSessionActive = ref(false)
 const bootstrapLoaded = ref(false)
 const securityError = ref<FormErrorState | null>(null)
 const authNotice = ref('')
@@ -62,6 +64,7 @@ const loginForm = reactive({
 })
 
 const accountUiReady = computed(() => hasHydrated.value && bootstrapLoaded.value)
+const showAdminSessionCard = computed(() => accountUiReady.value && adminSessionActive.value && !viewer.value)
 
 function applyServerContext(payload: unknown) {
   if (!payload || typeof payload !== 'object')
@@ -234,6 +237,7 @@ async function logoutAccount() {
 
 onMounted(() => {
   hasHydrated.value = true
+  adminSessionActive.value = Boolean(readStoredAdminKey())
   void loadBootstrap()
 })
 </script>
@@ -298,6 +302,26 @@ onMounted(() => {
           <button class="secondary-button" :disabled="logoutPending" type="button" @click="logoutAccount">
             {{ logoutPending ? 'Signing out...' : 'Sign out' }}
           </button>
+        </div>
+
+        <div v-else-if="showAdminSessionCard" class="account-panel__signed-in">
+          <div>
+            <p class="account-panel__note account-panel__note--success" role="status">
+              Admin key accepted. It is stored only in this browser session.
+            </p>
+            <p class="account-panel__label">
+              Admin session
+            </p>
+            <strong>Key accepted</strong>
+            <small>Stored only for this browser session.</small>
+            <small class="account-panel__admin">
+              This admin path is separate from optional board user accounts.
+            </small>
+          </div>
+
+          <NuxtLink class="secondary-button" prefetch-on="interaction" to="/admin">
+            Open admin review
+          </NuxtLink>
         </div>
 
         <template v-else-if="accountUiReady">
