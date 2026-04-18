@@ -107,7 +107,7 @@ const emit = defineEmits<{
 .submission-page__back {
   width: fit-content;
   text-decoration: none;
-  color: #294635;
+  color: var(--site-link);
   font-weight: 700;
 }
 
@@ -123,7 +123,7 @@ const emit = defineEmits<{
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: #6d7267;
+  color: var(--site-muted);
 }
 
 .submission-page h1,
@@ -132,7 +132,7 @@ const emit = defineEmits<{
   font-family: 'DM Serif Display', serif;
   font-weight: 400;
   letter-spacing: -0.03em;
-  color: #162219;
+  color: var(--site-heading);
 }
 
 .submission-page h1 {
@@ -150,7 +150,7 @@ const emit = defineEmits<{
 .submission-page__lede,
 .submission-page__copy,
 .submission-page__examples {
-  color: #33433a;
+  color: var(--site-text);
   line-height: 1.7;
 }
 
@@ -171,9 +171,9 @@ const emit = defineEmits<{
 .submission-page__form {
   padding: 1.5rem;
   border-radius: 1.65rem;
-  background: rgba(255, 250, 243, 0.84);
-  border: 1px solid rgba(40, 58, 45, 0.08);
-  box-shadow: 0 24px 50px rgba(52, 66, 56, 0.08);
+  background: var(--site-surface);
+  border: 1px solid var(--site-border);
+  box-shadow: var(--site-shadow);
 }
 
 .submission-page__copy {
@@ -209,17 +209,17 @@ const emit = defineEmits<{
 :deep(.field span) {
   font-size: 0.88rem;
   font-weight: 700;
-  color: #2b382f;
+  color: var(--site-text);
 }
 
 :deep(.field input),
 :deep(.field textarea),
 :deep(.field select) {
   width: 100%;
-  border: 1px solid rgba(40, 58, 45, 0.12);
+  border: 1px solid var(--site-border-strong);
   border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.88);
-  color: #1c2a21;
+  background: var(--site-input-bg);
+  color: var(--site-input-text);
   padding: 0.92rem 1rem;
   font: inherit;
   transition:
@@ -237,9 +237,9 @@ const emit = defineEmits<{
 :deep(.field textarea:focus-visible),
 :deep(.field select:focus-visible) {
   outline: none;
-  border-color: rgba(41, 70, 53, 0.32);
-  box-shadow: 0 0 0 4px rgba(41, 70, 53, 0.1);
-  background: #fff;
+  border-color: var(--site-focus);
+  box-shadow: 0 0 0 4px var(--site-focus-ring);
+  background: var(--site-elevated-strong);
 }
 
 .submit-button {
@@ -251,11 +251,11 @@ const emit = defineEmits<{
   padding: 0.88rem 1.2rem;
   border: 0;
   border-radius: 999px;
-  background: #294635;
-  color: #f8f5ee;
+  background: var(--site-button-bg);
+  color: var(--site-button-text);
   font-size: 0.96rem;
   font-weight: 700;
-  box-shadow: 0 16px 30px rgba(41, 70, 53, 0.18);
+  box-shadow: 0 16px 30px var(--site-focus-ring);
   transition:
     transform 180ms ease,
     box-shadow 180ms ease,
@@ -266,7 +266,7 @@ const emit = defineEmits<{
 .submit-button:hover,
 .submit-button:focus-visible {
   transform: translateY(-1px);
-  background: #1d3528;
+  background: var(--site-button-bg-hover);
 }
 
 .submit-button:disabled {
@@ -284,13 +284,13 @@ const emit = defineEmits<{
 }
 
 .success-note {
-  background: rgba(92, 148, 103, 0.12);
-  color: #24402e;
+  background: var(--site-success-bg);
+  color: var(--site-success-text);
 }
 
 .error-panel {
-  background: rgba(148, 91, 82, 0.12);
-  color: #6a2d23;
+  background: var(--site-error-bg);
+  color: var(--site-error-text);
 }
 
 .error-note,

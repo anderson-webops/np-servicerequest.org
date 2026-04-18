@@ -26,14 +26,15 @@ export default defineNuxtConfig({
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
         { name: 'description', content: appDescription },
         { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' },
-        { name: 'theme-color', media: '(prefers-color-scheme: light)', content: '#294635' },
-        { name: 'theme-color', media: '(prefers-color-scheme: dark)', content: '#294635' },
+        { name: 'theme-color', media: '(prefers-color-scheme: light)', content: '#f5f0e5' },
+        { name: 'theme-color', media: '(prefers-color-scheme: dark)', content: '#0d1510' },
       ],
     },
   },
 
   colorMode: {
     classSuffix: '',
+    preference: 'system',
   },
   runtimeConfig: {
     public: {

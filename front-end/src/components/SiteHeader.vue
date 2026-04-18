@@ -5,19 +5,23 @@
       <span class="site-header__name">np-servicerequest.org</span>
     </NuxtLink>
 
-    <nav aria-label="Primary" class="site-header__nav">
-      <a href="/#live-board">Live board</a>
-      <NuxtLink to="/service-request">
-        Service projects
-      </NuxtLink>
-      <NuxtLink to="/item-request">
-        Borrow an item
-      </NuxtLink>
-      <NuxtLink to="/item-lending">
-        Lend an item
-      </NuxtLink>
-      <a href="/#account-hub">Optional account</a>
-    </nav>
+    <div class="site-header__actions">
+      <nav aria-label="Primary" class="site-header__nav">
+        <a href="/#live-board">Live board</a>
+        <NuxtLink to="/service-request">
+          Service projects
+        </NuxtLink>
+        <NuxtLink to="/item-request">
+          Borrow an item
+        </NuxtLink>
+        <NuxtLink to="/item-lending">
+          Lend an item
+        </NuxtLink>
+        <a href="/#account-hub">Optional account</a>
+      </nav>
+
+      <DarkToggle />
+    </div>
   </header>
 </template>
 
@@ -31,9 +35,9 @@
   justify-content: space-between;
   gap: 1.5rem;
   padding: 1rem 5vw;
-  background: linear-gradient(180deg, rgba(245, 240, 229, 0.96), rgba(245, 240, 229, 0.82));
+  background: var(--site-header-bg);
   backdrop-filter: blur(18px);
-  border-bottom: 1px solid rgba(37, 50, 41, 0.08);
+  border-bottom: 1px solid var(--site-header-border);
 }
 
 .site-header__brand {
@@ -41,7 +45,7 @@
   flex-direction: column;
   gap: 0.15rem;
   text-decoration: none;
-  color: #1e2a22;
+  color: var(--site-heading);
 }
 
 .site-header__eyebrow {
@@ -49,13 +53,20 @@
   font-weight: 600;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: #6c7268;
+  color: var(--site-muted);
 }
 
 .site-header__name {
   font-family: 'DM Serif Display', serif;
   font-size: 1.55rem;
   line-height: 1;
+}
+
+.site-header__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.9rem;
 }
 
 .site-header__nav {
@@ -69,7 +80,7 @@
   padding: 0.55rem 0.95rem;
   border-radius: 999px;
   text-decoration: none;
-  color: #243128;
+  color: var(--site-heading);
   font-size: 0.95rem;
   font-weight: 600;
   transition:
@@ -80,8 +91,8 @@
 
 .site-header__nav a:hover,
 .site-header__nav a:focus-visible {
-  background: rgba(58, 91, 71, 0.1);
-  color: #102017;
+  background: var(--site-accent-soft);
+  color: var(--site-text-strong);
   transform: translateY(-1px);
 }
 
@@ -92,7 +103,13 @@
     padding-inline: 1.25rem;
   }
 
+  .site-header__actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
   .site-header__nav {
+    flex: 1;
     justify-content: flex-start;
   }
 }

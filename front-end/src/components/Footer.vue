@@ -21,7 +21,7 @@
   display: flex;
   justify-content: flex-end;
   padding: 2.5rem 5vw 3rem;
-  color: #3c4c42;
+  color: var(--site-subtle);
 }
 
 .site-footer__links {
@@ -32,7 +32,7 @@
 }
 
 .site-footer__links a {
-  color: #243128;
+  color: var(--site-heading);
   text-decoration: none;
   font-weight: 600;
 }

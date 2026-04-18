@@ -12,10 +12,13 @@
 .site-shell {
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(165, 196, 177, 0.42), transparent 24%),
-    linear-gradient(180deg, #f5f0e5 0%, #efe7d8 100%);
-  color: #1f2b23;
+    radial-gradient(circle at top left, var(--site-bg-accent), transparent 24%),
+    linear-gradient(180deg, var(--site-bg-start) 0%, var(--site-bg-end) 100%);
+  color: var(--site-text);
   font-family: 'DM Sans', sans-serif;
+  transition:
+    background 220ms ease,
+    color 220ms ease;
 }
 
 .site-shell__content {
