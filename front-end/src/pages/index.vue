@@ -1203,6 +1203,7 @@ onMounted(() => {
 }
 
 .hero__poster {
+  align-self: center;
   display: flex;
   justify-content: flex-end;
   animation: poster-in 860ms ease 60ms both;
@@ -1881,6 +1882,10 @@ onMounted(() => {
 @media (max-width: 1080px) {
   .hero__inner {
     grid-template-columns: 1fr;
+  }
+
+  .hero__poster {
+    align-self: start;
   }
 }
 
