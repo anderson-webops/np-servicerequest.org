@@ -1,8 +1,32 @@
 <script setup lang="ts">
 const colorMode = useColorMode()
+const hasMounted = ref(false)
 
 const isDark = computed(() => colorMode.value === 'dark')
-const nextLabel = computed(() => isDark.value ? 'light' : 'dark')
+const currentLabel = computed(() => {
+  if (!hasMounted.value)
+    return 'Theme'
+
+  return isDark.value ? 'Dark' : 'Light'
+})
+
+const nextLabel = computed(() => {
+  if (!hasMounted.value)
+    return 'color'
+
+  return isDark.value ? 'light' : 'dark'
+})
+
+const toggleIconClass = computed(() => {
+  if (!hasMounted.value)
+    return 'i-carbon-contrast'
+
+  return isDark.value ? 'i-carbon-moon' : 'i-carbon-sun'
+})
+
+onMounted(() => {
+  hasMounted.value = true
+})
 
 function toggleTheme() {
   colorMode.preference = isDark.value ? 'light' : 'dark'
@@ -13,13 +37,13 @@ function toggleTheme() {
   <button
     class="theme-toggle"
     type="button"
-    :aria-pressed="isDark"
+    :aria-pressed="hasMounted ? isDark : undefined"
     :aria-label="`Switch to ${nextLabel} mode`"
     :title="`Switch to ${nextLabel} mode`"
     @click="toggleTheme"
   >
-    <span :class="isDark ? 'i-carbon-moon' : 'i-carbon-sun'" aria-hidden="true" class="theme-toggle__icon" />
-    <span class="theme-toggle__label">{{ isDark ? 'Dark' : 'Light' }}</span>
+    <span :class="toggleIconClass" aria-hidden="true" class="theme-toggle__icon" />
+    <span class="theme-toggle__label">{{ currentLabel }}</span>
   </button>
 </template>
 

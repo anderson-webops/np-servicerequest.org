@@ -17,6 +17,7 @@ import { submissionKinds } from '~/utils/submissions'
 
 type BoardFilter = 'all' | SubmissionKind
 type AuthTab = 'login' | 'register'
+type BoardCountMap = Record<BoardFilter, number>
 
 interface FormErrorState {
   detail: string
@@ -47,11 +48,13 @@ useSeoMeta({
 
 const runtimeConfig = useRuntimeConfig()
 
+const hasHydrated = ref(false)
 const antiBotChallenge = ref<AntiBotChallenge | null>(null)
 const viewer = ref<ViewerAccount | null>(null)
 const boardItems = ref<BoardItem[]>([])
-const boardPending = ref(false)
 const boardLoaded = ref(false)
+const bootstrapPending = ref(false)
+const bootstrapLoaded = ref(false)
 const boardError = ref<FormErrorState | null>(null)
 const securityError = ref<FormErrorState | null>(null)
 const boardFilter = ref<BoardFilter>('all')
@@ -126,6 +129,13 @@ const boardFilters = [
   { key: submissionKinds.itemLending, label: 'Items to lend' },
 ]
 
+const placeholderBoardCounts: BoardCountMap = {
+  all: 0,
+  [submissionKinds.service]: 0,
+  [submissionKinds.itemRequest]: 0,
+  [submissionKinds.itemLending]: 0,
+}
+
 const filteredBoardItems = computed(() => {
   if (boardFilter.value === 'all')
     return boardItems.value
@@ -133,12 +143,26 @@ const filteredBoardItems = computed(() => {
   return boardItems.value.filter(item => item.kind === boardFilter.value)
 })
 
-const boardCounts = computed(() => ({
+const boardCounts = computed<BoardCountMap>(() => ({
   all: boardItems.value.length,
   [submissionKinds.service]: boardItems.value.filter(item => item.kind === submissionKinds.service).length,
   [submissionKinds.itemRequest]: boardItems.value.filter(item => item.kind === submissionKinds.itemRequest).length,
   [submissionKinds.itemLending]: boardItems.value.filter(item => item.kind === submissionKinds.itemLending).length,
 }))
+
+const boardUiReady = computed(() => hasHydrated.value && boardLoaded.value)
+const accountUiReady = computed(() => hasHydrated.value && bootstrapLoaded.value)
+const displayBoardCounts = computed<BoardCountMap>(() => (
+  boardUiReady.value && !boardError.value ? boardCounts.value : placeholderBoardCounts
+))
+const boardAudienceNote = computed(() => {
+  if (!accountUiReady.value)
+    return 'Account and reply state load after the page initializes.'
+
+  return viewer.value
+    ? 'You can reply with your account or anonymously.'
+    : 'You can reply anonymously right now, even without signing in.'
+})
 
 function isViewerAccount(value: unknown): value is ViewerAccount {
   return Boolean(
@@ -310,6 +334,7 @@ function getApiErrorState(error: unknown, endpoint: string, fallbackMessage: str
 
 async function loadBootstrap() {
   const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'bootstrap')
+  bootstrapPending.value = true
 
   try {
     const response = await $fetch<BoardBootstrapResponse>(endpoint, {
@@ -322,11 +347,14 @@ async function loadBootstrap() {
   catch (error) {
     securityError.value = getApiErrorState(error, endpoint, 'Unable to initialize board security right now.')
   }
+  finally {
+    bootstrapPending.value = false
+    bootstrapLoaded.value = true
+  }
 }
 
 async function loadBoardItems() {
   const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'items')
-  boardPending.value = true
   boardError.value = null
 
   try {
@@ -340,7 +368,6 @@ async function loadBoardItems() {
     boardError.value = getApiErrorState(error, endpoint, 'Unable to load the live board right now.')
   }
   finally {
-    boardPending.value = false
     boardLoaded.value = true
   }
 }
@@ -612,6 +639,7 @@ watch(viewer, (nextViewer) => {
 })
 
 onMounted(() => {
+  hasHydrated.value = true
   refreshStoredDeleteTokenIds()
   void Promise.allSettled([
     loadBootstrap(),
@@ -659,21 +687,21 @@ onMounted(() => {
               live board
             </div>
             <div class="poster__headline">
-              <strong>{{ boardCounts.all }}</strong>
+              <strong>{{ displayBoardCounts.all }}</strong>
               <span>active community posts</span>
             </div>
             <div class="poster__lanes">
               <div>
                 <small>service</small>
-                <strong>{{ boardCounts[submissionKinds.service] }}</strong>
+                <strong>{{ displayBoardCounts[submissionKinds.service] }}</strong>
               </div>
               <div>
                 <small>borrow</small>
-                <strong>{{ boardCounts[submissionKinds.itemRequest] }}</strong>
+                <strong>{{ displayBoardCounts[submissionKinds.itemRequest] }}</strong>
               </div>
               <div>
                 <small>lend</small>
-                <strong>{{ boardCounts[submissionKinds.itemLending] }}</strong>
+                <strong>{{ displayBoardCounts[submissionKinds.itemLending] }}</strong>
               </div>
             </div>
             <p class="poster__note">
@@ -708,7 +736,7 @@ onMounted(() => {
             @click="boardFilter = filter.key"
           >
             <span>{{ filter.label }}</span>
-            <strong>{{ boardCounts[filter.key] }}</strong>
+            <strong>{{ displayBoardCounts[filter.key] }}</strong>
           </button>
         </div>
       </div>
@@ -731,7 +759,10 @@ onMounted(() => {
             <li>Logged-in replies can reuse the email already on the account.</li>
           </ul>
 
-          <p v-if="securityError" class="account-panel__note account-panel__note--warning" role="alert">
+          <p v-if="!accountUiReady" class="account-panel__note" role="status">
+            {{ bootstrapPending ? 'Loading account tools...' : 'Account tools load after the page initializes.' }}
+          </p>
+          <p v-else-if="securityError" class="account-panel__note account-panel__note--warning" role="alert">
             {{ securityError.message }} {{ securityError.detail }}
           </p>
           <p v-if="authNotice" class="account-panel__note account-panel__note--success" role="status">
@@ -741,7 +772,7 @@ onMounted(() => {
             {{ authError.message }} {{ authError.detail }}
           </p>
 
-          <div v-if="viewer" class="account-panel__signed-in">
+          <div v-if="accountUiReady && viewer" class="account-panel__signed-in">
             <div>
               <p class="account-panel__label">
                 Signed in as
@@ -755,7 +786,7 @@ onMounted(() => {
             </button>
           </div>
 
-          <template v-else>
+          <template v-else-if="accountUiReady">
             <div class="account-tabs">
               <button
                 class="account-tabs__button" :class="[{ 'account-tabs__button--active': authTab === 'register' }]"
@@ -827,14 +858,14 @@ onMounted(() => {
         <div class="board-feed">
           <div class="board-feed__meta">
             <p>
-              {{ boardCounts.all }} live posts
+              {{ displayBoardCounts.all }} live posts
             </p>
             <p>
-              {{ viewer ? 'You can reply with your account or anonymously.' : 'You can reply anonymously right now, even without signing in.' }}
+              {{ boardAudienceNote }}
             </p>
           </div>
 
-          <div v-if="boardPending && !boardLoaded" class="board-empty board-empty--loading">
+          <div v-if="!boardUiReady" class="board-empty board-empty--loading" role="status">
             Loading the live board...
           </div>
 
@@ -1447,6 +1478,11 @@ onMounted(() => {
   padding: 0.9rem 1rem;
   border-radius: 1rem;
   line-height: 1.55;
+}
+
+.account-panel__note {
+  background: var(--site-surface-soft);
+  color: var(--site-subtle);
 }
 
 .account-panel__note--success,
