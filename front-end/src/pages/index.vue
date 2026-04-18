@@ -9,34 +9,19 @@ import type {
   BoardInteractionResponse,
   BoardItem,
   BoardItemCounts,
+  BoardItemResolutionResponse,
   BoardItemsPagination,
   BoardItemsResponse,
   ViewerAccount,
 } from '~/utils/board'
+import type { BoardFormErrorState, BoardFormStatus, BoardReplyDraft } from '~/utils/boardUi'
 import type { SubmissionKind } from '~/utils/submissions'
 import { isAntiBotChallenge, isAntiBotChallengeExpired, markAntiBotChallengeObserved, waitForAntiBotChallengeMinimumAge } from '~/utils/antiBot'
 import { forgetBoardDeleteToken, getBoardEndpoint, getStoredBoardDeleteToken, listStoredBoardDeleteTokenIds, rememberBoardDeleteToken } from '~/utils/board'
+import { formatBoardDate, getBoardApiErrorState, getBoardDetailPath, getContactActionLabel, getInteractionDeleteKey, getReplyActionLabel, getRevealKey } from '~/utils/boardUi'
 import { submissionKinds } from '~/utils/submissions'
 
 type BoardFilter = 'all' | SubmissionKind
-
-interface FormErrorState {
-  detail: string
-  message: string
-}
-
-interface FormStatus {
-  error: FormErrorState | null
-  pending: boolean
-  success: boolean
-}
-
-interface ReplyDraft {
-  'bot-field': string
-  'contact': string
-  'message': string
-  'name': string
-}
 
 definePageMeta({
   layout: 'home',
@@ -58,8 +43,8 @@ const boardItems = ref<BoardItem[]>([])
 const boardLoaded = ref(false)
 const boardPending = ref(false)
 const bootstrapLoaded = ref(false)
-const boardError = ref<FormErrorState | null>(null)
-const securityError = ref<FormErrorState | null>(null)
+const boardError = ref<BoardFormErrorState | null>(null)
+const securityError = ref<BoardFormErrorState | null>(null)
 const boardFilter = ref<BoardFilter>('all')
 const boardCounts = ref<BoardItemCounts>({
   all: 0,
@@ -77,23 +62,25 @@ const boardPagination = ref<BoardItemsPagination>({
 })
 const managementNotice = ref('')
 const managementPending = ref(false)
-const managementError = ref<FormErrorState | null>(null)
+const managementError = ref<BoardFormErrorState | null>(null)
 const openReplyItemId = ref<string | null>(null)
 const confirmDeleteItemId = ref<string | null>(null)
 const confirmDeleteInteractionKey = ref<string | null>(null)
 
-const replyDrafts = reactive<Record<string, ReplyDraft>>({})
-const replyStatuses = reactive<Record<string, FormStatus>>({})
+const replyDrafts = reactive<Record<string, BoardReplyDraft>>({})
+const replyStatuses = reactive<Record<string, BoardFormStatus>>({})
 const revealItemContacts = reactive<Record<string, string>>({})
 const revealInteractionContacts = reactive<Record<string, string>>({})
 const revealItemContactVisibility = reactive<Record<string, boolean>>({})
 const revealInteractionContactVisibility = reactive<Record<string, boolean>>({})
-const revealErrors = reactive<Record<string, FormErrorState | null>>({})
+const revealErrors = reactive<Record<string, BoardFormErrorState | null>>({})
 const revealPending = reactive<Record<string, boolean>>({})
-const deleteErrors = reactive<Record<string, FormErrorState | null>>({})
+const deleteErrors = reactive<Record<string, BoardFormErrorState | null>>({})
 const deletePending = reactive<Record<string, boolean>>({})
-const deleteInteractionErrors = reactive<Record<string, FormErrorState | null>>({})
+const deleteInteractionErrors = reactive<Record<string, BoardFormErrorState | null>>({})
 const deleteInteractionPending = reactive<Record<string, boolean>>({})
+const resolveErrors = reactive<Record<string, BoardFormErrorState | null>>({})
+const resolvePending = reactive<Record<string, boolean>>({})
 const storedDeleteTokenItemIds = ref<string[]>([])
 
 const boardFilters = [
@@ -159,13 +146,6 @@ function applyServerContext(payload: unknown) {
     viewer.value = record.viewer
 }
 
-function formatBoardDate(value: string) {
-  return new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value))
-}
-
 function sortBoardItems(items: BoardItem[]) {
   return [...items].sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt))
 }
@@ -217,20 +197,12 @@ function getReplyStatus(itemId: string) {
   return replyStatuses[itemId]
 }
 
-function getRevealKey(itemId: string, interactionId?: string) {
-  return interactionId ? `${itemId}:${interactionId}` : itemId
-}
-
 function ensureDeleteState(itemId: string) {
   if (!(itemId in deletePending))
     deletePending[itemId] = false
 
   if (!(itemId in deleteErrors))
     deleteErrors[itemId] = null
-}
-
-function getInteractionDeleteKey(itemId: string, interactionId: string) {
-  return `${itemId}:${interactionId}`
 }
 
 function ensureInteractionDeleteState(key: string) {
@@ -241,29 +213,20 @@ function ensureInteractionDeleteState(key: string) {
     deleteInteractionErrors[key] = null
 }
 
+function ensureResolutionState(itemId: string) {
+  if (!(itemId in resolvePending))
+    resolvePending[itemId] = false
+
+  if (!(itemId in resolveErrors))
+    resolveErrors[itemId] = null
+}
+
 function ensureRevealState(key: string) {
   if (!(key in revealPending))
     revealPending[key] = false
 
   if (!(key in revealErrors))
     revealErrors[key] = null
-}
-
-function getReplyActionLabel(kind: SubmissionKind) {
-  if (kind === submissionKinds.service)
-    return 'Offer help'
-
-  if (kind === submissionKinds.itemRequest)
-    return 'I can lend this'
-
-  return 'I am interested'
-}
-
-function getContactActionLabel(kind: SubmissionKind) {
-  if (kind === submissionKinds.itemLending)
-    return 'Reveal lender contact'
-
-  return 'Reveal contact'
 }
 
 function isItemContactVisible(itemId: string) {
@@ -297,51 +260,6 @@ function getInteractionContactActionLabel(itemId: string, interactionId: string)
   return 'Reveal reply contact'
 }
 
-function getApiErrorState(error: unknown, endpoint: string, fallbackMessage: string): FormErrorState {
-  const fallbackDetail = `Request URL: ${endpoint}. Please try again in a moment.`
-  let statusCode: number | null = null
-  let serverMessage = ''
-
-  if (error && typeof error === 'object') {
-    if ('status' in error && typeof error.status === 'number')
-      statusCode = error.status
-
-    if ('data' in error) {
-      const data = (error as { data?: unknown }).data
-      applyServerContext(data)
-
-      if (data && typeof data === 'object' && 'message' in data && typeof data.message === 'string')
-        serverMessage = data.message
-    }
-  }
-
-  if (statusCode === 404) {
-    return {
-      message: serverMessage || 'The server did not recognize this URL.',
-      detail: `Request URL: ${endpoint}. A stale cached client can cause this after deployment, so try a hard refresh and then retry.`,
-    }
-  }
-
-  if (statusCode === 429) {
-    return {
-      message: serverMessage || 'Too many requests arrived from this browser.',
-      detail: 'The board is rate-limiting repeat actions for bot protection. Wait a moment, then try again.',
-    }
-  }
-
-  if (statusCode != null) {
-    return {
-      message: serverMessage || fallbackMessage,
-      detail: `Request URL: ${endpoint}.`,
-    }
-  }
-
-  return {
-    message: serverMessage || fallbackMessage,
-    detail: serverMessage ? `Request URL: ${endpoint}.` : fallbackDetail,
-  }
-}
-
 async function loadBootstrap() {
   const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'bootstrap')
 
@@ -354,7 +272,7 @@ async function loadBootstrap() {
     securityError.value = null
   }
   catch (error) {
-    securityError.value = getApiErrorState(error, endpoint, 'Unable to initialize board security right now.')
+    securityError.value = getBoardApiErrorState(error, endpoint, 'Unable to initialize board security right now.', applyServerContext)
   }
   finally {
     bootstrapLoaded.value = true
@@ -379,7 +297,7 @@ async function loadBoardItems() {
     boardItems.value = sortBoardItems(response.items)
   }
   catch (error) {
-    boardError.value = getApiErrorState(error, endpoint.toString(), 'Unable to load the live board right now.')
+    boardError.value = getBoardApiErrorState(error, endpoint.toString(), 'Unable to load the live board right now.', applyServerContext)
   }
   finally {
     boardPending.value = false
@@ -446,7 +364,7 @@ async function claimBoardManagementLink(itemId: string, managementToken: string)
     managementNotice.value = 'Management access for this post is now saved in this browser. You can delete it from the live board.'
   }
   catch (error) {
-    managementError.value = getApiErrorState(error, endpoint, 'We could not claim that management link right now.')
+    managementError.value = getBoardApiErrorState(error, endpoint, 'We could not claim that management link right now.', applyServerContext)
   }
   finally {
     managementPending.value = false
@@ -479,11 +397,24 @@ function canDeleteItem(item: BoardItem) {
   return storedDeleteTokenItemIds.value.includes(item.id)
 }
 
+function canResolveItem(item: BoardItem) {
+  return canDeleteItem(item)
+}
+
 function canDeleteInteraction(interaction: BoardItem['interactions'][number]) {
   if (viewer.value?.isAdmin)
     return true
 
   return Boolean(viewer.value && interaction.author.accountId && viewer.value.id === interaction.author.accountId)
+}
+
+function canReplyToItem(item: BoardItem) {
+  return item.resolutionStatus === 'open'
+}
+
+function getResolvedNote(item: BoardItem) {
+  const resolvedAt = item.resolutionChangedAt || item.lastActivityAt
+  return `This post was marked resolved ${formatBoardDate(resolvedAt)}. It stays visible for reference, and new public replies are closed until it is reopened.`
 }
 
 function getDeleteActionLabel(itemId: string) {
@@ -508,6 +439,13 @@ function getDeleteInteractionActionLabel(itemId: string, interactionId: string) 
   return 'Delete reply'
 }
 
+function getResolutionActionLabel(item: BoardItem) {
+  if (resolvePending[item.id])
+    return 'Saving...'
+
+  return item.resolutionStatus === 'resolved' ? 'Mark open' : 'Mark resolved'
+}
+
 function removeInteractionFromBoard(itemId: string, interactionId: string) {
   boardItems.value = sortBoardItems(boardItems.value.map((item) => {
     if (item.id !== itemId)
@@ -521,6 +459,10 @@ function removeInteractionFromBoard(itemId: string, interactionId: string) {
       lastActivityAt: remainingInteractions[0]?.createdAt || item.createdAt,
     }
   }))
+}
+
+function replaceBoardItem(nextItem: BoardItem) {
+  boardItems.value = sortBoardItems(boardItems.value.map(item => item.id === nextItem.id ? nextItem : item))
 }
 
 function getQueryValue(value: unknown) {
@@ -625,7 +567,7 @@ async function submitBoardReply(item: BoardItem) {
     status.success = true
   }
   catch (error) {
-    status.error = getApiErrorState(error, endpoint, 'We could not post that board response right now.')
+    status.error = getBoardApiErrorState(error, endpoint, 'We could not post that board response right now.', applyServerContext)
   }
   finally {
     status.pending = false
@@ -655,7 +597,7 @@ async function revealItemContact(item: BoardItem) {
     revealItemContactVisibility[item.id] = true
   }
   catch (error) {
-    revealErrors[key] = getApiErrorState(error, endpoint, 'We could not reveal that contact right now.')
+    revealErrors[key] = getBoardApiErrorState(error, endpoint, 'We could not reveal that contact right now.', applyServerContext)
   }
   finally {
     revealPending[key] = false
@@ -685,10 +627,37 @@ async function revealInteractionContact(itemId: string, interactionId: string) {
     revealInteractionContactVisibility[key] = true
   }
   catch (error) {
-    revealErrors[key] = getApiErrorState(error, endpoint, 'We could not reveal that contact right now.')
+    revealErrors[key] = getBoardApiErrorState(error, endpoint, 'We could not reveal that contact right now.', applyServerContext)
   }
   finally {
     revealPending[key] = false
+  }
+}
+
+async function toggleBoardResolution(item: BoardItem) {
+  ensureResolutionState(item.id)
+  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `items/${item.id}/resolution`)
+  resolvePending[item.id] = true
+  resolveErrors[item.id] = null
+
+  try {
+    const response = await protectedPost<BoardItemResolutionResponse>(endpoint, {
+      'bot-field': '',
+      'deleteToken': getStoredBoardDeleteToken(item.id),
+      'status': item.resolutionStatus === 'resolved' ? 'open' : 'resolved',
+    })
+
+    applyServerContext(response)
+    replaceBoardItem(response.item)
+
+    if (response.item.resolutionStatus === 'resolved' && openReplyItemId.value === item.id)
+      openReplyItemId.value = null
+  }
+  catch (error) {
+    resolveErrors[item.id] = getBoardApiErrorState(error, endpoint, 'We could not update that post right now.', applyServerContext)
+  }
+  finally {
+    resolvePending[item.id] = false
   }
 }
 
@@ -743,7 +712,7 @@ async function deleteBoardPost(item: BoardItem) {
   }
   catch (error) {
     confirmDeleteItemId.value = item.id
-    deleteErrors[item.id] = getApiErrorState(error, endpoint, 'We could not delete that board item right now.')
+    deleteErrors[item.id] = getBoardApiErrorState(error, endpoint, 'We could not delete that board item right now.', applyServerContext)
   }
   finally {
     if (item.id in deletePending)
@@ -778,17 +747,20 @@ async function deleteBoardInteraction(item: BoardItem, interaction: BoardItem['i
   }
   catch (error) {
     confirmDeleteInteractionKey.value = key
-    deleteInteractionErrors[key] = getApiErrorState(error, endpoint, 'We could not delete that board response right now.')
+    deleteInteractionErrors[key] = getBoardApiErrorState(error, endpoint, 'We could not delete that board response right now.', applyServerContext)
   }
   finally {
     deleteInteractionPending[key] = false
   }
 }
 
-function openReplyForm(itemId: string) {
-  getReplyDraft(itemId)
-  getReplyStatus(itemId)
-  openReplyItemId.value = openReplyItemId.value === itemId ? null : itemId
+function openReplyForm(item: BoardItem) {
+  if (!canReplyToItem(item))
+    return
+
+  getReplyDraft(item.id)
+  getReplyStatus(item.id)
+  openReplyItemId.value = openReplyItemId.value === item.id ? null : item.id
 }
 
 watch(viewer, (nextViewer) => {
@@ -1003,6 +975,7 @@ watch(
               <div class="board-card__author">
                 <strong>{{ item.author.displayName }}</strong>
                 <span v-if="item.author.hasAccount" class="board-card__badge">account-backed</span>
+                <span v-if="item.resolutionStatus === 'resolved'" class="board-card__badge board-card__badge--resolved">resolved</span>
               </div>
 
               <p class="board-card__summary-label">
@@ -1020,6 +993,9 @@ watch(
               </dl>
 
               <div class="board-card__actions">
+                <NuxtLink class="secondary-button" prefetch-on="interaction" :to="getBoardDetailPath(item.id)">
+                  View details
+                </NuxtLink>
                 <button
                   class="secondary-button"
                   :disabled="revealPending[item.id]"
@@ -1028,8 +1004,22 @@ watch(
                 >
                   {{ getItemContactActionLabel(item) }}
                 </button>
-                <button class="secondary-button secondary-button--dark" type="button" @click="openReplyForm(item.id)">
+                <button
+                  v-if="canReplyToItem(item)"
+                  class="secondary-button secondary-button--dark"
+                  type="button"
+                  @click="openReplyForm(item)"
+                >
                   {{ openReplyItemId === item.id ? 'Hide reply form' : getReplyActionLabel(item.kind) }}
+                </button>
+                <button
+                  v-if="canResolveItem(item)"
+                  class="secondary-button"
+                  :disabled="resolvePending[item.id]"
+                  type="button"
+                  @click="toggleBoardResolution(item)"
+                >
+                  {{ getResolutionActionLabel(item) }}
                 </button>
                 <button
                   v-if="canDeleteItem(item)"
@@ -1045,9 +1035,15 @@ watch(
               <p class="board-card__contact-note">
                 Contact details are hidden until you deliberately reveal them to reduce scraping.
               </p>
+              <p v-if="item.resolutionStatus === 'resolved'" class="board-card__resolved-note">
+                {{ getResolvedNote(item) }}
+              </p>
 
               <p v-if="deleteErrors[item.id]" class="inline-note inline-note--error" role="alert">
                 {{ deleteErrors[item.id]?.message }} {{ deleteErrors[item.id]?.detail }}
+              </p>
+              <p v-if="resolveErrors[item.id]" class="inline-note inline-note--error" role="alert">
+                {{ resolveErrors[item.id]?.message }} {{ resolveErrors[item.id]?.detail }}
               </p>
               <p v-if="revealErrors[item.id]" class="inline-note inline-note--error" role="alert">
                 {{ revealErrors[item.id]?.message }} {{ revealErrors[item.id]?.detail }}
@@ -1105,8 +1101,12 @@ watch(
                 </p>
               </div>
 
+              <p v-if="item.resolutionStatus === 'resolved'" class="board-card__thread-empty">
+                This post is resolved, so new public replies are closed unless the owner or an admin reopens it.
+              </p>
+
               <form
-                v-if="openReplyItemId === item.id"
+                v-if="openReplyItemId === item.id && canReplyToItem(item)"
                 class="reply-form"
                 :aria-busy="replyStatuses[item.id]?.pending"
                 @submit.prevent="submitBoardReply(item)"
@@ -1479,6 +1479,12 @@ watch(
   font-size: 0.94rem;
 }
 
+.board-card__resolved-note {
+  margin: 0;
+  color: var(--site-subtle);
+  line-height: 1.65;
+}
+
 .inline-note,
 .success-note,
 .error-panel {
@@ -1636,6 +1642,11 @@ watch(
   font-size: 0.76rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.board-card__badge--resolved {
+  background: var(--site-success-bg);
+  color: var(--site-success-text);
 }
 
 .board-card__summary-label {

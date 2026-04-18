@@ -288,3 +288,107 @@ test('board and admin listings support server-side pagination and filters', asyn
   assert.ok((adminListing.activity as Array<{ category: string }>).every(entry => entry.category === 'posts'))
   assert.ok(((adminListing.activityCounts as Record<string, number>).posts || 0) >= 3)
 })
+
+test('public item detail pages can load a visible post and owners can toggle resolved state without deleting it', async () => {
+  const antiBot = await getAgedAntiBotChallenge()
+
+  const { body: createdSubmission, response: createResponse } = await fetchJson('/api/submissions/item-lending', {
+    body: JSON.stringify({
+      availability: 'Most weekdays after 5 PM',
+      challengeIssuedAt: String(antiBot.issuedAt),
+      challengeToken: antiBot.token,
+      condition: 'Clean and fully working',
+      contact: 'lender@example.com',
+      guidelines: 'Please return it within three days.',
+      item_available: 'Folding ladder',
+      name: 'Jordan Lender',
+      neighborhood: 'North side',
+    }),
+    method: 'POST',
+  })
+
+  assert.equal(createResponse.status, 201)
+  assert.equal(createdSubmission.accepted, true)
+  const createdBoardItem = createdSubmission.boardItem as { id: string, resolutionStatus: string }
+  const deleteToken = String(createdSubmission.deleteToken)
+
+  assert.equal(createdBoardItem.resolutionStatus, 'open')
+
+  const { body: detailBeforeResolve, response: detailBeforeResolveResponse } = await fetchJson(`/api/board/items/${createdBoardItem.id}`, {
+    method: 'GET',
+  })
+
+  assert.equal(detailBeforeResolveResponse.status, 200)
+  assert.equal((detailBeforeResolve.item as { id: string, resolutionStatus: string }).id, createdBoardItem.id)
+  assert.equal((detailBeforeResolve.item as { resolutionStatus: string }).resolutionStatus, 'open')
+
+  const { body: resolvedItem, response: resolveResponse } = await fetchJson(`/api/board/items/${createdBoardItem.id}/resolution`, {
+    body: JSON.stringify({
+      challengeIssuedAt: String(antiBot.issuedAt),
+      challengeToken: antiBot.token,
+      deleteToken,
+      status: 'resolved',
+    }),
+    method: 'POST',
+  })
+
+  assert.equal(resolveResponse.status, 200)
+  assert.equal((resolvedItem.item as { resolutionStatus: string }).resolutionStatus, 'resolved')
+
+  const { body: boardAfterResolve, response: boardAfterResolveResponse } = await fetchJson('/api/board/items', {
+    method: 'GET',
+  })
+
+  assert.equal(boardAfterResolveResponse.status, 200)
+  assert.ok((boardAfterResolve.items as Array<{ id: string, resolutionStatus: string }>).some(item =>
+    item.id === createdBoardItem.id && item.resolutionStatus === 'resolved',
+  ))
+
+  const { body: detailAfterResolve, response: detailAfterResolveResponse } = await fetchJson(`/api/board/items/${createdBoardItem.id}`, {
+    method: 'GET',
+  })
+
+  assert.equal(detailAfterResolveResponse.status, 200)
+  assert.equal((detailAfterResolve.item as { resolutionStatus: string }).resolutionStatus, 'resolved')
+
+  const { body: blockedReply, response: blockedReplyResponse } = await fetchJson(`/api/board/items/${createdBoardItem.id}/interactions`, {
+    body: JSON.stringify({
+      challengeIssuedAt: String(antiBot.issuedAt),
+      challengeToken: antiBot.token,
+      contact: 'neighbor@example.com',
+      message: 'I can come by tomorrow.',
+      name: 'Helpful Neighbor',
+    }),
+    method: 'POST',
+  })
+
+  assert.equal(blockedReplyResponse.status, 400)
+  assert.equal(blockedReply.message, 'That board item is already marked resolved. Reopen it before posting a new public reply.')
+
+  const { body: reopenedItem, response: reopenResponse } = await fetchJson(`/api/board/items/${createdBoardItem.id}/resolution`, {
+    body: JSON.stringify({
+      challengeIssuedAt: String(antiBot.issuedAt),
+      challengeToken: antiBot.token,
+      deleteToken,
+      status: 'open',
+    }),
+    method: 'POST',
+  })
+
+  assert.equal(reopenResponse.status, 200)
+  assert.equal((reopenedItem.item as { resolutionStatus: string }).resolutionStatus, 'open')
+
+  const { body: successfulReply, response: successfulReplyResponse } = await fetchJson(`/api/board/items/${createdBoardItem.id}/interactions`, {
+    body: JSON.stringify({
+      challengeIssuedAt: String(antiBot.issuedAt),
+      challengeToken: antiBot.token,
+      contact: 'neighbor@example.com',
+      message: 'I can come by tomorrow.',
+      name: 'Helpful Neighbor',
+    }),
+    method: 'POST',
+  })
+
+  assert.equal(successfulReplyResponse.status, 201)
+  assert.equal((successfulReply.interaction as { message: string }).message, 'I can come by tomorrow.')
+})

@@ -22,14 +22,17 @@ import {
 import {
   BoardAuthorizationError,
   BoardNotFoundError,
+  BoardValidationError,
   claimBoardItemManagement,
   createBoardInteraction,
   createBoardItemFromSubmission,
   deleteBoardInteraction,
   deleteBoardItem,
+  getPublicBoardItem,
   listBoardItems,
   revealBoardInteractionContact,
   revealBoardItemContact,
+  setBoardItemResolution,
 } from './board.js'
 import {
   sendBoardInteractionNotificationEmail,
@@ -135,6 +138,14 @@ function handleApiError(response: express.Response, error: unknown) {
 
   if (error instanceof BoardNotFoundError) {
     response.status(404).json({
+      antiBot: createAntiBotChallenge(),
+      message: error.message,
+    })
+    return true
+  }
+
+  if (error instanceof BoardValidationError) {
+    response.status(400).json({
       antiBot: createAntiBotChallenge(),
       message: error.message,
     })
@@ -259,6 +270,23 @@ export function createApp() {
         pageSize: parsePositiveInt(request.query.pageSize, 12, 50),
       }),
     })
+  })
+
+  app.get('/api/board/items/:itemId', async (request, response) => {
+    try {
+      response.json({
+        item: await getPublicBoardItem(request.params.itemId),
+      })
+    }
+    catch (error) {
+      if (handleApiError(response, error))
+        return
+
+      console.error('Failed to load board item:', error)
+      response.status(500).json({
+        message: 'Unable to load that board item right now.',
+      })
+    }
   })
 
   app.post('/api/submissions/:kind', async (request, response) => {
@@ -454,6 +482,37 @@ export function createApp() {
       response.status(500).json({
         antiBot: createAntiBotChallenge(),
         message: 'Unable to reveal that contact right now.',
+      })
+    }
+  })
+
+  app.post('/api/board/items/:itemId/resolution', async (request, response) => {
+    try {
+      consumeRateLimit(`resolution:item:${request.params.itemId}:${getRequestIp(request)}`, {
+        limit: 12,
+        windowMs: 1000 * 60 * 60,
+      })
+      validateAntiBotPayload(request.body)
+
+      response.json({
+        antiBot: createAntiBotChallenge(),
+        item: await setBoardItemResolution({
+          deleteToken: typeof request.body.deleteToken === 'string' ? request.body.deleteToken : '',
+          itemId: request.params.itemId,
+          resolutionStatus: typeof request.body.status === 'string' ? request.body.status : '',
+          viewer: await getViewerFromCookie(request.get('cookie')),
+        }),
+        ok: true,
+      })
+    }
+    catch (error) {
+      if (handleApiError(response, error))
+        return
+
+      console.error('Failed to update board item resolution:', error)
+      response.status(500).json({
+        antiBot: createAntiBotChallenge(),
+        message: 'Unable to update that board item right now.',
       })
     }
   })

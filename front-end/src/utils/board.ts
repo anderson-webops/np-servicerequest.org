@@ -34,6 +34,8 @@ export interface BoardInteraction {
   message: string
 }
 
+export type BoardResolutionStatus = 'open' | 'resolved'
+
 export interface BoardItem {
   attributes: BoardAttribute[]
   author: BoardAuthor
@@ -45,6 +47,8 @@ export interface BoardItem {
   kind: SubmissionKind
   kindLabel: string
   lastActivityAt: string
+  resolutionChangedAt?: string
+  resolutionStatus: BoardResolutionStatus
   status: 'visible' | 'hidden_by_admin' | 'deleted_by_owner' | 'deleted_by_admin'
   summary: string
   summaryLabel: string
@@ -78,6 +82,10 @@ export interface BoardItemsResponse {
   pagination: BoardItemsPagination
 }
 
+export interface BoardItemDetailResponse {
+  item: BoardItem
+}
+
 export interface BoardContactResponse {
   antiBot: AntiBotChallenge
   contact: string
@@ -107,6 +115,12 @@ export interface BoardInteractionDeleteResponse {
   antiBot: AntiBotChallenge
   interactionId: string
   itemId: string
+  ok: boolean
+}
+
+export interface BoardItemResolutionResponse {
+  antiBot: AntiBotChallenge
+  item: BoardItem
   ok: boolean
 }
 

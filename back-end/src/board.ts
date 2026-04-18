@@ -17,6 +17,13 @@ export const boardItemStatuses = [
 
 export type BoardItemStatus = (typeof boardItemStatuses)[number]
 
+export const boardItemResolutionStatuses = [
+  'open',
+  'resolved',
+] as const
+
+export type BoardItemResolutionStatus = (typeof boardItemResolutionStatuses)[number]
+
 export const boardInteractionStatuses = [
   'visible',
   'deleted_by_author',
@@ -55,6 +62,8 @@ interface StoredBoardItem {
   kindLabel: string
   lastActivityAt: string
   managementTokenHash?: string
+  resolutionChangedAt?: string
+  resolutionStatus: BoardItemResolutionStatus
   sourceSubmission?: SubmissionSource
   status: BoardItemStatus
   statusChangedAt?: string
@@ -95,6 +104,8 @@ export interface PublicBoardItem {
   kind: SubmissionKind
   kindLabel: string
   lastActivityAt: string
+  resolutionChangedAt?: string
+  resolutionStatus: BoardItemResolutionStatus
   status: Extract<BoardItemStatus, 'visible'>
   summary: string
   summaryLabel: string
@@ -140,6 +151,13 @@ export class BoardAuthorizationError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'BoardAuthorizationError'
+  }
+}
+
+export class BoardValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'BoardValidationError'
   }
 }
 
@@ -281,6 +299,10 @@ function isBoardInteractionVisibleToPublic(interaction: StoredBoardInteraction) 
   return interaction.status === 'visible'
 }
 
+function isBoardItemOpen(item: StoredBoardItem) {
+  return item.resolutionStatus === 'open'
+}
+
 function createEmptyBoardItemCounts(): BoardItemCounts {
   return {
     'all': 0,
@@ -293,6 +315,11 @@ function createEmptyBoardItemCounts(): BoardItemCounts {
 function assertPublicBoardItemAvailable(item: StoredBoardItem) {
   if (!isBoardItemVisibleToPublic(item))
     throw new BoardNotFoundError('That board item is no longer available on the public board.')
+}
+
+function assertPublicBoardItemOpenForReplies(item: StoredBoardItem) {
+  if (!isBoardItemOpen(item))
+    throw new BoardValidationError('That board item is already marked resolved. Reopen it before posting a new public reply.')
 }
 
 function assertPublicBoardInteractionAvailable(interaction: StoredBoardInteraction) {
@@ -357,11 +384,49 @@ function toPublicItem(item: StoredBoardItem, interactions: StoredBoardInteractio
     kind: item.kind,
     kindLabel: item.kindLabel,
     lastActivityAt: item.lastActivityAt,
+    resolutionChangedAt: item.resolutionChangedAt,
+    resolutionStatus: item.resolutionStatus,
     status: 'visible',
     summary: item.summary,
     summaryLabel: item.summaryLabel,
     title: item.title,
   }
+}
+
+function getBoardItemManagementAccess(input: {
+  deleteToken: string
+  item: StoredBoardItem
+  viewer: ViewerAccount | null
+}) {
+  const normalizedDeleteToken = cleanValue(input.deleteToken)
+  const ownsByAdmin = Boolean(input.viewer?.isAdmin)
+  const ownsByAccount = Boolean(input.viewer && input.item.author.accountId && input.viewer.id === input.item.author.accountId)
+  const ownsByDeleteToken = Boolean(
+    normalizedDeleteToken
+    && input.item.deleteTokenHash
+    && hashDeleteToken(normalizedDeleteToken) === input.item.deleteTokenHash,
+  )
+
+  return {
+    actor: ownsByAdmin
+      ? { kind: 'admin' as const, label: input.viewer?.displayName || 'Admin account' }
+      : ownsByAccount
+        ? { kind: 'account' as const, label: input.viewer?.displayName || input.item.author.displayName }
+        : ownsByDeleteToken
+          ? { kind: 'delete_token' as const, label: 'Management link' }
+          : null,
+    canManage: ownsByAdmin || ownsByAccount || ownsByDeleteToken,
+    ownsByAdmin,
+  }
+}
+
+function normalizeStoredBoardItem(item: StoredBoardItem) {
+  return {
+    ...item,
+    resolutionStatus: boardItemResolutionStatuses.includes(item.resolutionStatus)
+      ? item.resolutionStatus
+      : 'open',
+  } satisfies StoredBoardItem
 }
 
 async function getStoredBoardItem(itemId: string) {
@@ -370,7 +435,7 @@ async function getStoredBoardItem(itemId: string) {
   if (!item)
     throw new BoardNotFoundError('That board item was not found.')
 
-  return item
+  return normalizeStoredBoardItem(item)
 }
 
 async function getStoredBoardInteraction(itemId: string, interactionId: string) {
@@ -383,7 +448,7 @@ async function getStoredBoardInteraction(itemId: string, interactionId: string) 
 }
 
 async function listStoredBoardItems() {
-  return listJsonDirectory<StoredBoardItem>(getBoardItemDirectory())
+  return (await listJsonDirectory<StoredBoardItem>(getBoardItemDirectory())).map(normalizeStoredBoardItem)
 }
 
 async function listStoredInteractions(itemId: string) {
@@ -535,6 +600,18 @@ export async function listBoardItems(options?: {
   }
 }
 
+export function describeBoardItemResolutionStatus(status: BoardItemResolutionStatus) {
+  return status === 'resolved' ? 'Resolved' : 'Open'
+}
+
+export async function getPublicBoardItem(itemId: string) {
+  const item = await getStoredBoardItem(itemId)
+  assertPublicBoardItemAvailable(item)
+
+  const interactions = (await listStoredInteractions(item.id)).filter(isBoardInteractionVisibleToPublic)
+  return toPublicItem(item, interactions)
+}
+
 export async function createBoardItemFromSubmission(input: {
   fields: Record<string, string>
   kind: SubmissionKind
@@ -571,6 +648,7 @@ export async function createBoardItemFromSubmission(input: {
     kindLabel: labels.kindLabel,
     lastActivityAt: createdAt,
     managementTokenHash: managementToken ? hashDeleteToken(managementToken) : undefined,
+    resolutionStatus: 'open',
     sourceSubmission: {
       id: input.submissionId,
       kind: input.kind,
@@ -614,6 +692,7 @@ export async function createBoardInteraction(input: {
 }) {
   const item = await getStoredBoardItem(input.itemId)
   assertPublicBoardItemAvailable(item)
+  assertPublicBoardItemOpenForReplies(item)
 
   const createdAt = new Date().toISOString()
   const authorName = cleanValue(input.name) || input.viewer?.displayName || ''
@@ -662,6 +741,59 @@ export async function createBoardInteraction(input: {
   })
 
   return toPublicInteraction(interaction)
+}
+
+export async function setBoardItemResolution(input: {
+  deleteToken: string
+  itemId: string
+  resolutionStatus: string
+  viewer: ViewerAccount | null
+}) {
+  if (!boardItemResolutionStatuses.includes(input.resolutionStatus as BoardItemResolutionStatus))
+    throw new BoardValidationError('Choose a valid board resolution status.')
+
+  const item = await getStoredBoardItem(input.itemId)
+  assertPublicBoardItemAvailable(item)
+
+  const access = getBoardItemManagementAccess({
+    deleteToken: input.deleteToken,
+    item,
+    viewer: input.viewer,
+  })
+
+  if (!access.canManage || !access.actor)
+    throw new BoardAuthorizationError('You are not allowed to update that board item.')
+
+  const nextResolutionStatus = input.resolutionStatus as BoardItemResolutionStatus
+
+  if (item.resolutionStatus === nextResolutionStatus)
+    return getPublicBoardItem(item.id)
+
+  const changedAt = new Date().toISOString()
+  const nextItem: StoredBoardItem = {
+    ...item,
+    resolutionChangedAt: changedAt,
+    resolutionStatus: nextResolutionStatus,
+  }
+
+  await writeStoredBoardItem(nextItem)
+  await recordBoardActivity({
+    action: nextResolutionStatus === 'resolved' ? 'board_item_resolved' : 'board_item_reopened',
+    actor: access.actor,
+    category: 'moderation',
+    createdAt: changedAt,
+    detail: nextResolutionStatus === 'resolved'
+      ? 'Marked resolved while keeping the post visible on the public board.'
+      : 'Reopened the post for new public replies.',
+    itemId: item.id,
+    kind: item.kind,
+    submissionId: item.sourceSubmission?.id,
+    title: item.title,
+    visibilityState: item.status,
+  })
+
+  const interactions = (await listStoredInteractions(item.id)).filter(isBoardInteractionVisibleToPublic)
+  return toPublicItem(nextItem, interactions)
 }
 
 export async function revealBoardItemContact(itemId: string) {
@@ -779,19 +911,16 @@ export async function deleteBoardItem(input: {
   viewer: ViewerAccount | null
 }) {
   const item = await getStoredBoardItem(input.itemId)
-  const normalizedDeleteToken = cleanValue(input.deleteToken)
-  const ownsByAdmin = Boolean(input.viewer?.isAdmin)
-  const ownsByAccount = Boolean(input.viewer && item.author.accountId && input.viewer.id === item.author.accountId)
-  const ownsByDeleteToken = Boolean(
-    normalizedDeleteToken
-    && item.deleteTokenHash
-    && hashDeleteToken(normalizedDeleteToken) === item.deleteTokenHash,
-  )
+  const access = getBoardItemManagementAccess({
+    deleteToken: input.deleteToken,
+    item,
+    viewer: input.viewer,
+  })
 
-  if (!ownsByAdmin && !ownsByAccount && !ownsByDeleteToken)
+  if (!access.canManage || !access.actor)
     throw new BoardAuthorizationError('You are not allowed to delete that board item.')
 
-  const nextStatus: BoardItemStatus = ownsByAdmin ? 'deleted_by_admin' : 'deleted_by_owner'
+  const nextStatus: BoardItemStatus = access.ownsByAdmin ? 'deleted_by_admin' : 'deleted_by_owner'
 
   if (item.status !== nextStatus) {
     const nextItem: StoredBoardItem = {
@@ -803,11 +932,7 @@ export async function deleteBoardItem(input: {
     await writeStoredBoardItem(nextItem)
     await recordBoardActivity({
       action: 'board_item_deleted',
-      actor: ownsByAdmin
-        ? { kind: 'admin', label: input.viewer?.displayName || 'Admin account' }
-        : ownsByAccount
-          ? { kind: 'account', label: input.viewer?.displayName || item.author.displayName }
-          : { kind: 'delete_token', label: 'Delete link' },
+      actor: access.actor,
       category: 'deletions',
       detail: 'Removed from the public board while preserving the internal record.',
       itemId: item.id,

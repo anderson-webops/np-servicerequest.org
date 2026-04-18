@@ -45,6 +45,7 @@ The landing page now exposes:
 The board and intake forms call the separate back-end API instead of relying on inline Nuxt routes or static form hosting.
 The previous PWA/service-worker runtime is intentionally disabled right now so clients do not keep serving stale cached form logic across deploys.
 The live board and admin review filters now stay in the URL query string so refresh, back/forward navigation, and shared links preserve the current view. The optional account page also supports `?tab=login`.
+Each public board post also has a dedicated static-safe detail page at `/post?id=<boardItemId>`, so individual requests can be shared even under static hosting.
 
 Set `NUXT_PUBLIC_API_BASE_URL` when the front-end should target a non-default API host. This value should be the full API base, for example `https://np-servicerequest.org/api`.
 
@@ -56,12 +57,14 @@ The API lives in `back-end` and exposes:
 - `GET /api/pageview`
 - `GET /api/board/bootstrap`
 - `GET /api/board/items`
+- `GET /api/board/items/:itemId`
 - `POST /api/submissions/service-request`
 - `POST /api/submissions/item-request`
 - `POST /api/submissions/item-lending`
 - `POST /api/board/items/:itemId/claim-management`
 - `POST /api/board/items/:itemId/interactions`
 - `POST /api/board/items/:itemId/contact`
+- `POST /api/board/items/:itemId/resolution`
 - `POST /api/board/items/:itemId/interactions/:interactionId/contact`
 - `DELETE /api/board/items/:itemId`
 - `DELETE /api/board/items/:itemId/interactions/:interactionId`
@@ -85,6 +88,7 @@ The live board, optional accounts, and session files are stored under a `_board`
 
 The back-end includes an SMTP notification pipeline for new board items and replies, but it is intentionally off by default.
 Anonymous posters who use an email address can also receive a management link that restores delete access from another browser.
+Those emails now point to the dedicated post detail page, where owners can recover delete access and manage the post in place.
 
 - `ENABLE_BOARD_EMAIL_NOTIFICATIONS=false` keeps notifications disabled
 - `ENABLE_BOARD_MANAGEMENT_EMAILS=true` keeps owner management-link emails enabled when SMTP is configured
@@ -97,6 +101,12 @@ Anonymous posters who use an email address can also receive a management link th
 
 Signed-in board accounts whose email addresses appear in `BOARD_ADMIN_EMAILS` are treated as admins.
 Admins can delete any board post and any board reply directly from the live board.
+
+### Board Resolution States
+
+Public board visibility and board completion are now separate states.
+Visible posts can stay on the public board while being marked `open` or `resolved`.
+Resolved posts remain shareable and readable, but new public replies are blocked until the owner or an admin reopens them.
 
 ### Admin Review API
 

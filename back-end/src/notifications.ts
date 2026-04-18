@@ -21,6 +21,13 @@ function getEmailSettings() {
   }
 }
 
+function buildPublicBoardItemUrl(itemId: string) {
+  const settings = getEmailSettings()
+  const itemUrl = new URL('/post', settings.publicWebUrl)
+  itemUrl.searchParams.set('id', itemId)
+  return itemUrl
+}
+
 async function deliverMessage(input: { subject: string, text: string, to: string }) {
   const settings = getEmailSettings()
 
@@ -77,6 +84,7 @@ export async function sendBoardItemNotificationEmail(input: {
     `Contact: ${input.contact}`,
     `Created: ${input.createdAt}`,
     `Board ID: ${input.itemId}`,
+    `Public URL: ${buildPublicBoardItemUrl(input.itemId).toString()}`,
     '',
     'Summary:',
     input.summary,
@@ -110,6 +118,7 @@ export async function sendBoardInteractionNotificationEmail(input: {
     '',
     `Item: ${input.itemTitle}`,
     `Board ID: ${input.itemId}`,
+    `Public URL: ${buildPublicBoardItemUrl(input.itemId).toString()}`,
     `Author: ${input.authorName}`,
     `Contact: ${input.contact}`,
     `Created: ${input.createdAt}`,
@@ -136,10 +145,10 @@ export async function sendBoardItemManagementLinkEmail(input: {
   if (!settings.managementEnabled)
     return
 
-  const manageUrl = new URL('/', settings.publicWebUrl)
+  const manageUrl = new URL('/post', settings.publicWebUrl)
+  manageUrl.searchParams.set('id', input.itemId)
   manageUrl.searchParams.set('manageItem', input.itemId)
   manageUrl.searchParams.set('manageToken', input.managementToken)
-  manageUrl.hash = 'live-board'
 
   const body = [
     'You posted a request on np-servicerequest.org.',
