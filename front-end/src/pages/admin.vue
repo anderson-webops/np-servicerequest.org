@@ -97,6 +97,7 @@ const adminKeyInput = ref('')
 const activeAdminKey = ref('')
 const authPending = ref(false)
 const loadPending = ref(false)
+const refreshPending = ref(false)
 const authError = ref<FormErrorState | null>(null)
 const dataError = ref<FormErrorState | null>(null)
 const authNotice = ref('')
@@ -380,7 +381,7 @@ function getApiErrorState(error: unknown, endpoint: string, fallbackMessage: str
   }
 }
 
-async function loadAdminSubmissions(candidateKey = activeAdminKey.value, options?: { authAttempt?: boolean, showSessionNotice?: boolean }) {
+async function loadAdminSubmissions(candidateKey = activeAdminKey.value, options?: { authAttempt?: boolean, background?: boolean, showSessionNotice?: boolean }) {
   const endpoint = new URL(getAdminEndpoint(runtimeConfig.public.apiBaseUrl, 'submissions'))
   endpoint.searchParams.set('review', reviewFilter.value)
   endpoint.searchParams.set('kind', kindFilter.value)
@@ -403,7 +404,13 @@ async function loadAdminSubmissions(candidateKey = activeAdminKey.value, options
     return
   }
 
-  loadPending.value = true
+  const useBackgroundRefresh = Boolean(options?.background)
+
+  if (useBackgroundRefresh)
+    refreshPending.value = true
+  else
+    loadPending.value = true
+
   dataError.value = null
 
   try {
@@ -447,7 +454,10 @@ async function loadAdminSubmissions(candidateKey = activeAdminKey.value, options
       dataError.value = errorState
   }
   finally {
-    loadPending.value = false
+    if (useBackgroundRefresh)
+      refreshPending.value = false
+    else
+      loadPending.value = false
   }
 }
 
@@ -526,6 +536,7 @@ function changeActivityPage(nextPage: number) {
 
 async function saveReview(submission: AdminSubmissionRecord, status: AdminReviewStatus) {
   const endpoint = getAdminEndpoint(runtimeConfig.public.apiBaseUrl, `submissions/${submission.kind}/${submission.id}/review`)
+  const previousScrollY = import.meta.client ? window.scrollY : 0
   reviewPending[submission.id] = true
   reviewErrors[submission.id] = null
   reviewNotices[submission.id] = ''
@@ -542,7 +553,16 @@ async function saveReview(submission: AdminSubmissionRecord, status: AdminReview
       method: 'POST',
     })
 
-    await loadAdminSubmissions(activeAdminKey.value, { showSessionNotice: false })
+    await loadAdminSubmissions(activeAdminKey.value, { background: true, showSessionNotice: false })
+    await nextTick()
+
+    if (import.meta.client) {
+      const maxScrollTop = Math.max(document.documentElement.scrollHeight - window.innerHeight, 0)
+      window.scrollTo({
+        top: Math.min(previousScrollY, maxScrollTop),
+      })
+    }
+
     reviewNotices[submission.id] = status === 'rejected'
       ? response.submission.board.publicState === 'hidden_by_admin'
         ? 'Rejected and hidden from the public board.'
@@ -598,7 +618,7 @@ watch(
     const changed = syncAdminStateFromRoute()
 
     if (changed && isAuthenticated.value)
-      void loadAdminSubmissions(activeAdminKey.value, { showSessionNotice: false })
+      void loadAdminSubmissions(activeAdminKey.value, { background: true, showSessionNotice: false })
   },
 )
 </script>
@@ -731,7 +751,10 @@ watch(
         </div>
       </div>
 
-      <div v-if="loadPending" class="admin-empty" role="status">
+      <p v-if="refreshPending" class="inline-note" role="status">
+        Refreshing admin review results…
+      </p>
+      <div v-if="loadPending && !visibleSubmissions.length" class="admin-empty" role="status">
         Loading admin submissions…
       </div>
       <div v-else-if="!visibleSubmissions.length" class="admin-empty">
@@ -806,7 +829,7 @@ watch(
                 'secondary-button--dark': action.status === submission.review.status,
                 'secondary-button--danger': action.status === 'rejected',
               }"
-              :disabled="reviewPending[submission.id]"
+              :disabled="reviewPending[submission.id] || refreshPending"
               type="button"
               @click="saveReview(submission, action.status)"
             >
@@ -827,7 +850,7 @@ watch(
         <div class="admin-pagination">
           <button
             class="secondary-button"
-            :disabled="loadPending || !submissionsPagination.hasPreviousPage"
+            :disabled="loadPending || refreshPending || !submissionsPagination.hasPreviousPage"
             type="button"
             @click="changeSubmissionsPage(submissionsPagination.page - 1)"
           >
@@ -835,7 +858,7 @@ watch(
           </button>
           <button
             class="secondary-button secondary-button--dark"
-            :disabled="loadPending || !submissionsPagination.hasNextPage"
+            :disabled="loadPending || refreshPending || !submissionsPagination.hasNextPage"
             type="button"
             @click="changeSubmissionsPage(submissionsPagination.page + 1)"
           >
@@ -875,7 +898,15 @@ watch(
         </div>
       </div>
 
-      <div v-if="!filteredActivityEntries.length" class="admin-empty">
+      <p v-if="refreshPending" class="inline-note" role="status">
+        Refreshing activity log…
+      </p>
+
+      <div v-if="loadPending && !filteredActivityEntries.length" class="admin-empty" role="status">
+        Loading admin activity…
+      </div>
+
+      <div v-else-if="!filteredActivityEntries.length" class="admin-empty">
         No activity has been recorded for the current filters yet.
       </div>
 
@@ -909,7 +940,7 @@ watch(
         <div class="admin-pagination">
           <button
             class="secondary-button"
-            :disabled="loadPending || !activityPagination.hasPreviousPage"
+            :disabled="loadPending || refreshPending || !activityPagination.hasPreviousPage"
             type="button"
             @click="changeActivityPage(activityPagination.page - 1)"
           >
@@ -917,7 +948,7 @@ watch(
           </button>
           <button
             class="secondary-button secondary-button--dark"
-            :disabled="loadPending || !activityPagination.hasNextPage"
+            :disabled="loadPending || refreshPending || !activityPagination.hasNextPage"
             type="button"
             @click="changeActivityPage(activityPagination.page + 1)"
           >
