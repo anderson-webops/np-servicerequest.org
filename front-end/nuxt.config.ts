@@ -8,11 +8,10 @@ export default defineNuxtConfig({
     '@unocss/nuxt',
     '@pinia/nuxt',
     '@nuxtjs/color-mode',
-    '@nuxt/eslint',
   ],
 
   devtools: {
-    enabled: true,
+    enabled: process.env.NODE_ENV === 'development',
   },
 
   app: {
@@ -43,15 +42,17 @@ export default defineNuxtConfig({
   },
 
   srcDir: 'src',
+  sourcemap: {
+    client: false,
+    server: false,
+  },
 
   future: {
     compatibilityVersion: 4,
   },
 
   experimental: {
-    // when using generate, payload js assets included in sw precache manifest
-    // but missing on offline, disabling extraction it until fixed
-    payloadExtraction: false,
+    payloadExtraction: true,
     renderJsonPayloads: true,
     typedPages: true,
   },
@@ -70,14 +71,11 @@ export default defineNuxtConfig({
       ignore: ['/hi'],
     },
   },
-
-  eslint: {
-    config: {
-      standalone: false,
-      nuxt: {
-        sortConfigKeys: true,
+  vite: {
+    build: {
+      modulePreload: {
+        polyfill: false,
       },
     },
   },
-
 })

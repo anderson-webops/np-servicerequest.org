@@ -1,14 +1,19 @@
 // @ts-check
-import antfu from '@antfu/eslint-config'
-import nuxt from './.nuxt/eslint.config.mjs'
+import { createConfigForNuxt } from '@nuxt/eslint-config'
 
-export default antfu(
+export default createConfigForNuxt(
   {
-    unocss: true,
-    formatters: true,
+    features: {
+      formatters: true,
+      nuxt: {
+        sortConfigKeys: true,
+      },
+    },
+  },
+  {
     rules: {
       'pnpm/json-enforce-catalog': 'off',
+      'vue/multi-word-component-names': 'off',
     },
   },
 )
-  .append(nuxt())
