@@ -1425,6 +1425,13 @@ onMounted(() => {
   border: 1px solid var(--site-border);
 }
 
+.account-tabs__button:hover,
+.account-tabs__button:focus-visible {
+  transform: translateY(-1px);
+  border-color: var(--site-accent-soft-strong);
+  background: var(--site-elevated-strong);
+}
+
 .account-tabs__button--active {
   background: var(--site-button-bg);
   color: var(--site-button-text);
