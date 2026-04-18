@@ -11,6 +11,7 @@ import type {
   ViewerAccount,
 } from '~/utils/board'
 import type { SubmissionKind } from '~/utils/submissions'
+import { isAntiBotChallenge, waitForAntiBotChallengeMinimumAge } from '~/utils/antiBot'
 import { forgetBoardDeleteToken, getBoardEndpoint, getStoredBoardDeleteToken, listStoredBoardDeleteTokenIds } from '~/utils/board'
 import { submissionKinds } from '~/utils/submissions'
 
@@ -138,19 +139,6 @@ const boardCounts = computed(() => ({
   [submissionKinds.itemRequest]: boardItems.value.filter(item => item.kind === submissionKinds.itemRequest).length,
   [submissionKinds.itemLending]: boardItems.value.filter(item => item.kind === submissionKinds.itemLending).length,
 }))
-
-function isAntiBotChallenge(value: unknown): value is AntiBotChallenge {
-  return Boolean(
-    value
-    && typeof value === 'object'
-    && 'action' in value
-    && typeof value.action === 'string'
-    && 'issuedAt' in value
-    && typeof value.issuedAt === 'number'
-    && 'token' in value
-    && typeof value.token === 'string',
-  )
-}
 
 function isViewerAccount(value: unknown): value is ViewerAccount {
   return Boolean(
@@ -363,6 +351,8 @@ async function ensureAntiBotReady() {
 
   if (!antiBotChallenge.value)
     throw new Error('Missing anti-bot challenge.')
+
+  await waitForAntiBotChallengeMinimumAge(antiBotChallenge.value)
 }
 
 async function protectedPost<T>(endpoint: string, body: Record<string, string>) {
@@ -966,7 +956,7 @@ onMounted(() => {
                       {{ revealPending[getRevealKey(item.id, interaction.id)] ? 'Revealing...' : 'Reveal reply contact' }}
                     </button>
                     <p v-if="revealErrors[getRevealKey(item.id, interaction.id)]" class="inline-note inline-note--error" role="alert">
-                      {{ revealErrors[getRevealKey(item.id, interaction.id)]?.message }}
+                      {{ revealErrors[getRevealKey(item.id, interaction.id)]?.message }} {{ revealErrors[getRevealKey(item.id, interaction.id)]?.detail }}
                     </p>
                     <p v-if="revealInteractionContacts[getRevealKey(item.id, interaction.id)]" class="inline-note inline-note--success" role="status">
                       Contact: {{ revealInteractionContacts[getRevealKey(item.id, interaction.id)] }}

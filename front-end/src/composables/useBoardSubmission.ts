@@ -1,4 +1,5 @@
 import type { AntiBotChallenge, BoardBootstrapResponse, SubmissionResponse } from '~/utils/board'
+import { isAntiBotChallenge, waitForAntiBotChallengeMinimumAge } from '~/utils/antiBot'
 import { getBoardEndpoint, rememberBoardDeleteToken } from '~/utils/board'
 import { getSubmissionEndpoint, submissionKinds } from '~/utils/submissions'
 
@@ -11,19 +12,6 @@ export interface FormStatus {
   error: FormErrorState | null
   pending: boolean
   success: boolean
-}
-
-function isAntiBotChallenge(value: unknown): value is AntiBotChallenge {
-  return Boolean(
-    value
-    && typeof value === 'object'
-    && 'action' in value
-    && typeof value.action === 'string'
-    && 'issuedAt' in value
-    && typeof value.issuedAt === 'number'
-    && 'token' in value
-    && typeof value.token === 'string',
-  )
 }
 
 export function useBoardSubmission(kind: keyof typeof submissionKinds) {
@@ -114,6 +102,8 @@ export function useBoardSubmission(kind: keyof typeof submissionKinds) {
 
     if (!antiBotChallenge.value)
       throw new Error('Missing anti-bot challenge.')
+
+    await waitForAntiBotChallengeMinimumAge(antiBotChallenge.value)
   }
 
   async function submit(event: Event) {
