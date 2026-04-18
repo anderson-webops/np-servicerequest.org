@@ -25,10 +25,14 @@
 <style scoped>
 .site-footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
   gap: 1.5rem;
-  padding: 2.5rem 5vw 3rem;
+  padding-top: 2.5rem;
+  padding-right: var(--page-inline-end);
+  padding-bottom: max(3rem, calc(2rem + var(--page-block-end)));
+  padding-left: var(--page-inline-start);
   color: var(--site-subtle);
 }
 
@@ -37,6 +41,8 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 0.75rem;
+  margin-left: auto;
+  max-width: 48rem;
 }
 
 .site-footer__help,
@@ -58,10 +64,10 @@
   .site-footer {
     flex-direction: column;
     align-items: flex-start;
-    padding-inline: 1.25rem;
   }
 
   .site-footer__links {
+    margin-left: 0;
     justify-content: flex-start;
   }
 }

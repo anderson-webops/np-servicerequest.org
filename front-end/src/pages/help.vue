@@ -109,7 +109,10 @@ const boardGroups = [
 .help-page {
   display: grid;
   gap: 1.5rem;
-  padding: 0 5vw 2.75rem;
+  padding-top: 0;
+  padding-right: var(--page-inline-end);
+  padding-bottom: 2.75rem;
+  padding-left: var(--page-inline-start);
 }
 
 .help-page__hero,
@@ -119,6 +122,7 @@ const boardGroups = [
 }
 
 .help-page__hero {
+  min-width: 0;
   max-width: 58rem;
   padding-block: var(--page-hero-space);
 }
@@ -160,6 +164,7 @@ const boardGroups = [
   font-size: clamp(2.35rem, 4.8vw, 4.25rem);
   line-height: 0.92;
   max-width: 14ch;
+  overflow-wrap: anywhere;
   text-wrap: balance;
 }
 
@@ -182,7 +187,7 @@ const boardGroups = [
 
 .process__list {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
   gap: 1rem;
   padding: 0;
   margin: 0;
@@ -217,7 +222,7 @@ const boardGroups = [
 
 .board-groups__grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
   gap: 1rem;
 }
 
@@ -226,18 +231,7 @@ const boardGroups = [
   padding-left: 1.15rem;
 }
 
-@media (max-width: 860px) {
-  .process__list,
-  .board-groups__grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media (max-width: 760px) {
-  .help-page {
-    padding-inline: 1.25rem;
-  }
-
   .help-page h1 {
     max-width: 100%;
   }

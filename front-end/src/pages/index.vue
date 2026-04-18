@@ -985,7 +985,8 @@ onMounted(() => {
 
 .hero,
 .live-board {
-  padding-inline: 5vw;
+  padding-right: var(--page-inline-end);
+  padding-left: var(--page-inline-start);
 }
 
 .hero {
@@ -1003,6 +1004,7 @@ onMounted(() => {
 
 .hero__copy {
   align-self: center;
+  min-width: 0;
   max-width: 46rem;
   padding-right: clamp(0rem, 2vw, 1.75rem);
   animation: rise-in 700ms ease both;
@@ -1030,6 +1032,7 @@ onMounted(() => {
   max-width: 13ch;
   font-size: clamp(2.7rem, 5.4vw, 5.15rem);
   line-height: 0.92;
+  overflow-wrap: anywhere;
   text-wrap: balance;
 }
 
@@ -1070,6 +1073,7 @@ onMounted(() => {
   text-decoration: none;
   font-size: 0.96rem;
   font-weight: 700;
+  touch-action: manipulation;
   transition:
     transform 180ms ease,
     box-shadow 180ms ease,
@@ -1106,6 +1110,7 @@ onMounted(() => {
 .hero__poster {
   align-self: center;
   display: flex;
+  min-width: 0;
   justify-content: flex-end;
   animation: poster-in 860ms ease 60ms both;
 }
@@ -1211,6 +1216,7 @@ onMounted(() => {
 }
 
 .section-heading {
+  min-width: 0;
   max-width: 42rem;
 }
 
@@ -1219,12 +1225,13 @@ onMounted(() => {
 }
 
 .board-filter-strip {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
   gap: 0.75rem;
 }
 
 .board-filter {
+  width: 100%;
   gap: 0.7rem;
   background: var(--site-surface);
   color: var(--site-text-strong);
@@ -1358,6 +1365,11 @@ onMounted(() => {
   align-items: flex-start;
 }
 
+.board-card__header > div,
+.thread-item__header > div {
+  min-width: 0;
+}
+
 .board-card__kind,
 .board-card__thread-label,
 .board-card__summary-label {
@@ -1374,6 +1386,8 @@ onMounted(() => {
   font-size: 2rem;
   line-height: 1;
   color: var(--site-text-strong);
+  overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 
 .board-card__meta {
@@ -1409,6 +1423,7 @@ onMounted(() => {
 
 .board-card__summary {
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .board-card__attributes {
@@ -1436,6 +1451,7 @@ onMounted(() => {
   margin: 0.4rem 0 0;
   color: var(--site-heading);
   line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 
 .board-card__actions {
@@ -1515,6 +1531,7 @@ onMounted(() => {
 
 .thread-item p {
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .thread-item__contact {
@@ -1656,6 +1673,7 @@ onMounted(() => {
 
   .hero__poster {
     align-self: start;
+    justify-content: center;
   }
 }
 
@@ -1677,11 +1695,6 @@ onMounted(() => {
 }
 
 @media (max-width: 760px) {
-  .hero,
-  .live-board {
-    padding-inline: 1.25rem;
-  }
-
   .hero__inner {
     min-height: auto;
     gap: 2rem;

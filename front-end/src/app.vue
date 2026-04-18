@@ -21,6 +21,11 @@ useHead({
 
 <style>
 :root {
+  --page-inline: clamp(1.25rem, 4vw, 5rem);
+  --page-inline-start: max(var(--page-inline), env(safe-area-inset-left));
+  --page-inline-end: max(var(--page-inline), env(safe-area-inset-right));
+  --page-block-start: max(0px, env(safe-area-inset-top));
+  --page-block-end: max(0px, env(safe-area-inset-bottom));
   --site-bg-start: #f5f0e5;
   --site-bg-end: #efe7d8;
   --site-bg-accent: rgba(165, 196, 177, 0.42);
@@ -70,8 +75,23 @@ body,
   padding: 0;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+img,
+svg,
+video {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
 html {
   scroll-behavior: smooth;
+  scroll-padding-top: 6rem;
   background: var(--site-bg-start);
 }
 
@@ -83,9 +103,11 @@ body,
 body {
   background: var(--site-bg-start);
   color: var(--site-text);
+  overflow-x: hidden;
   transition:
     background-color 220ms ease,
     color 220ms ease;
+  -webkit-tap-highlight-color: rgba(41, 70, 53, 0.12);
 }
 
 html.dark {

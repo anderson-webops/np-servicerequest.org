@@ -372,12 +372,16 @@ onMounted(() => {
 .account-page {
   display: grid;
   gap: 1.5rem;
-  padding: 0 5vw 2.75rem;
+  padding-top: 0;
+  padding-right: var(--page-inline-end);
+  padding-bottom: 2.75rem;
+  padding-left: var(--page-inline-start);
 }
 
 .account-page__hero {
   display: grid;
   gap: 0.9rem;
+  min-width: 0;
   max-width: 56rem;
   padding-block: var(--page-hero-space);
 }
@@ -417,6 +421,7 @@ onMounted(() => {
   font-size: clamp(2.35rem, 4.6vw, 4rem);
   line-height: 0.92;
   max-width: 15ch;
+  overflow-wrap: anywhere;
   text-wrap: balance;
 }
 
@@ -442,6 +447,7 @@ onMounted(() => {
 
 .account-page__copy,
 .account-panel {
+  min-width: 0;
   padding: 1.5rem;
   border-radius: 1.65rem;
   background: var(--site-surface);
@@ -490,6 +496,7 @@ onMounted(() => {
   background: var(--site-elevated);
   color: var(--site-text-strong);
   border: 1px solid var(--site-border);
+  touch-action: manipulation;
 }
 
 .account-tabs__button:hover,
@@ -558,7 +565,7 @@ onMounted(() => {
   font: inherit;
 }
 
-.field input:focus {
+.field input:focus-visible {
   outline: 2px solid transparent;
   border-color: var(--site-link);
   box-shadow: 0 0 0 3px var(--site-focus-ring);
@@ -590,6 +597,7 @@ onMounted(() => {
 .account-panel__signed-in strong,
 .account-panel__signed-in small {
   display: block;
+  overflow-wrap: anywhere;
 }
 
 .account-panel__signed-in small {
@@ -627,17 +635,13 @@ onMounted(() => {
   color: var(--site-error-text);
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1080px) {
   .account-page__panel {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 760px) {
-  .account-page {
-    padding-inline: 1.25rem;
-  }
-
   .account-page h1 {
     max-width: 100%;
   }

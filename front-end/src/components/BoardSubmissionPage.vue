@@ -95,12 +95,16 @@ const emit = defineEmits<{
 .submission-page {
   display: grid;
   gap: 1.5rem;
-  padding: 0 5vw 2.75rem;
+  padding-top: 0;
+  padding-right: var(--page-inline-end);
+  padding-bottom: 2.75rem;
+  padding-left: var(--page-inline-start);
 }
 
 .submission-page__hero {
   display: grid;
   gap: 0.9rem;
+  min-width: 0;
   max-width: 56rem;
   padding-block: var(--page-hero-space);
 }
@@ -140,6 +144,7 @@ const emit = defineEmits<{
   font-size: clamp(2.35rem, 4.6vw, 4rem);
   line-height: 0.92;
   max-width: 15ch;
+  overflow-wrap: anywhere;
   text-wrap: balance;
 }
 
@@ -170,6 +175,7 @@ const emit = defineEmits<{
 
 .submission-page__copy,
 .submission-page__form {
+  min-width: 0;
   padding: 1.5rem;
   border-radius: 1.65rem;
   background: var(--site-surface);
@@ -256,6 +262,7 @@ const emit = defineEmits<{
   color: var(--site-button-text);
   font-size: 0.96rem;
   font-weight: 700;
+  touch-action: manipulation;
   box-shadow: 0 16px 30px var(--site-focus-ring);
   transition:
     transform 180ms ease,
@@ -315,17 +322,13 @@ const emit = defineEmits<{
   border: 0;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1080px) {
   .submission-page__panel {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 760px) {
-  .submission-page {
-    padding-inline: 1.25rem;
-  }
-
   .submission-page__copy,
   .submission-page__form {
     padding: 1.2rem;

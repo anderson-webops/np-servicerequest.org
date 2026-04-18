@@ -18,7 +18,10 @@
 <style scoped>
 .not-found {
   max-width: 42rem;
-  padding: 5rem 5vw 4rem;
+  padding-top: 5rem;
+  padding-right: var(--page-inline-end);
+  padding-bottom: 4rem;
+  padding-left: var(--page-inline-start);
 }
 
 .not-found__eyebrow {
@@ -64,11 +67,5 @@
 .not-found__link:hover,
 .not-found__link:focus-visible {
   transform: translateY(-2px);
-}
-
-@media (max-width: 760px) {
-  .not-found {
-    padding-inline: 1.25rem;
-  }
 }
 </style>
