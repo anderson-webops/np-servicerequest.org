@@ -9,6 +9,15 @@ import {
   registerBoardAccount,
 } from './accounts.js'
 import {
+  AdminAuthorizationError,
+  AdminConfigurationError,
+  AdminSubmissionNotFoundError,
+  AdminSubmissionValidationError,
+  assertValidAdminKey,
+  listAdminSubmissions,
+  reviewAdminSubmission,
+} from './admin.js'
+import {
   BoardAuthorizationError,
   BoardNotFoundError,
   claimBoardItemManagement,
@@ -49,6 +58,34 @@ function getRequestIp(request: express.Request) {
 }
 
 function handleApiError(response: express.Response, error: unknown) {
+  if (error instanceof AdminSubmissionValidationError) {
+    response.status(400).json({
+      message: error.message,
+    })
+    return true
+  }
+
+  if (error instanceof AdminAuthorizationError) {
+    response.status(401).json({
+      message: error.message,
+    })
+    return true
+  }
+
+  if (error instanceof AdminConfigurationError) {
+    response.status(503).json({
+      message: error.message,
+    })
+    return true
+  }
+
+  if (error instanceof AdminSubmissionNotFoundError) {
+    response.status(404).json({
+      message: error.message,
+    })
+    return true
+  }
+
   if (error instanceof SubmissionValidationError || error instanceof AccountValidationError || error instanceof BotProtectionError) {
     response.status(400).json({
       antiBot: createAntiBotChallenge(),
@@ -109,6 +146,60 @@ export function createApp() {
       pageview: pageview++,
       startAt: startedAt,
     })
+  })
+
+  app.get('/api/admin/submissions', async (request, response) => {
+    try {
+      assertValidAdminKey(request.get('x-admin-key') || '')
+
+      response.json({
+        ok: true,
+        ...await listAdminSubmissions(),
+      })
+    }
+    catch (error) {
+      if (handleApiError(response, error))
+        return
+
+      console.error('Failed to list admin submissions:', error)
+      response.status(500).json({
+        message: 'Unable to load admin submissions right now.',
+      })
+    }
+  })
+
+  app.post('/api/admin/submissions/:kind/:id/review', async (request, response) => {
+    const { kind, id } = request.params
+
+    if (!isSubmissionKind(kind)) {
+      response.status(404).json({
+        message: 'Unknown submission type.',
+      })
+      return
+    }
+
+    try {
+      assertValidAdminKey(request.get('x-admin-key') || '')
+
+      response.json({
+        ok: true,
+        submission: await reviewAdminSubmission({
+          id,
+          kind,
+          notes: typeof request.body.notes === 'string' ? request.body.notes : '',
+          status: typeof request.body.status === 'string' ? request.body.status : '',
+        }),
+      })
+    }
+    catch (error) {
+      if (handleApiError(response, error))
+        return
+
+      console.error('Failed to review admin submission:', error)
+      response.status(500).json({
+        message: 'Unable to save that admin review right now.',
+      })
+    }
   })
 
   app.get('/api/board/bootstrap', async (request, response) => {

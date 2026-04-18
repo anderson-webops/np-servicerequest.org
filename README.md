@@ -39,6 +39,7 @@ The landing page now exposes:
 - a live board with service, borrowing, and lending lanes
 - public board replies that work with or without an account
 - optional account registration/login for repeat participants
+- a separate `/admin` review page that uses an admin key instead of a board account login
 - on-demand contact reveal actions instead of embedding contact details directly in the page
 
 The board and intake forms call the separate back-end API instead of relying on inline Nuxt routes or static form hosting.
@@ -66,6 +67,8 @@ The API lives in `back-end` and exposes:
 - `POST /api/board/account/register`
 - `POST /api/board/account/login`
 - `POST /api/board/account/logout`
+- `GET /api/admin/submissions`
+- `POST /api/admin/submissions/:kind/:id/review`
 
 Default port: `3006`
 
@@ -88,6 +91,19 @@ Anonymous posters who use an email address can also receive a management link th
 
 Signed-in board accounts whose email addresses appear in `BOARD_ADMIN_EMAILS` are treated as admins.
 Admins can delete any board post and any board reply directly from the live board.
+
+### Admin Review API
+
+The dedicated admin review UI at `/admin` does not use the normal board account session flow.
+It sends an admin key in the `x-admin-key` header to the review API and stores that key only in browser `sessionStorage`.
+
+The back-end accepts the admin key from the first configured value found in:
+
+- `BOARD_ADMIN_KEY`
+- `BOARD_ADMIN_KEYS` (comma-separated)
+- `ADMIN_API_KEY`
+- `NP_SERVICE_REQUEST_ADMIN_KEY`
+- `SERVICEREQUEST_ADMIN_KEY`
 
 ### Bot Protection
 

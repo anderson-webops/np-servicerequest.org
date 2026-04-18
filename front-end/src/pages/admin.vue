@@ -1,0 +1,1027 @@
+<script setup lang="ts">
+import type {
+  AdminReviewResponse,
+  AdminReviewStatus,
+  AdminSubmissionCounts,
+  AdminSubmissionRecord,
+  AdminSubmissionsResponse,
+} from '~/utils/admin'
+import type { SubmissionKind } from '~/utils/submissions'
+import {
+  clearStoredAdminKey,
+  getAdminEndpoint,
+  readStoredAdminKey,
+  writeStoredAdminKey,
+} from '~/utils/admin'
+
+interface FormErrorState {
+  detail: string
+  message: string
+}
+
+type ReviewFilter = 'all' | AdminReviewStatus
+type KindFilter = 'all' | SubmissionKind
+
+const emptyCounts: AdminSubmissionCounts = {
+  approved: 0,
+  needsFollowUp: 0,
+  pending: 0,
+  rejected: 0,
+  total: 0,
+}
+
+const reviewStatusLabels: Record<AdminReviewStatus, string> = {
+  'pending': 'Pending',
+  'approved': 'Approved',
+  'needs-follow-up': 'Needs Follow-Up',
+  'rejected': 'Rejected',
+}
+
+const reviewActionOptions = [
+  { status: 'approved' as const, label: 'Approve' },
+  { status: 'needs-follow-up' as const, label: 'Needs Follow-Up' },
+  { status: 'rejected' as const, label: 'Reject' },
+  { status: 'pending' as const, label: 'Reset' },
+]
+
+const kindLabels: Record<SubmissionKind, string> = {
+  'service-request': 'Service projects',
+  'item-request': 'Borrow requests',
+  'item-lending': 'Lending offers',
+}
+
+definePageMeta({
+  layout: 'home',
+})
+
+useSeoMeta({
+  title: 'Admin review',
+  description: 'Review stored submissions with an admin key. This page is separate from normal board user accounts.',
+})
+
+const runtimeConfig = useRuntimeConfig()
+
+const hasHydrated = ref(false)
+const adminKeyInput = ref('')
+const activeAdminKey = ref('')
+const authPending = ref(false)
+const loadPending = ref(false)
+const authError = ref<FormErrorState | null>(null)
+const dataError = ref<FormErrorState | null>(null)
+const authNotice = ref('')
+const submissions = ref<AdminSubmissionRecord[]>([])
+const reviewFilter = ref<ReviewFilter>('pending')
+const kindFilter = ref<KindFilter>('all')
+const adminKeyField = ref<HTMLInputElement | null>(null)
+
+const reviewPending = reactive<Record<string, boolean>>({})
+const reviewErrors = reactive<Record<string, FormErrorState | null>>({})
+const reviewNotices = reactive<Record<string, string>>({})
+const notesDrafts = reactive<Record<string, string>>({})
+
+const isAuthenticated = computed(() => Boolean(activeAdminKey.value))
+
+const counts = computed<AdminSubmissionCounts>(() => submissions.value.reduce((summary, submission) => {
+  summary.total += 1
+
+  if (submission.review.status === 'approved')
+    summary.approved += 1
+  else if (submission.review.status === 'needs-follow-up')
+    summary.needsFollowUp += 1
+  else if (submission.review.status === 'rejected')
+    summary.rejected += 1
+  else
+    summary.pending += 1
+
+  return summary
+}, { ...emptyCounts }))
+
+const visibleSubmissions = computed(() => submissions.value.filter((submission) => {
+  const matchesKind = kindFilter.value === 'all' || submission.kind === kindFilter.value
+  const matchesReview = reviewFilter.value === 'all' || submission.review.status === reviewFilter.value
+
+  return matchesKind && matchesReview
+}))
+
+const statusFilters = computed(() => [
+  { key: 'all' as const, label: 'All', count: counts.value.total },
+  { key: 'pending' as const, label: 'Pending', count: counts.value.pending },
+  { key: 'approved' as const, label: 'Approved', count: counts.value.approved },
+  { key: 'needs-follow-up' as const, label: 'Needs Follow-Up', count: counts.value.needsFollowUp },
+  { key: 'rejected' as const, label: 'Rejected', count: counts.value.rejected },
+])
+
+const kindFilters = computed(() => [
+  { key: 'all' as const, label: 'All kinds', count: counts.value.total },
+  { key: 'service-request' as const, label: kindLabels['service-request'], count: submissions.value.filter(submission => submission.kind === 'service-request').length },
+  { key: 'item-request' as const, label: kindLabels['item-request'], count: submissions.value.filter(submission => submission.kind === 'item-request').length },
+  { key: 'item-lending' as const, label: kindLabels['item-lending'], count: submissions.value.filter(submission => submission.kind === 'item-lending').length },
+])
+
+function formatSubmissionDate(value: string) {
+  return new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value))
+}
+
+function formatStatusLabel(status: AdminReviewStatus) {
+  return reviewStatusLabels[status]
+}
+
+function getReviewButtonLabel(submissionId: string, baseLabel: string) {
+  return reviewPending[submissionId] ? 'Saving…' : baseLabel
+}
+
+function clearAdminSession() {
+  clearStoredAdminKey()
+  activeAdminKey.value = ''
+  submissions.value = []
+}
+
+function seedReviewState(nextSubmissions: AdminSubmissionRecord[]) {
+  for (const submission of nextSubmissions) {
+    if (!(submission.id in reviewPending))
+      reviewPending[submission.id] = false
+
+    if (!(submission.id in reviewErrors))
+      reviewErrors[submission.id] = null
+
+    notesDrafts[submission.id] = submission.review.notes
+
+    if (!(submission.id in reviewNotices))
+      reviewNotices[submission.id] = ''
+  }
+}
+
+function getApiErrorState(error: unknown, endpoint: string, fallbackMessage: string): FormErrorState {
+  const fallbackDetail = `Request URL: ${endpoint}. Please try again in a moment.`
+  let statusCode: number | null = null
+  let serverMessage = ''
+
+  if (error && typeof error === 'object') {
+    if ('status' in error && typeof error.status === 'number')
+      statusCode = error.status
+
+    if ('data' in error) {
+      const data = (error as { data?: unknown }).data
+
+      if (data && typeof data === 'object' && 'message' in data && typeof data.message === 'string')
+        serverMessage = data.message
+    }
+  }
+
+  if (statusCode === 401 || statusCode === 403) {
+    return {
+      message: serverMessage || 'The admin key was missing or invalid.',
+      detail: 'Re-enter a valid admin key to continue. This admin access path is separate from normal board user accounts.',
+    }
+  }
+
+  if (statusCode === 404) {
+    return {
+      message: serverMessage || 'The admin review API is not available at this URL.',
+      detail: `Request URL: ${endpoint}.`,
+    }
+  }
+
+  if (statusCode === 503) {
+    return {
+      message: serverMessage || 'Admin review is not configured on this server.',
+      detail: `Request URL: ${endpoint}.`,
+    }
+  }
+
+  if (statusCode != null) {
+    return {
+      message: serverMessage || fallbackMessage,
+      detail: `Request URL: ${endpoint}.`,
+    }
+  }
+
+  return {
+    message: serverMessage || fallbackMessage,
+    detail: serverMessage ? `Request URL: ${endpoint}.` : fallbackDetail,
+  }
+}
+
+async function loadAdminSubmissions(candidateKey = activeAdminKey.value, options?: { authAttempt?: boolean }) {
+  const endpoint = getAdminEndpoint(runtimeConfig.public.apiBaseUrl, 'submissions')
+  const normalizedKey = candidateKey.trim()
+
+  if (!normalizedKey) {
+    const nextError = {
+      message: 'Enter an admin key to continue.',
+      detail: 'This page does not use the normal board account sign-in.',
+    }
+
+    if (options?.authAttempt)
+      authError.value = nextError
+
+    return
+  }
+
+  loadPending.value = true
+  dataError.value = null
+
+  try {
+    const response = await $fetch<AdminSubmissionsResponse>(endpoint, {
+      headers: {
+        'x-admin-key': normalizedKey,
+      },
+    })
+
+    activeAdminKey.value = normalizedKey
+    writeStoredAdminKey(normalizedKey)
+    submissions.value = response.submissions
+    seedReviewState(response.submissions)
+    adminKeyInput.value = ''
+    authError.value = null
+    authNotice.value = 'Admin key accepted. It is stored only in this browser session.'
+  }
+  catch (error) {
+    const errorState = getApiErrorState(error, endpoint, 'Unable to load admin submissions right now.')
+
+    if ((error as { status?: number })?.status === 401 || (error as { status?: number })?.status === 403) {
+      clearAdminSession()
+      authError.value = errorState
+      authNotice.value = ''
+      adminKeyInput.value = ''
+      await nextTick()
+      adminKeyField.value?.focus()
+      return
+    }
+
+    if (options?.authAttempt)
+      authError.value = errorState
+    else
+      dataError.value = errorState
+  }
+  finally {
+    loadPending.value = false
+  }
+}
+
+async function submitAdminKey() {
+  authPending.value = true
+  authNotice.value = ''
+  authError.value = null
+
+  try {
+    await loadAdminSubmissions(adminKeyInput.value, { authAttempt: true })
+  }
+  finally {
+    authPending.value = false
+  }
+}
+
+function signOutAdmin() {
+  clearAdminSession()
+  adminKeyInput.value = ''
+  authNotice.value = ''
+  dataError.value = null
+  authError.value = null
+}
+
+function updateSubmission(submission: AdminSubmissionRecord) {
+  submissions.value = submissions.value.map(existingSubmission => existingSubmission.id === submission.id ? submission : existingSubmission)
+  notesDrafts[submission.id] = submission.review.notes
+}
+
+async function saveReview(submission: AdminSubmissionRecord, status: AdminReviewStatus) {
+  const endpoint = getAdminEndpoint(runtimeConfig.public.apiBaseUrl, `submissions/${submission.kind}/${submission.id}/review`)
+  reviewPending[submission.id] = true
+  reviewErrors[submission.id] = null
+  reviewNotices[submission.id] = ''
+
+  try {
+    const response = await $fetch<AdminReviewResponse>(endpoint, {
+      body: {
+        notes: notesDrafts[submission.id] || '',
+        status,
+      },
+      headers: {
+        'x-admin-key': activeAdminKey.value,
+      },
+      method: 'POST',
+    })
+
+    updateSubmission(response.submission)
+    reviewNotices[submission.id] = status === 'pending'
+      ? 'Review reset to pending.'
+      : `Saved as ${formatStatusLabel(status).toLowerCase()}.`
+  }
+  catch (error) {
+    const errorState = getApiErrorState(error, endpoint, 'Unable to save that review right now.')
+
+    if ((error as { status?: number })?.status === 401 || (error as { status?: number })?.status === 403) {
+      clearAdminSession()
+      authError.value = errorState
+      dataError.value = null
+      authNotice.value = ''
+      return
+    }
+
+    reviewErrors[submission.id] = errorState
+  }
+  finally {
+    reviewPending[submission.id] = false
+  }
+}
+
+onMounted(() => {
+  hasHydrated.value = true
+
+  const storedAdminKey = readStoredAdminKey()
+
+  if (!storedAdminKey) {
+    adminKeyField.value?.focus()
+    return
+  }
+
+  void loadAdminSubmissions(storedAdminKey)
+})
+</script>
+
+<template>
+  <div class="admin-page">
+    <section class="admin-page__hero">
+      <NuxtLink class="admin-page__back" prefetch-on="interaction" to="/#live-board">
+        Back to live board
+      </NuxtLink>
+
+      <p class="eyebrow">
+        Admin review
+      </p>
+      <h1>
+        Review stored submissions with an admin key, not a board user account.
+      </h1>
+      <p class="admin-page__lede">
+        This page is separate from the normal board account flow. It accepts an admin key, stores it only in <code>sessionStorage</code>, and uses that key only for the protected admin review API.
+      </p>
+    </section>
+
+    <section class="admin-page__panel">
+      <div class="admin-page__copy">
+        <p class="eyebrow">
+          Separate access path
+        </p>
+        <h2>
+          Do not use the optional account login here.
+        </h2>
+        <ul class="admin-page__list">
+          <li>This sign-in is key-based, not email/password-based.</li>
+          <li>The key stays only in this browser session and is cleared when you sign out.</li>
+          <li>Every admin request is sent with <code>x-admin-key</code> directly to the backend admin API.</li>
+        </ul>
+      </div>
+
+      <div class="admin-panel">
+        <p v-if="authNotice" class="inline-note inline-note--success" role="status">
+          {{ authNotice }}
+        </p>
+        <p v-if="authError" class="inline-note inline-note--error" role="alert">
+          {{ authError.message }} {{ authError.detail }}
+        </p>
+        <p v-if="dataError" class="inline-note inline-note--error" role="alert">
+          {{ dataError.message }} {{ dataError.detail }}
+        </p>
+
+        <form v-if="hasHydrated && !isAuthenticated" class="admin-form" @submit.prevent="submitAdminKey">
+          <label class="field">
+            <span>Admin key</span>
+            <input
+              ref="adminKeyField"
+              v-model="adminKeyInput"
+              autocomplete="off"
+              name="admin_key"
+              placeholder="Enter the admin key"
+              required
+              spellcheck="false"
+              type="password"
+            >
+          </label>
+
+          <button class="submit-button" :disabled="authPending" type="submit">
+            {{ authPending ? 'Checking key…' : 'Sign in with admin key' }}
+          </button>
+        </form>
+
+        <div v-else-if="hasHydrated" class="admin-panel__session">
+          <div>
+            <p class="admin-panel__label">
+              Admin session
+            </p>
+            <strong>Key accepted</strong>
+            <small>Stored only for this browser session.</small>
+          </div>
+
+          <button class="secondary-button" type="button" @click="signOutAdmin">
+            Sign out
+          </button>
+        </div>
+        <p v-else class="inline-note" role="status">
+          Loading admin tools…
+        </p>
+      </div>
+    </section>
+
+    <section v-if="isAuthenticated" class="admin-review">
+      <div class="section-heading">
+        <p class="eyebrow">
+          Review queue
+        </p>
+        <h2>
+          Review stored submissions and record an admin decision.
+        </h2>
+        <p class="section-copy">
+          The filters below work against the stored submission queue. Invalid admin keys clear the session immediately and return you to the admin-key prompt.
+        </p>
+      </div>
+
+      <div class="admin-review__filters">
+        <div class="filter-strip" role="tablist" aria-label="Review status filters">
+          <button
+            v-for="filter in statusFilters"
+            :key="filter.key"
+            :aria-selected="reviewFilter === filter.key"
+            class="filter-chip"
+            :class="{ 'filter-chip--active': reviewFilter === filter.key }"
+            type="button"
+            @click="reviewFilter = filter.key"
+          >
+            <span>{{ filter.label }}</span>
+            <strong>{{ filter.count }}</strong>
+          </button>
+        </div>
+
+        <div class="filter-strip" role="tablist" aria-label="Submission type filters">
+          <button
+            v-for="filter in kindFilters"
+            :key="filter.key"
+            :aria-selected="kindFilter === filter.key"
+            class="filter-chip"
+            :class="{ 'filter-chip--active': kindFilter === filter.key }"
+            type="button"
+            @click="kindFilter = filter.key"
+          >
+            <span>{{ filter.label }}</span>
+            <strong>{{ filter.count }}</strong>
+          </button>
+        </div>
+      </div>
+
+      <div v-if="loadPending" class="admin-empty" role="status">
+        Loading admin submissions…
+      </div>
+      <div v-else-if="!visibleSubmissions.length" class="admin-empty">
+        No submissions match the current filters.
+      </div>
+      <div v-else class="admin-review__list">
+        <article v-for="submission in visibleSubmissions" :key="submission.id" class="admin-card">
+          <header class="admin-card__header">
+            <div>
+              <p class="admin-card__kind">
+                {{ submission.kindLabel }}
+              </p>
+              <h3>{{ submission.title }}</h3>
+            </div>
+
+            <div class="admin-card__meta">
+              <span>{{ formatSubmissionDate(submission.createdAt) }}</span>
+              <span class="admin-card__status" :data-status="submission.review.status">
+                {{ formatStatusLabel(submission.review.status) }}
+              </span>
+            </div>
+          </header>
+
+          <p class="admin-card__summary">
+            {{ submission.summary || 'No summary available.' }}
+          </p>
+
+          <dl class="admin-card__fields">
+            <div v-for="entry in submission.fieldEntries" :key="`${submission.id}-${entry.label}`">
+              <dt>{{ entry.label }}</dt>
+              <dd>{{ entry.value }}</dd>
+            </div>
+          </dl>
+
+          <div v-if="submission.meta.ip || submission.meta.userAgent" class="admin-card__meta-note">
+            <span v-if="submission.meta.ip">IP: {{ submission.meta.ip }}</span>
+            <span v-if="submission.meta.userAgent">User agent: {{ submission.meta.userAgent }}</span>
+          </div>
+
+          <label class="field field--wide">
+            <span>Admin notes</span>
+            <textarea
+              v-model="notesDrafts[submission.id]"
+              placeholder="Add context for the review decision or next step."
+              rows="4"
+            />
+          </label>
+
+          <div class="admin-card__actions">
+            <button
+              v-for="action in reviewActionOptions"
+              :key="`${submission.id}-${action.status}`"
+              class="secondary-button"
+              :class="{
+                'secondary-button--dark': action.status === submission.review.status,
+                'secondary-button--danger': action.status === 'rejected',
+              }"
+              :disabled="reviewPending[submission.id]"
+              type="button"
+              @click="saveReview(submission, action.status)"
+            >
+              {{ getReviewButtonLabel(submission.id, action.label) }}
+            </button>
+          </div>
+
+          <p v-if="submission.review.reviewedAt" class="admin-card__reviewed-at">
+            Last reviewed {{ formatSubmissionDate(submission.review.reviewedAt) }}
+          </p>
+          <p v-if="reviewNotices[submission.id]" class="inline-note inline-note--success" role="status">
+            {{ reviewNotices[submission.id] }}
+          </p>
+          <p v-if="reviewErrors[submission.id]" class="inline-note inline-note--error" role="alert">
+            {{ reviewErrors[submission.id]?.message }} {{ reviewErrors[submission.id]?.detail }}
+          </p>
+        </article>
+      </div>
+    </section>
+  </div>
+</template>
+
+<style scoped>
+.admin-page {
+  display: grid;
+  gap: 1.5rem;
+  padding-top: 0;
+  padding-right: var(--page-inline-end);
+  padding-bottom: 2.75rem;
+  padding-left: var(--page-inline-start);
+}
+
+.admin-page__hero,
+.admin-review {
+  display: grid;
+  gap: 1rem;
+}
+
+.admin-page__hero {
+  min-width: 0;
+  max-width: 60rem;
+  padding-block: var(--page-hero-space);
+}
+
+.admin-page__back {
+  width: fit-content;
+  color: var(--site-link);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.admin-page__back:hover,
+.admin-page__back:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--site-muted);
+}
+
+.admin-page h1,
+.admin-page h2,
+.admin-card h3 {
+  margin: 0;
+  font-family: 'DM Serif Display', serif;
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  color: var(--site-heading);
+}
+
+.admin-page h1 {
+  max-width: 15ch;
+  font-size: clamp(2.35rem, 4.6vw, 4rem);
+  line-height: 0.92;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.admin-page__lede,
+.section-copy,
+.admin-card__summary,
+.admin-page__list {
+  color: var(--site-text);
+  line-height: 1.7;
+}
+
+.admin-page__lede {
+  max-width: 46rem;
+  margin: 0;
+  font-size: 1.02rem;
+}
+
+.section-heading {
+  max-width: 44rem;
+}
+
+.section-copy {
+  margin: 0;
+}
+
+.admin-page__lede code,
+.admin-page__list code {
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.55rem;
+  background: var(--site-elevated);
+  font-size: 0.95em;
+}
+
+.admin-page__panel {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 1.2rem;
+  align-items: start;
+}
+
+.admin-page__copy,
+.admin-panel,
+.admin-card {
+  min-width: 0;
+  padding: 1.5rem;
+  border-radius: 1.65rem;
+  background: var(--site-surface);
+  border: 1px solid var(--site-border);
+  box-shadow: var(--site-shadow);
+}
+
+.admin-page__copy,
+.admin-panel,
+.admin-review__list {
+  display: grid;
+  gap: 1rem;
+}
+
+.admin-page__list {
+  margin: 0;
+  padding-left: 1.15rem;
+}
+
+.admin-form {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.field--wide {
+  grid-column: 1 / -1;
+}
+
+.field span {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--site-text);
+}
+
+.field input,
+.field textarea {
+  width: 100%;
+  border: 1px solid var(--site-border-strong);
+  border-radius: 1rem;
+  background: var(--site-input-bg);
+  color: var(--site-input-text);
+  padding: 0.92rem 1rem;
+  font: inherit;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
+}
+
+.field textarea {
+  resize: vertical;
+  min-height: 6rem;
+}
+
+.field input:focus-visible,
+.field textarea:focus-visible {
+  outline: none;
+  border-color: var(--site-focus);
+  box-shadow: 0 0 0 4px var(--site-focus-ring);
+  background: var(--site-elevated-strong);
+}
+
+.submit-button,
+.secondary-button,
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3.1rem;
+  padding: 0.88rem 1.2rem;
+  border: 0;
+  border-radius: 999px;
+  text-decoration: none;
+  font-size: 0.96rem;
+  font-weight: 700;
+  touch-action: manipulation;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease,
+    border-color 180ms ease;
+}
+
+.submit-button,
+.secondary-button--dark {
+  background: var(--site-button-bg);
+  color: var(--site-button-text);
+  box-shadow: 0 16px 30px var(--site-focus-ring);
+}
+
+.submit-button:hover,
+.submit-button:focus-visible,
+.secondary-button--dark:hover,
+.secondary-button--dark:focus-visible {
+  transform: translateY(-1px);
+  background: var(--site-button-bg-hover);
+}
+
+.secondary-button,
+.filter-chip {
+  background: var(--site-elevated);
+  color: var(--site-heading);
+  border: 1px solid var(--site-border-strong);
+}
+
+.secondary-button:hover,
+.secondary-button:focus-visible,
+.filter-chip:hover,
+.filter-chip:focus-visible,
+.filter-chip--active {
+  transform: translateY(-1px);
+  background: var(--site-elevated-strong);
+  border-color: var(--site-accent-soft-strong);
+}
+
+.secondary-button--danger {
+  background: var(--site-error-bg);
+  color: var(--site-error-text);
+  border-color: rgba(181, 95, 82, 0.3);
+}
+
+.secondary-button--danger:hover,
+.secondary-button--danger:focus-visible {
+  background: rgba(181, 95, 82, 0.24);
+}
+
+.submit-button:disabled,
+.secondary-button:disabled {
+  opacity: 0.68;
+  cursor: wait;
+  transform: none;
+}
+
+.admin-panel__session {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 1.2rem;
+  background: var(--site-elevated);
+}
+
+.admin-panel__label {
+  margin: 0 0 0.2rem;
+  font-size: 0.74rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--site-muted);
+}
+
+.admin-panel__session strong,
+.admin-panel__session small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.admin-panel__session small {
+  margin-top: 0.2rem;
+  color: var(--site-subtle);
+}
+
+.inline-note,
+.admin-empty {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  border-radius: 1rem;
+  line-height: 1.55;
+}
+
+.inline-note {
+  background: var(--site-surface-soft);
+  color: var(--site-subtle);
+}
+
+.inline-note--success {
+  background: var(--site-success-bg);
+  color: var(--site-success-text);
+}
+
+.inline-note--error {
+  background: var(--site-error-bg);
+  color: var(--site-error-text);
+}
+
+.admin-review__filters {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.filter-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 0.75rem;
+}
+
+.filter-chip {
+  width: 100%;
+  gap: 0.7rem;
+}
+
+.filter-chip strong {
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: var(--site-accent-soft);
+  font-size: 0.82rem;
+}
+
+.admin-review__list {
+  gap: 1rem;
+}
+
+.admin-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.admin-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.admin-card__header > div,
+.admin-card__meta-note {
+  min-width: 0;
+}
+
+.admin-card__kind {
+  margin: 0;
+  font-size: 0.76rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--site-muted);
+}
+
+.admin-card h3 {
+  margin-top: 0.35rem;
+  font-size: 2rem;
+  line-height: 1;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.admin-card__meta {
+  display: grid;
+  gap: 0.35rem;
+  justify-items: end;
+  color: var(--site-subtle);
+  font-size: 0.88rem;
+}
+
+.admin-card__status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.28rem 0.55rem;
+  border-radius: 999px;
+  background: var(--site-accent-soft);
+  color: var(--site-link);
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-card__status[data-status='approved'] {
+  background: var(--site-success-bg);
+  color: var(--site-success-text);
+}
+
+.admin-card__status[data-status='rejected'] {
+  background: var(--site-error-bg);
+  color: var(--site-error-text);
+}
+
+.admin-card__summary,
+.admin-card__reviewed-at,
+.admin-card__meta-note {
+  margin: 0;
+}
+
+.admin-card__summary,
+.admin-card__meta-note,
+.admin-card__reviewed-at {
+  overflow-wrap: anywhere;
+}
+
+.admin-card__fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.8rem;
+  margin: 0;
+}
+
+.admin-card__fields div {
+  padding: 0.9rem 0.95rem;
+  border-radius: 1rem;
+  background: var(--site-elevated);
+}
+
+.admin-card__fields dt {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--site-muted);
+}
+
+.admin-card__fields dd {
+  margin: 0.4rem 0 0;
+  color: var(--site-heading);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.admin-card__meta-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  color: var(--site-subtle);
+  font-size: 0.9rem;
+}
+
+.admin-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+@media (max-width: 1080px) {
+  .admin-page__panel {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .admin-page h1 {
+    max-width: 100%;
+  }
+
+  .admin-page__copy,
+  .admin-panel,
+  .admin-card {
+    padding: 1.2rem;
+  }
+
+  .admin-panel__session,
+  .admin-card__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-card__meta {
+    justify-items: start;
+  }
+
+  .admin-card__actions,
+  .secondary-button,
+  .submit-button {
+    width: 100%;
+  }
+}
+</style>
