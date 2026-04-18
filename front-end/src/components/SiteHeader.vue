@@ -17,7 +17,9 @@
         <NuxtLink to="/item-lending">
           Lend an item
         </NuxtLink>
-        <a href="/#live-board">Optional account</a>
+        <NuxtLink to="/account">
+          Optional account
+        </NuxtLink>
       </nav>
 
       <DarkToggle />

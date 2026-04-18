@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type {
   AntiBotChallenge,
-  AuthResponse,
   BoardBootstrapResponse,
   BoardClaimManagementResponse,
   BoardContactResponse,
@@ -18,7 +17,6 @@ import { forgetBoardDeleteToken, getBoardEndpoint, getStoredBoardDeleteToken, li
 import { submissionKinds } from '~/utils/submissions'
 
 type BoardFilter = 'all' | SubmissionKind
-type AuthTab = 'login' | 'register'
 type BoardCountMap = Record<BoardFilter, number>
 
 interface FormErrorState {
@@ -57,35 +55,16 @@ const antiBotChallenge = ref<AntiBotChallenge | null>(null)
 const viewer = ref<ViewerAccount | null>(null)
 const boardItems = ref<BoardItem[]>([])
 const boardLoaded = ref(false)
-const bootstrapPending = ref(false)
 const bootstrapLoaded = ref(false)
 const boardError = ref<FormErrorState | null>(null)
 const securityError = ref<FormErrorState | null>(null)
 const boardFilter = ref<BoardFilter>('all')
-const authTab = ref<AuthTab>('register')
-const authNotice = ref('')
-const authError = ref<FormErrorState | null>(null)
-const authPending = ref(false)
-const logoutPending = ref(false)
 const managementNotice = ref('')
 const managementPending = ref(false)
 const managementError = ref<FormErrorState | null>(null)
 const openReplyItemId = ref<string | null>(null)
 const confirmDeleteItemId = ref<string | null>(null)
 const confirmDeleteInteractionKey = ref<string | null>(null)
-
-const registerForm = reactive({
-  'bot-field': '',
-  'displayName': '',
-  'email': '',
-  'password': '',
-})
-
-const loginForm = reactive({
-  'bot-field': '',
-  'email': '',
-  'password': '',
-})
 
 const replyDrafts = reactive<Record<string, ReplyDraft>>({})
 const replyStatuses = reactive<Record<string, FormStatus>>({})
@@ -167,7 +146,7 @@ const displayBoardCounts = computed<BoardCountMap>(() => (
 ))
 const boardAudienceNote = computed(() => {
   if (!accountUiReady.value)
-    return 'Account and reply state load after the page initializes.'
+    return 'Board tools load after the page initializes.'
 
   return viewer.value
     ? 'You can reply with your account or anonymously.'
@@ -358,7 +337,6 @@ function getApiErrorState(error: unknown, endpoint: string, fallbackMessage: str
 
 async function loadBootstrap() {
   const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'bootstrap')
-  bootstrapPending.value = true
 
   try {
     const response = await $fetch<BoardBootstrapResponse>(endpoint, {
@@ -372,7 +350,6 @@ async function loadBootstrap() {
     securityError.value = getApiErrorState(error, endpoint, 'Unable to initialize board security right now.')
   }
   finally {
-    bootstrapPending.value = false
     bootstrapLoaded.value = true
   }
 }
@@ -686,72 +663,6 @@ async function deleteBoardInteraction(item: BoardItem, interaction: BoardItem['i
   }
 }
 
-async function registerAccount() {
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'account/register')
-  authPending.value = true
-  authError.value = null
-  authNotice.value = ''
-
-  try {
-    const response = await protectedPost<AuthResponse>(endpoint, registerForm)
-    applyServerContext(response)
-
-    registerForm.password = ''
-    authNotice.value = 'Account ready. You can still keep using the board without one, but replies now have a consistent identity.'
-  }
-  catch (error) {
-    authError.value = getApiErrorState(error, endpoint, 'We could not create an account right now.')
-  }
-  finally {
-    authPending.value = false
-  }
-}
-
-async function loginAccount() {
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'account/login')
-  authPending.value = true
-  authError.value = null
-  authNotice.value = ''
-
-  try {
-    const response = await protectedPost<AuthResponse>(endpoint, loginForm)
-    applyServerContext(response)
-
-    loginForm.password = ''
-    authNotice.value = 'Signed in. Anonymous posting still stays open for everyone else.'
-  }
-  catch (error) {
-    authError.value = getApiErrorState(error, endpoint, 'We could not sign you in right now.')
-  }
-  finally {
-    authPending.value = false
-  }
-}
-
-async function logoutAccount() {
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'account/logout')
-  logoutPending.value = true
-  authError.value = null
-  authNotice.value = ''
-
-  try {
-    const response = await $fetch<{ antiBot?: AntiBotChallenge, ok: boolean }>(endpoint, {
-      credentials: 'include',
-      method: 'POST',
-    })
-
-    applyServerContext(response)
-    viewer.value = null
-    authNotice.value = 'Signed out. The board still works without an account.'
-  }
-  catch (error) {
-    authError.value = getApiErrorState(error, endpoint, 'We could not sign you out right now.')
-  }
-  finally {
-    logoutPending.value = false
-  }
-}
-
 function openReplyForm(itemId: string) {
   getReplyDraft(itemId)
   getReplyStatus(itemId)
@@ -881,129 +792,17 @@ onMounted(() => {
       </div>
 
       <div class="live-board__layout">
-        <aside id="account-hub" class="account-panel">
-          <p class="eyebrow">
-            Account optional
-          </p>
-          <h3>
-            Keep the board open to everyone, then add an account only if it helps.
-          </h3>
-          <p>
-            Anonymous replies and submissions are fully allowed. A board account just gives repeat participants a stable identity and quicker follow-up.
-          </p>
-
-          <ul class="account-panel__benefits">
-            <li>Anonymous use stays open by default.</li>
-            <li>Account-backed posts show a stronger identity marker.</li>
-            <li>Logged-in replies can reuse the email already on the account.</li>
-          </ul>
-
-          <p v-if="!accountUiReady" class="account-panel__note" role="status">
-            {{ bootstrapPending ? 'Loading account tools...' : 'Account tools load after the page initializes.' }}
-          </p>
-          <p v-else-if="securityError" class="account-panel__note account-panel__note--warning" role="alert">
+        <div class="board-feed">
+          <p v-if="securityError" class="inline-note inline-note--error" role="alert">
             {{ securityError.message }} {{ securityError.detail }}
           </p>
-          <p v-if="authNotice" class="account-panel__note account-panel__note--success" role="status">
-            {{ authNotice }}
-          </p>
-          <p v-if="authError" class="account-panel__note account-panel__note--warning" role="alert">
-            {{ authError.message }} {{ authError.detail }}
-          </p>
-          <p v-if="managementNotice" class="account-panel__note account-panel__note--success" role="status">
+          <p v-if="managementNotice" class="inline-note inline-note--success" role="status">
             {{ managementNotice }}
           </p>
-          <p v-if="managementError" class="account-panel__note account-panel__note--warning" role="alert">
+          <p v-if="managementError" class="inline-note inline-note--error" role="alert">
             {{ managementError.message }} {{ managementError.detail }}
           </p>
 
-          <div v-if="accountUiReady && viewer" class="account-panel__signed-in">
-            <div>
-              <p class="account-panel__label">
-                Signed in as
-              </p>
-              <strong>{{ viewer.displayName }}</strong>
-              <small>{{ viewer.email }}</small>
-              <small v-if="viewer.isAdmin" class="account-panel__admin">
-                Admin tools active
-              </small>
-            </div>
-
-            <button class="secondary-button" :disabled="logoutPending" type="button" @click="logoutAccount">
-              {{ logoutPending ? 'Signing out...' : 'Sign out' }}
-            </button>
-          </div>
-
-          <template v-else-if="accountUiReady">
-            <div class="account-tabs">
-              <button
-                class="account-tabs__button" :class="[{ 'account-tabs__button--active': authTab === 'register' }]"
-                type="button"
-                @click="authTab = 'register'"
-              >
-                Create account
-              </button>
-              <button
-                class="account-tabs__button" :class="[{ 'account-tabs__button--active': authTab === 'login' }]"
-                type="button"
-                @click="authTab = 'login'"
-              >
-                Sign in
-              </button>
-            </div>
-
-            <form v-if="authTab === 'register'" class="account-form" @submit.prevent="registerAccount">
-              <p class="sr-only">
-                <label>Do not fill this field if you are human. <input v-model="registerForm['bot-field']" name="bot-field" type="text"></label>
-              </p>
-
-              <label class="field">
-                <span>Display name</span>
-                <input v-model="registerForm.displayName" autocomplete="name" placeholder="Jane Smith" required type="text">
-              </label>
-
-              <label class="field">
-                <span>Email</span>
-                <input v-model="registerForm.email" autocomplete="email" placeholder="jane@email.com" required type="email">
-              </label>
-
-              <label class="field">
-                <span>Password</span>
-                <input v-model="registerForm.password" autocomplete="new-password" minlength="10" required type="password">
-              </label>
-
-              <button class="submit-button submit-button--slim" :disabled="authPending" type="submit">
-                {{ authPending ? 'Creating account...' : 'Create optional account' }}
-              </button>
-            </form>
-
-            <form v-else class="account-form" @submit.prevent="loginAccount">
-              <p class="sr-only">
-                <label>Do not fill this field if you are human. <input v-model="loginForm['bot-field']" name="bot-field" type="text"></label>
-              </p>
-
-              <label class="field">
-                <span>Email</span>
-                <input v-model="loginForm.email" autocomplete="email" placeholder="jane@email.com" required type="email">
-              </label>
-
-              <label class="field">
-                <span>Password</span>
-                <input v-model="loginForm.password" autocomplete="current-password" minlength="10" required type="password">
-              </label>
-
-              <button class="submit-button submit-button--slim" :disabled="authPending" type="submit">
-                {{ authPending ? 'Signing in...' : 'Sign in' }}
-              </button>
-            </form>
-          </template>
-
-          <p class="account-panel__privacy">
-            Contact details are intentionally hidden from the page markup and only revealed through a separate, rate-limited action.
-          </p>
-        </aside>
-
-        <div class="board-feed">
           <div class="board-feed__meta">
             <p>
               {{ displayBoardCounts.all }} live posts
@@ -1296,8 +1095,7 @@ onMounted(() => {
 }
 
 .hero h1,
-.section-heading h2,
-.account-panel h3 {
+.section-heading h2 {
   margin: 0;
   font-family: 'DM Serif Display', serif;
   font-weight: 400;
@@ -1314,7 +1112,6 @@ onMounted(() => {
 
 .hero__lede,
 .section-copy,
-.account-panel p,
 .process__list p,
 .board-groups li,
 .board-card__summary,
@@ -1341,8 +1138,7 @@ onMounted(() => {
 .hero__actions a,
 .submit-button,
 .secondary-button,
-.board-filter,
-.account-tabs__button {
+.board-filter {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1542,7 +1338,6 @@ onMounted(() => {
   align-items: start;
 }
 
-.account-panel,
 .board-card {
   padding: 1.5rem;
   border-radius: 1.65rem;
@@ -1550,95 +1345,11 @@ onMounted(() => {
   border: 1px solid var(--site-border);
   box-shadow: var(--site-shadow);
 }
-
-.account-panel {
-  position: static;
-}
-
-.account-panel h3 {
-  font-size: 2rem;
-  line-height: 1.05;
-}
-
-.account-panel__benefits {
-  margin: 1rem 0 0;
-  padding-left: 1.2rem;
-  color: var(--site-text);
-  line-height: 1.7;
-}
-
-.account-panel__signed-in {
-  margin-top: 1.2rem;
-  padding: 1rem;
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: center;
-  border-radius: 1.2rem;
-  background: var(--site-elevated);
-}
-
-.account-panel__label {
-  margin: 0 0 0.2rem;
-  font-size: 0.74rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--site-muted);
-}
-
-.account-panel__signed-in strong,
-.account-panel__signed-in small {
-  display: block;
-}
-
-.account-panel__signed-in small {
-  margin-top: 0.2rem;
-  color: var(--site-subtle);
-}
-
-.account-panel__admin {
-  color: var(--site-link);
-  font-weight: 700;
-}
-
-.account-tabs {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.6rem;
-  margin-top: 1.2rem;
-}
-
-.account-tabs__button {
-  background: var(--site-elevated);
-  color: var(--site-text-strong);
-  border: 1px solid var(--site-border);
-}
-
-.account-tabs__button:hover,
-.account-tabs__button:focus-visible {
-  transform: translateY(-1px);
-  border-color: var(--site-accent-soft-strong);
-  background: var(--site-elevated-strong);
-}
-
-.account-tabs__button--active {
-  background: var(--site-button-bg);
-  color: var(--site-button-text);
-}
-
-.account-form {
-  margin-top: 1rem;
-  display: grid;
-  gap: 0.85rem;
-}
-
-.account-panel__privacy,
 .board-card__contact-note {
   margin: 1rem 0 0;
   font-size: 0.94rem;
 }
 
-.account-panel__note,
 .inline-note,
 .success-note,
 .error-panel {
@@ -1648,19 +1359,12 @@ onMounted(() => {
   line-height: 1.55;
 }
 
-.account-panel__note {
-  background: var(--site-surface-soft);
-  color: var(--site-subtle);
-}
-
-.account-panel__note--success,
 .inline-note--success,
 .success-note {
   background: var(--site-success-bg);
   color: var(--site-success-text);
 }
 
-.account-panel__note--warning,
 .inline-note--error,
 .error-panel {
   background: var(--site-error-bg);
@@ -1833,8 +1537,7 @@ onMounted(() => {
 
 .secondary-button:disabled,
 .submit-button:disabled,
-.board-filter:disabled,
-.account-tabs__button:disabled {
+.board-filter:disabled {
   opacity: 0.68;
   cursor: wait;
   transform: none;
@@ -2130,8 +1833,7 @@ onMounted(() => {
     max-width: 100%;
   }
 
-  .board-card,
-  .account-panel {
+  .board-card {
     padding: 1.2rem;
   }
 
