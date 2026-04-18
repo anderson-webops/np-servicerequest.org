@@ -1,5 +1,5 @@
 import type { AntiBotChallenge, BoardBootstrapResponse, SubmissionResponse } from '~/utils/board'
-import { isAntiBotChallenge, waitForAntiBotChallengeMinimumAge } from '~/utils/antiBot'
+import { isAntiBotChallenge, isAntiBotChallengeExpired, markAntiBotChallengeObserved, waitForAntiBotChallengeMinimumAge } from '~/utils/antiBot'
 import { getBoardEndpoint, rememberBoardDeleteToken } from '~/utils/board'
 import { getSubmissionEndpoint, submissionKinds } from '~/utils/submissions'
 
@@ -32,7 +32,7 @@ export function useBoardSubmission(kind: keyof typeof submissionKinds) {
     const record = payload as Record<string, unknown>
 
     if (isAntiBotChallenge(record.antiBot))
-      antiBotChallenge.value = record.antiBot
+      antiBotChallenge.value = markAntiBotChallengeObserved(record.antiBot)
   }
 
   function getApiErrorState(error: unknown, endpoint: string, fallbackMessage: string): FormErrorState {
@@ -97,7 +97,7 @@ export function useBoardSubmission(kind: keyof typeof submissionKinds) {
   }
 
   async function ensureAntiBotReady() {
-    if (!antiBotChallenge.value)
+    if (!antiBotChallenge.value || isAntiBotChallengeExpired(antiBotChallenge.value))
       await loadBootstrap()
 
     if (!antiBotChallenge.value)

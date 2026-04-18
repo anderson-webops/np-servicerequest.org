@@ -11,7 +11,7 @@ import type {
   ViewerAccount,
 } from '~/utils/board'
 import type { SubmissionKind } from '~/utils/submissions'
-import { isAntiBotChallenge, waitForAntiBotChallengeMinimumAge } from '~/utils/antiBot'
+import { isAntiBotChallenge, isAntiBotChallengeExpired, markAntiBotChallengeObserved, waitForAntiBotChallengeMinimumAge } from '~/utils/antiBot'
 import { forgetBoardDeleteToken, getBoardEndpoint, getStoredBoardDeleteToken, listStoredBoardDeleteTokenIds } from '~/utils/board'
 import { submissionKinds } from '~/utils/submissions'
 
@@ -184,7 +184,7 @@ function applyServerContext(payload: unknown) {
   const record = payload as Record<string, unknown>
 
   if (isAntiBotChallenge(record.antiBot))
-    antiBotChallenge.value = record.antiBot
+    antiBotChallenge.value = markAntiBotChallengeObserved(record.antiBot)
 
   if (record.viewer === null)
     viewer.value = null
@@ -373,7 +373,7 @@ async function loadBoardItems() {
 }
 
 async function ensureAntiBotReady() {
-  if (!antiBotChallenge.value)
+  if (!antiBotChallenge.value || isAntiBotChallengeExpired(antiBotChallenge.value))
     await loadBootstrap()
 
   if (!antiBotChallenge.value)
