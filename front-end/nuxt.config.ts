@@ -69,7 +69,7 @@ export default defineNuxtConfig({
     },
     prerender: {
       crawlLinks: false,
-      routes: ['/', '/account', '/admin', '/help', '/post', '/service-request', '/item-request', '/item-lending'],
+      routes: ['/', '/account', '/admin', '/help', '/service-directory', '/post', '/service-request', '/item-request', '/item-lending'],
       ignore: ['/hi'],
     },
   },

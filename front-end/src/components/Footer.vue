@@ -1,8 +1,13 @@
 <template>
   <footer class="site-footer">
-    <NuxtLink class="site-footer__help" prefetch-on="interaction" to="/help">
-      Help
-    </NuxtLink>
+    <div class="site-footer__left">
+      <NuxtLink class="site-footer__help" prefetch-on="interaction" to="/help">
+        Help
+      </NuxtLink>
+      <NuxtLink class="site-footer__help" prefetch-on="interaction" to="/service-directory">
+        Service directory
+      </NuxtLink>
+    </div>
 
     <div class="site-footer__links">
       <a href="/#live-board">Live board</a>
@@ -34,6 +39,11 @@
   padding-bottom: max(3rem, calc(2rem + var(--page-block-end)));
   padding-left: var(--page-inline-start);
   color: var(--site-subtle);
+}
+
+.site-footer__left {
+  display: grid;
+  gap: 0.4rem;
 }
 
 .site-footer__links {
