@@ -40,6 +40,7 @@ The landing page now exposes:
 - public board replies that work with or without an account
 - optional account registration/login for repeat participants
 - a separate `/admin` review page that uses an admin key instead of a board account login
+- a `/service-directory` page with seeded nationwide and regional service websites plus an optional live provider-backed search
 - on-demand contact reveal actions instead of embedding contact details directly in the page
 
 The board and intake forms call the separate back-end API instead of relying on inline Nuxt routes or static form hosting.
@@ -56,6 +57,7 @@ The API lives in `back-end` and exposes:
 
 - `GET /api/health`
 - `GET /api/pageview`
+- `GET /api/service-directory/search`
 - `GET /api/board/bootstrap`
 - `GET /api/board/items`
 - `GET /api/board/items/:itemId`
@@ -79,11 +81,13 @@ Listing endpoints now support server-side filtering and pagination:
 
 - `GET /api/board/items?kind=all|service-request|item-request|item-lending&page=1&pageSize=12`
 - `GET /api/admin/submissions?review=all|pending|approved|needs-follow-up|rejected&kind=all|service-request|item-request|item-lending&submissionsPage=1&submissionsPageSize=20&activityCategory=all|posts|replies|moderation|deletions&activityPage=1&activityPageSize=40`
+- `GET /api/service-directory/search?provider=idealist&query=food%20pantry&lat=33.749&lng=-84.388&radiusMiles=40&page=1&pageSize=12`
 
 Default port: `3006`
 
 Form submissions are written under `SUBMISSIONS_DATA_DIR` when it is set. When it is not set, the back-end falls back to an OS temp directory under `np-servicerequest/submissions`, which is suitable for local development but not durable production storage.
 The live board, optional accounts, and session files are stored under a `_board` subdirectory beneath that same root.
+Live service-directory provider caches are stored under `_service-directory` beneath that same root.
 
 Submission and reply payloads accept either the legacy `contact` field or the newer structured contact fields:
 
@@ -92,6 +96,18 @@ Submission and reply payloads accept either the legacy `contact` field or the ne
 - `contact_note=<optional extra instruction>`
 
 The server still accepts legacy `contact` input for backward compatibility, but new UI flows use the structured fields by default.
+
+### Live Service Directory Provider
+
+The `/service-directory` page now supports a real provider-backed search path through Idealist when the server is configured with an API key.
+The back-end keeps a cached local index of volunteer listings, then filters and paginates those results for the front-end.
+
+- `IDEALIST_API_KEY` enables live Idealist syncing
+- `IDEALIST_LISTINGS_API_KEY` and `SERVICE_DIRECTORY_IDEALIST_API_KEY` are also accepted
+- `IDEALIST_INITIAL_SYNC_DAYS` controls how far back the first sync looks and defaults to `45`
+- `IDEALIST_SYNC_TTL_MINUTES` controls how long cached data is kept before a fresh sync is attempted and defaults to `360`
+
+This implementation uses the official Idealist listings API feed and maintains a local search index on the host instead of scraping public pages.
 
 ### Email Notifications And Management Links
 

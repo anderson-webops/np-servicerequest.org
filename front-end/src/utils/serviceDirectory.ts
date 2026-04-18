@@ -1,3 +1,5 @@
+import { getApiEndpoint } from './api'
+
 export interface ServiceGeoPoint {
   lat: number
   lng: number
@@ -45,10 +47,72 @@ export interface ServiceDirectoryMatch extends ServiceDirectoryEntry {
   matchReason: string
 }
 
+export interface ServiceDirectoryProviderStatus {
+  configured: boolean
+  id: 'idealist'
+  lastAttemptedAt: string | null
+  lastError: string | null
+  lastSyncedAt: string | null
+  listingCount: number
+  message: string
+  sourceUrl: string
+  syncState: 'idle' | 'syncing' | 'unconfigured'
+}
+
+export interface ServiceDirectoryProviderResult {
+  applyUrl: string
+  areasOfFocus: string[]
+  distanceMiles: number | null
+  functionTags: string[]
+  id: string
+  imageUrl: string | null
+  isRecurring: boolean
+  locationLabel: string
+  locationType: 'HYBRID' | 'ONSITE' | 'REMOTE' | 'UNKNOWN'
+  matchReason: string
+  opportunityUrl: string
+  organizationName: string
+  organizationUrl: string | null
+  provider: 'idealist'
+  sourceUpdatedAt: string
+  summary: string
+  title: string
+}
+
+export interface ServiceDirectorySearchResponse {
+  ok: true
+  pagination: {
+    hasNextPage: boolean
+    hasPreviousPage: boolean
+    page: number
+    pageSize: number
+    totalItems: number
+    totalPages: number
+  }
+  provider: ServiceDirectoryProviderStatus
+  query: {
+    lat: number | null
+    lng: number | null
+    page: number
+    pageSize: number
+    provider: 'idealist'
+    query: string
+    radiusMiles: number
+    refresh: boolean
+  }
+  results: ServiceDirectoryProviderResult[]
+}
+
 export const serviceDirectoryApiStatusLabels: Record<ServiceDirectoryApiStatus, string> = {
   available: 'API available',
   manual: 'Manual or site-only',
   partner: 'Partner integration',
+}
+
+export function getServiceDirectoryEndpoint(apiBaseUrl: string, path = 'search') {
+  const normalizedPath = path.replace(/^\/+/, '').replace(/^service-directory\/+/, '').replace(/^api\/service-directory\/+/, '')
+
+  return getApiEndpoint(apiBaseUrl, `service-directory/${normalizedPath}`)
 }
 
 export const serviceDirectoryAudienceLabels: Record<ServiceDirectoryAudience, string> = {

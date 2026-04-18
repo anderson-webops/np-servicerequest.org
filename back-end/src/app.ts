@@ -49,6 +49,7 @@ import {
   RateLimitError,
   validateAntiBotPayload,
 } from './security.js'
+import { searchServiceDirectory } from './service-directory.js'
 import {
   AccountValidationError,
   attachBoardItemToSubmission,
@@ -81,6 +82,15 @@ function parsePositiveInt(value: unknown, fallback: number, max: number) {
     return fallback
 
   return Math.min(parsedValue, max)
+}
+
+function parseMaybeFloat(value: unknown) {
+  const parsedValue = Number.parseFloat(getSingleQueryValue(value))
+
+  if (!Number.isFinite(parsedValue))
+    return undefined
+
+  return parsedValue
 }
 
 function handleApiError(response: express.Response, error: unknown) {
@@ -180,6 +190,27 @@ export function createApp() {
       pageview: pageview++,
       startAt: startedAt,
     })
+  })
+
+  app.get('/api/service-directory/search', async (request, response) => {
+    try {
+      response.json(await searchServiceDirectory({
+        lat: parseMaybeFloat(request.query.lat),
+        lng: parseMaybeFloat(request.query.lng),
+        page: parsePositiveInt(request.query.page, 1, 999),
+        pageSize: parsePositiveInt(request.query.pageSize, 12, 24),
+        provider: getSingleQueryValue(request.query.provider) === 'idealist' ? 'idealist' : 'idealist',
+        query: getSingleQueryValue(request.query.query),
+        radiusMiles: parsePositiveInt(request.query.radiusMiles, 40, 250),
+        refresh: getSingleQueryValue(request.query.refresh) === 'true',
+      }))
+    }
+    catch (error) {
+      console.error('Failed to search service directory:', error)
+      response.status(500).json({
+        message: 'Unable to load live service listings right now.',
+      })
+    }
   })
 
   app.get('/api/admin/submissions', async (request, response) => {
