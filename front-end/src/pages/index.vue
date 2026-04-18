@@ -70,6 +70,8 @@ const replyDrafts = reactive<Record<string, ReplyDraft>>({})
 const replyStatuses = reactive<Record<string, FormStatus>>({})
 const revealItemContacts = reactive<Record<string, string>>({})
 const revealInteractionContacts = reactive<Record<string, string>>({})
+const revealItemContactVisibility = reactive<Record<string, boolean>>({})
+const revealInteractionContactVisibility = reactive<Record<string, boolean>>({})
 const revealErrors = reactive<Record<string, FormErrorState | null>>({})
 const revealPending = reactive<Record<string, boolean>>({})
 const deleteErrors = reactive<Record<string, FormErrorState | null>>({})
@@ -255,6 +257,37 @@ function getContactActionLabel(kind: SubmissionKind) {
     return 'Reveal lender contact'
 
   return 'Reveal contact'
+}
+
+function isItemContactVisible(itemId: string) {
+  return Boolean(revealItemContactVisibility[itemId] && revealItemContacts[itemId])
+}
+
+function isInteractionContactVisible(itemId: string, interactionId: string) {
+  const key = getRevealKey(itemId, interactionId)
+  return Boolean(revealInteractionContactVisibility[key] && revealInteractionContacts[key])
+}
+
+function getItemContactActionLabel(item: BoardItem) {
+  if (revealPending[item.id])
+    return 'Revealing...'
+
+  if (isItemContactVisible(item.id))
+    return item.kind === submissionKinds.itemLending ? 'Hide lender contact' : 'Hide contact'
+
+  return getContactActionLabel(item.kind)
+}
+
+function getInteractionContactActionLabel(itemId: string, interactionId: string) {
+  const key = getRevealKey(itemId, interactionId)
+
+  if (revealPending[key])
+    return 'Revealing...'
+
+  if (isInteractionContactVisible(itemId, interactionId))
+    return 'Hide reply contact'
+
+  return 'Reveal reply contact'
 }
 
 function getApiErrorState(error: unknown, endpoint: string, fallbackMessage: string): FormErrorState {
@@ -504,6 +537,12 @@ async function submitBoardReply(item: BoardItem) {
 async function revealItemContact(item: BoardItem) {
   const key = getRevealKey(item.id)
   ensureRevealState(key)
+  if (revealItemContacts[item.id]) {
+    revealItemContactVisibility[item.id] = !isItemContactVisible(item.id)
+    revealErrors[key] = null
+    return
+  }
+
   const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `items/${item.id}/contact`)
   revealPending[key] = true
   revealErrors[key] = null
@@ -515,6 +554,7 @@ async function revealItemContact(item: BoardItem) {
 
     applyServerContext(response)
     revealItemContacts[item.id] = response.contact
+    revealItemContactVisibility[item.id] = true
   }
   catch (error) {
     revealErrors[key] = getApiErrorState(error, endpoint, 'We could not reveal that contact right now.')
@@ -527,6 +567,12 @@ async function revealItemContact(item: BoardItem) {
 async function revealInteractionContact(itemId: string, interactionId: string) {
   const key = getRevealKey(itemId, interactionId)
   ensureRevealState(key)
+  if (revealInteractionContacts[key]) {
+    revealInteractionContactVisibility[key] = !isInteractionContactVisible(itemId, interactionId)
+    revealErrors[key] = null
+    return
+  }
+
   const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `items/${itemId}/interactions/${interactionId}/contact`)
   revealPending[key] = true
   revealErrors[key] = null
@@ -538,6 +584,7 @@ async function revealInteractionContact(itemId: string, interactionId: string) {
 
     applyServerContext(response)
     revealInteractionContacts[key] = response.contact
+    revealInteractionContactVisibility[key] = true
   }
   catch (error) {
     revealErrors[key] = getApiErrorState(error, endpoint, 'We could not reveal that contact right now.')
@@ -572,10 +619,12 @@ async function deleteBoardPost(item: BoardItem) {
     forgetBoardDeleteToken(item.id)
     refreshStoredDeleteTokenIds()
     revealItemContacts[item.id] = ''
+    revealItemContactVisibility[item.id] = false
 
     for (const interaction of item.interactions) {
       const key = getRevealKey(item.id, interaction.id)
       revealInteractionContacts[key] = ''
+      revealInteractionContactVisibility[key] = false
       revealErrors[key] = null
       revealPending[key] = false
     }
@@ -850,7 +899,7 @@ onMounted(() => {
                   type="button"
                   @click="revealItemContact(item)"
                 >
-                  {{ revealPending[item.id] ? 'Revealing...' : getContactActionLabel(item.kind) }}
+                  {{ getItemContactActionLabel(item) }}
                 </button>
                 <button class="secondary-button secondary-button--dark" type="button" @click="openReplyForm(item.id)">
                   {{ openReplyItemId === item.id ? 'Hide reply form' : getReplyActionLabel(item.kind) }}
@@ -876,7 +925,7 @@ onMounted(() => {
               <p v-if="revealErrors[item.id]" class="inline-note inline-note--error" role="alert">
                 {{ revealErrors[item.id]?.message }} {{ revealErrors[item.id]?.detail }}
               </p>
-              <p v-if="revealItemContacts[item.id]" class="inline-note inline-note--success" role="status">
+              <p v-if="isItemContactVisible(item.id)" class="inline-note inline-note--success" role="status">
                 Contact: {{ revealItemContacts[item.id] }}
               </p>
 
@@ -901,7 +950,7 @@ onMounted(() => {
                       type="button"
                       @click="revealInteractionContact(item.id, interaction.id)"
                     >
-                      {{ revealPending[getRevealKey(item.id, interaction.id)] ? 'Revealing...' : 'Reveal reply contact' }}
+                      {{ getInteractionContactActionLabel(item.id, interaction.id) }}
                     </button>
                     <button
                       v-if="canDeleteInteraction(interaction)"
@@ -918,7 +967,7 @@ onMounted(() => {
                     <p v-if="deleteInteractionErrors[getInteractionDeleteKey(item.id, interaction.id)]" class="inline-note inline-note--error" role="alert">
                       {{ deleteInteractionErrors[getInteractionDeleteKey(item.id, interaction.id)]?.message }} {{ deleteInteractionErrors[getInteractionDeleteKey(item.id, interaction.id)]?.detail }}
                     </p>
-                    <p v-if="revealInteractionContacts[getRevealKey(item.id, interaction.id)]" class="inline-note inline-note--success" role="status">
+                    <p v-if="isInteractionContactVisible(item.id, interaction.id)" class="inline-note inline-note--success" role="status">
                       Contact: {{ revealInteractionContacts[getRevealKey(item.id, interaction.id)] }}
                     </p>
                   </article>
