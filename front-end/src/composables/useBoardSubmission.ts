@@ -1,5 +1,5 @@
 import type { AntiBotChallenge, BoardBootstrapResponse, SubmissionResponse } from '~/utils/board'
-import { getBoardEndpoint } from '~/utils/board'
+import { getBoardEndpoint, rememberBoardDeleteToken } from '~/utils/board'
 import { getSubmissionEndpoint, submissionKinds } from '~/utils/submissions'
 
 export interface FormErrorState {
@@ -145,6 +145,10 @@ export function useBoardSubmission(kind: keyof typeof submissionKinds) {
       })
 
       applyServerContext(response)
+
+      if (response.boardItem?.id && response.deleteToken)
+        rememberBoardDeleteToken(response.boardItem.id, response.deleteToken)
+
       form.reset()
       status.success = true
       return response

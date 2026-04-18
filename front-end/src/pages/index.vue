@@ -4,13 +4,14 @@ import type {
   AuthResponse,
   BoardBootstrapResponse,
   BoardContactResponse,
+  BoardDeleteResponse,
   BoardInteractionResponse,
   BoardItem,
   BoardItemsResponse,
   ViewerAccount,
 } from '~/utils/board'
 import type { SubmissionKind } from '~/utils/submissions'
-import { getBoardEndpoint } from '~/utils/board'
+import { forgetBoardDeleteToken, getBoardEndpoint, getStoredBoardDeleteToken, listStoredBoardDeleteTokenIds } from '~/utils/board'
 import { submissionKinds } from '~/utils/submissions'
 
 type BoardFilter = 'all' | SubmissionKind
@@ -59,6 +60,7 @@ const authError = ref<FormErrorState | null>(null)
 const authPending = ref(false)
 const logoutPending = ref(false)
 const openReplyItemId = ref<string | null>(null)
+const confirmDeleteItemId = ref<string | null>(null)
 
 const registerForm = reactive({
   'bot-field': '',
@@ -79,6 +81,9 @@ const revealItemContacts = reactive<Record<string, string>>({})
 const revealInteractionContacts = reactive<Record<string, string>>({})
 const revealErrors = reactive<Record<string, FormErrorState | null>>({})
 const revealPending = reactive<Record<string, boolean>>({})
+const deleteErrors = reactive<Record<string, FormErrorState | null>>({})
+const deletePending = reactive<Record<string, boolean>>({})
+const storedDeleteTokenItemIds = ref<string[]>([])
 
 const processSteps = [
   {
@@ -237,6 +242,14 @@ function getRevealKey(itemId: string, interactionId?: string) {
   return interactionId ? `${itemId}:${interactionId}` : itemId
 }
 
+function ensureDeleteState(itemId: string) {
+  if (!(itemId in deletePending))
+    deletePending[itemId] = false
+
+  if (!(itemId in deleteErrors))
+    deleteErrors[itemId] = null
+}
+
 function ensureRevealState(key: string) {
   if (!(key in revealPending))
     revealPending[key] = false
@@ -366,6 +379,41 @@ async function protectedPost<T>(endpoint: string, body: Record<string, string>) 
   })
 }
 
+async function protectedDelete<T>(endpoint: string, body: Record<string, string>) {
+  await ensureAntiBotReady()
+
+  return $fetch<T>(endpoint, {
+    body: {
+      ...body,
+      challengeIssuedAt: String(antiBotChallenge.value?.issuedAt || ''),
+      challengeToken: antiBotChallenge.value?.token || '',
+    },
+    credentials: 'include',
+    method: 'DELETE',
+  })
+}
+
+function refreshStoredDeleteTokenIds() {
+  storedDeleteTokenItemIds.value = listStoredBoardDeleteTokenIds()
+}
+
+function canDeleteItem(item: BoardItem) {
+  if (viewer.value && item.author.accountId && viewer.value.id === item.author.accountId)
+    return true
+
+  return storedDeleteTokenItemIds.value.includes(item.id)
+}
+
+function getDeleteActionLabel(itemId: string) {
+  if (deletePending[itemId])
+    return 'Deleting...'
+
+  if (confirmDeleteItemId.value === itemId)
+    return 'Click again to delete'
+
+  return 'Delete post'
+}
+
 async function submitBoardReply(item: BoardItem) {
   const draft = getReplyDraft(item.id)
   const status = getReplyStatus(item.id)
@@ -436,6 +484,55 @@ async function revealInteractionContact(itemId: string, interactionId: string) {
   }
   finally {
     revealPending[key] = false
+  }
+}
+
+async function deleteBoardPost(item: BoardItem) {
+  if (confirmDeleteItemId.value !== item.id) {
+    confirmDeleteItemId.value = item.id
+    ensureDeleteState(item.id)
+    deleteErrors[item.id] = null
+    return
+  }
+
+  confirmDeleteItemId.value = null
+  ensureDeleteState(item.id)
+  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `items/${item.id}`)
+  deletePending[item.id] = true
+  deleteErrors[item.id] = null
+
+  try {
+    const response = await protectedDelete<BoardDeleteResponse>(endpoint, {
+      'bot-field': '',
+      'deleteToken': getStoredBoardDeleteToken(item.id),
+    })
+
+    applyServerContext(response)
+    boardItems.value = boardItems.value.filter(existingItem => existingItem.id !== item.id)
+    forgetBoardDeleteToken(item.id)
+    refreshStoredDeleteTokenIds()
+    revealItemContacts[item.id] = ''
+
+    for (const interaction of item.interactions) {
+      const key = getRevealKey(item.id, interaction.id)
+      revealInteractionContacts[key] = ''
+      revealErrors[key] = null
+      revealPending[key] = false
+    }
+
+    deleteErrors[item.id] = null
+    deletePending[item.id] = false
+
+    if (openReplyItemId.value === item.id)
+      openReplyItemId.value = null
+  }
+  catch (error) {
+    confirmDeleteItemId.value = item.id
+    deleteErrors[item.id] = getApiErrorState(error, endpoint, 'We could not delete that board item right now.')
+  }
+  finally {
+    if (item.id in deletePending)
+      deletePending[item.id] = false
   }
 }
 
@@ -525,6 +622,7 @@ watch(viewer, (nextViewer) => {
 })
 
 onMounted(() => {
+  refreshStoredDeleteTokenIds()
   void Promise.allSettled([
     loadBootstrap(),
     loadBoardItems(),
@@ -819,12 +917,24 @@ onMounted(() => {
                 <button class="secondary-button secondary-button--dark" type="button" @click="openReplyForm(item.id)">
                   {{ openReplyItemId === item.id ? 'Hide reply form' : getReplyActionLabel(item.kind) }}
                 </button>
+                <button
+                  v-if="canDeleteItem(item)"
+                  class="secondary-button secondary-button--danger"
+                  :disabled="deletePending[item.id]"
+                  type="button"
+                  @click="deleteBoardPost(item)"
+                >
+                  {{ getDeleteActionLabel(item.id) }}
+                </button>
               </div>
 
               <p class="board-card__contact-note">
                 Contact details are hidden until you deliberately reveal them to reduce scraping.
               </p>
 
+              <p v-if="deleteErrors[item.id]" class="inline-note inline-note--error" role="alert">
+                {{ deleteErrors[item.id]?.message }} {{ deleteErrors[item.id]?.detail }}
+              </p>
               <p v-if="revealErrors[item.id]" class="inline-note inline-note--error" role="alert">
                 {{ revealErrors[item.id]?.message }} {{ revealErrors[item.id]?.detail }}
               </p>
@@ -1531,6 +1641,17 @@ onMounted(() => {
 .secondary-button--dark {
   background: var(--site-button-bg);
   color: var(--site-button-text);
+}
+
+.secondary-button--danger {
+  border-color: rgba(181, 95, 82, 0.3);
+  color: var(--site-error-text);
+  background: var(--site-error-bg);
+}
+
+.secondary-button--danger:hover,
+.secondary-button--danger:focus-visible {
+  background: rgba(181, 95, 82, 0.24);
 }
 
 .board-card__thread {

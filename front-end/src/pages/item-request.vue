@@ -30,7 +30,7 @@ onMounted(() => {
     :security-error="securityError"
     :status="status"
     submit-label="Post item request"
-    success-text="Posted. Your item request now appears on the live board."
+    success-text="Posted. Your item request now appears on the live board, and you can delete it there later."
     title="Ask for something specific that you want to borrow."
     @submit="submit"
   >

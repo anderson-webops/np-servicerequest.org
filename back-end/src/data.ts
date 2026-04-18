@@ -65,3 +65,10 @@ export async function removeFileIfExists(filePath: string) {
       throw error
   }
 }
+
+export async function removePathIfExists(path: string) {
+  await rm(path, {
+    force: true,
+    recursive: true,
+  })
+}

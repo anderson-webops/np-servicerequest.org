@@ -9,9 +9,11 @@ import {
   registerBoardAccount,
 } from './accounts.js'
 import {
+  BoardAuthorizationError,
   BoardNotFoundError,
   createBoardInteraction,
   createBoardItemFromSubmission,
+  deleteBoardItem,
   listBoardItems,
   revealBoardInteractionContact,
   revealBoardItemContact,
@@ -55,6 +57,14 @@ function handleApiError(response: express.Response, error: unknown) {
   if (error instanceof RateLimitError) {
     response.setHeader('Retry-After', Math.ceil(error.retryAfterMs / 1000))
     response.status(429).json({
+      antiBot: createAntiBotChallenge(),
+      message: error.message,
+    })
+    return true
+  }
+
+  if (error instanceof BoardAuthorizationError) {
+    response.status(403).json({
       antiBot: createAntiBotChallenge(),
       message: error.message,
     })
@@ -149,21 +159,21 @@ export function createApp() {
         return
       }
 
-      const item = await createBoardItemFromSubmission({
+      const createdBoardItem = await createBoardItemFromSubmission({
         fields: result.fields,
         kind,
         viewer,
       })
 
       void sendBoardItemNotificationEmail({
-        authorName: item.author.displayName,
+        authorName: createdBoardItem.item.author.displayName,
         contact: result.fields.contact || '',
-        context: item.attributes,
-        createdAt: item.createdAt,
-        itemId: item.id,
-        kindLabel: item.kindLabel,
-        summary: item.summary,
-        title: item.title,
+        context: createdBoardItem.item.attributes,
+        createdAt: createdBoardItem.item.createdAt,
+        itemId: createdBoardItem.item.id,
+        kindLabel: createdBoardItem.item.kindLabel,
+        summary: createdBoardItem.item.summary,
+        title: createdBoardItem.item.title,
       }).catch((error) => {
         console.error('Failed to send board item notification:', error)
       })
@@ -173,7 +183,8 @@ export function createApp() {
         id: result.id,
         accepted: result.accepted,
         antiBot: createAntiBotChallenge(),
-        boardItem: item,
+        boardItem: createdBoardItem.item,
+        deleteToken: createdBoardItem.deleteToken,
         createdAt: result.createdAt,
       })
     }
@@ -257,6 +268,38 @@ export function createApp() {
       response.status(500).json({
         antiBot: createAntiBotChallenge(),
         message: 'Unable to reveal that contact right now.',
+      })
+    }
+  })
+
+  app.delete('/api/board/items/:itemId', async (request, response) => {
+    try {
+      consumeRateLimit(`delete:item:${getRequestIp(request)}`, {
+        limit: 8,
+        windowMs: 1000 * 60 * 60,
+      })
+      validateAntiBotPayload(request.body)
+
+      await deleteBoardItem({
+        deleteToken: typeof request.body.deleteToken === 'string' ? request.body.deleteToken : '',
+        itemId: request.params.itemId,
+        viewer: await getViewerFromCookie(request.get('cookie')),
+      })
+
+      response.json({
+        antiBot: createAntiBotChallenge(),
+        itemId: request.params.itemId,
+        ok: true,
+      })
+    }
+    catch (error) {
+      if (handleApiError(response, error))
+        return
+
+      console.error('Failed to delete board item:', error)
+      response.status(500).json({
+        antiBot: createAntiBotChallenge(),
+        message: 'Unable to delete that board item right now.',
       })
     }
   })

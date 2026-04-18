@@ -1,9 +1,9 @@
 import type { ViewerAccount } from './accounts.js'
 import type { SubmissionKind } from './submissions.js'
 
-import { randomUUID } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
-import { listJsonDirectory, readJsonFile, resolveDataPath, writeJsonFile } from './data.js'
+import { listJsonDirectory, readJsonFile, removePathIfExists, resolveDataPath, writeJsonFile } from './data.js'
 import { SubmissionValidationError } from './submissions.js'
 
 const boardItemDirectory = resolveDataPath('_board', 'items')
@@ -27,6 +27,7 @@ interface StoredBoardItem {
   author: BoardAuthor
   contact: string
   createdAt: string
+  deleteTokenHash?: string
   id: string
   interactionCount: number
   kind: SubmissionKind
@@ -80,6 +81,13 @@ export class BoardNotFoundError extends Error {
   }
 }
 
+export class BoardAuthorizationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'BoardAuthorizationError'
+  }
+}
+
 function getItemFilePath(itemId: string) {
   return resolve(boardItemDirectory, `${itemId}.json`)
 }
@@ -94,6 +102,10 @@ function getInteractionFilePath(itemId: string, interactionId: string) {
 
 function cleanValue(value: string | undefined) {
   return value?.trim() || ''
+}
+
+function hashDeleteToken(token: string) {
+  return createHash('sha256').update(token).digest('hex')
 }
 
 function countUrlMentions(value: string) {
@@ -266,6 +278,7 @@ export async function createBoardItemFromSubmission(input: {
   validateHumanText(summary, labels.summaryLabel, 4000)
   validateHumanText(authorName, 'A name', 80)
   validateHumanText(contact, 'A contact method', 320)
+  const deleteToken = randomBytes(32).toString('hex')
 
   const item: StoredBoardItem = {
     id: randomUUID(),
@@ -277,6 +290,7 @@ export async function createBoardItemFromSubmission(input: {
     },
     contact,
     createdAt,
+    deleteTokenHash: hashDeleteToken(deleteToken),
     interactionCount: 0,
     kind: input.kind,
     kindLabel: labels.kindLabel,
@@ -288,7 +302,10 @@ export async function createBoardItemFromSubmission(input: {
   }
 
   await writeJsonFile(getItemFilePath(item.id), item)
-  return toPublicItem(item, [])
+  return {
+    deleteToken,
+    item: toPublicItem(item, []),
+  }
 }
 
 export async function createBoardInteraction(input: {
@@ -349,4 +366,25 @@ export async function revealBoardInteractionContact(itemId: string, interactionI
     throw new BoardNotFoundError('No contact method is available for that response.')
 
   return interaction.contact
+}
+
+export async function deleteBoardItem(input: {
+  deleteToken: string
+  itemId: string
+  viewer: ViewerAccount | null
+}) {
+  const item = await getStoredBoardItem(input.itemId)
+  const normalizedDeleteToken = cleanValue(input.deleteToken)
+  const ownsByAccount = Boolean(input.viewer && item.author.accountId && input.viewer.id === item.author.accountId)
+  const ownsByDeleteToken = Boolean(
+    normalizedDeleteToken
+    && item.deleteTokenHash
+    && hashDeleteToken(normalizedDeleteToken) === item.deleteTokenHash,
+  )
+
+  if (!ownsByAccount && !ownsByDeleteToken)
+    throw new BoardAuthorizationError('You are not allowed to delete that board item.')
+
+  await removePathIfExists(getItemFilePath(item.id))
+  await removePathIfExists(getInteractionDirectory(item.id))
 }

@@ -30,7 +30,7 @@ onMounted(() => {
     :security-error="securityError"
     :status="status"
     submit-label="Post service request"
-    success-text="Posted. Your service project now appears on the live board."
+    success-text="Posted. Your service project now appears on the live board, and you can delete it there later."
     title="Describe the job, the timing, and the best way for someone to reach you."
     @submit="submit"
   >
