@@ -1,10 +1,12 @@
 import type { ViewerAccount } from './accounts.js'
+import type { BoardContactMethod } from './contact.js'
+
 import type { SubmissionKind } from './submissions.js'
-
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
-import { resolve } from 'node:path'
 
+import { resolve } from 'node:path'
 import { recordBoardActivity } from './activity.js'
+import { normalizeStructuredContact } from './contact.js'
 import { listJsonDirectory, readJsonFile, removePathIfExists, resolveDataPath, writeJsonFile } from './data.js'
 import { SubmissionValidationError } from './submissions.js'
 
@@ -54,6 +56,9 @@ interface StoredBoardItem {
   attributes: BoardAttribute[]
   author: BoardAuthor
   contact: string
+  contactMethod?: BoardContactMethod
+  contactNote?: string
+  contactValue?: string
   createdAt: string
   deleteTokenHash?: string
   id: string
@@ -75,6 +80,9 @@ interface StoredBoardItem {
 interface StoredBoardInteraction {
   author: BoardAuthor
   contact: string
+  contactMethod?: BoardContactMethod
+  contactNote?: string
+  contactValue?: string
   createdAt: string
   hasContact: boolean
   id: string
@@ -187,10 +195,6 @@ function cleanValue(value: string | undefined) {
 
 function hashDeleteToken(token: string) {
   return createHash('sha256').update(token).digest('hex')
-}
-
-function isEmailAddress(value: string) {
-  return value.includes('@') && !/\s/.test(value)
 }
 
 function createBoardDeleteToken() {
@@ -328,9 +332,16 @@ function assertPublicBoardInteractionAvailable(interaction: StoredBoardInteracti
 }
 
 function buildSubmissionFingerprint(kind: SubmissionKind, fields: Record<string, string>) {
+  const contact = normalizeStructuredContact({
+    legacyContact: fields.contact,
+    method: fields.contact_method,
+    note: fields.contact_note,
+    value: fields.contact_value,
+  })
+
   return {
     authorName: cleanValue(fields.name),
-    contact: cleanValue(fields.contact),
+    contact: contact.display,
     summary: buildItemSummary(kind, fields),
     title: buildItemTitle(kind, fields),
   }
@@ -623,14 +634,30 @@ export async function createBoardItemFromSubmission(input: {
   const title = buildItemTitle(input.kind, input.fields)
   const summary = buildItemSummary(input.kind, input.fields)
   const authorName = cleanValue(input.fields.name)
-  const contact = cleanValue(input.fields.contact)
+  const contact = normalizeStructuredContact({
+    legacyContact: input.fields.contact,
+    method: input.fields.contact_method,
+    note: input.fields.contact_note,
+    value: input.fields.contact_value,
+  })
 
   validateHumanText(title, 'A title')
   validateHumanText(summary, labels.summaryLabel, 4000)
   validateHumanText(authorName, 'A name', 80)
-  validateHumanText(contact, 'A contact method', 320)
+  if (contact.invalidMethod)
+    throw new SubmissionValidationError('Choose a valid contact method.')
+  if (contact.invalidValue) {
+    throw new SubmissionValidationError(
+      contact.method === 'email'
+        ? 'Enter a valid email address.'
+        : 'Enter a valid phone number.',
+    )
+  }
+  validateHumanText(contact.value, 'A contact method', 320)
+  if (contact.note)
+    validateHumanText(contact.note, 'A contact note', 320)
   const deleteToken = createBoardDeleteToken()
-  const managementToken = !input.viewer && isEmailAddress(contact) ? createBoardManagementToken() : ''
+  const managementToken = !input.viewer && contact.managementEmail ? createBoardManagementToken() : ''
 
   const item: StoredBoardItem = {
     id: randomUUID(),
@@ -640,7 +667,10 @@ export async function createBoardItemFromSubmission(input: {
       displayName: authorName,
       hasAccount: Boolean(input.viewer),
     },
-    contact,
+    contact: contact.display,
+    contactMethod: contact.method || undefined,
+    contactNote: contact.note || undefined,
+    contactValue: contact.value || undefined,
     createdAt,
     deleteTokenHash: hashDeleteToken(deleteToken),
     interactionCount: 0,
@@ -678,13 +708,16 @@ export async function createBoardItemFromSubmission(input: {
   return {
     deleteToken,
     item: toPublicItem(item, []),
-    managementRecipientEmail: managementToken ? contact : '',
+    managementRecipientEmail: managementToken ? contact.managementEmail : '',
     managementToken,
   }
 }
 
 export async function createBoardInteraction(input: {
   contact: string
+  contactMethod: string
+  contactNote: string
+  contactValue: string
   itemId: string
   message: string
   name: string
@@ -696,11 +729,27 @@ export async function createBoardInteraction(input: {
 
   const createdAt = new Date().toISOString()
   const authorName = cleanValue(input.name) || input.viewer?.displayName || ''
-  const contact = cleanValue(input.contact) || input.viewer?.email || ''
+  const contact = normalizeStructuredContact({
+    legacyContact: input.contact || input.viewer?.email || '',
+    method: input.contactMethod || (input.viewer?.email ? 'email' : ''),
+    note: input.contactNote,
+    value: input.contactValue || '',
+  })
   const message = cleanValue(input.message)
 
   validateHumanText(authorName, 'A name', 80)
-  validateHumanText(contact, 'A contact method', 320)
+  if (contact.invalidMethod)
+    throw new SubmissionValidationError('Choose a valid contact method.')
+  if (contact.invalidValue) {
+    throw new SubmissionValidationError(
+      contact.method === 'email'
+        ? 'Enter a valid email address.'
+        : 'Enter a valid phone number.',
+    )
+  }
+  validateHumanText(contact.value, 'A contact method', 320)
+  if (contact.note)
+    validateHumanText(contact.note, 'A contact note', 320)
   validateHumanText(message, 'A message', 2000)
 
   const interaction: StoredBoardInteraction = {
@@ -709,9 +758,12 @@ export async function createBoardInteraction(input: {
       displayName: authorName,
       hasAccount: Boolean(input.viewer),
     },
-    contact,
+    contact: contact.display,
+    contactMethod: contact.method || undefined,
+    contactNote: contact.note || undefined,
+    contactValue: contact.value || undefined,
     createdAt,
-    hasContact: Boolean(contact),
+    hasContact: Boolean(contact.display),
     id: randomUUID(),
     itemId: input.itemId,
     message,

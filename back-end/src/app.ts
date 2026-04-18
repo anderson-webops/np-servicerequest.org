@@ -34,6 +34,7 @@ import {
   revealBoardItemContact,
   setBoardItemResolution,
 } from './board.js'
+import { normalizeStructuredContact } from './contact.js'
 import {
   sendBoardInteractionNotificationEmail,
   sendBoardItemManagementLinkEmail,
@@ -339,7 +340,12 @@ export function createApp() {
 
       void sendBoardItemNotificationEmail({
         authorName: createdBoardItem.item.author.displayName,
-        contact: result.fields.contact || '',
+        contact: normalizeStructuredContact({
+          legacyContact: result.fields.contact,
+          method: result.fields.contact_method,
+          note: result.fields.contact_note,
+          value: result.fields.contact_value,
+        }).display,
         context: createdBoardItem.item.attributes,
         createdAt: createdBoardItem.item.createdAt,
         itemId: createdBoardItem.item.id,
@@ -425,6 +431,9 @@ export function createApp() {
       const viewer = await getViewerFromCookie(request.get('cookie'))
       const interaction = await createBoardInteraction({
         contact: typeof request.body.contact === 'string' ? request.body.contact : '',
+        contactMethod: typeof request.body.contact_method === 'string' ? request.body.contact_method : '',
+        contactNote: typeof request.body.contact_note === 'string' ? request.body.contact_note : '',
+        contactValue: typeof request.body.contact_value === 'string' ? request.body.contact_value : '',
         itemId: request.params.itemId,
         message: typeof request.body.message === 'string' ? request.body.message : '',
         name: typeof request.body.name === 'string' ? request.body.name : '',
@@ -433,7 +442,12 @@ export function createApp() {
 
       void sendBoardInteractionNotificationEmail({
         authorName: interaction.author.displayName,
-        contact: typeof request.body.contact === 'string' ? request.body.contact : viewer?.email || '',
+        contact: normalizeStructuredContact({
+          legacyContact: typeof request.body.contact === 'string' ? request.body.contact : viewer?.email || '',
+          method: typeof request.body.contact_method === 'string' ? request.body.contact_method : viewer?.email ? 'email' : '',
+          note: typeof request.body.contact_note === 'string' ? request.body.contact_note : '',
+          value: typeof request.body.contact_value === 'string' ? request.body.contact_value : '',
+        }).display,
         createdAt: interaction.createdAt,
         itemId: request.params.itemId,
         itemTitle: typeof request.body.itemTitle === 'string' ? request.body.itemTitle : 'Board item',

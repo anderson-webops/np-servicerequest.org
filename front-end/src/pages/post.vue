@@ -17,6 +17,14 @@ import type { BoardFormErrorState, BoardFormStatus, BoardReplyDraft } from '~/ut
 import { isAntiBotChallenge, isAntiBotChallengeExpired, markAntiBotChallengeObserved, waitForAntiBotChallengeMinimumAge } from '~/utils/antiBot'
 import { forgetBoardDeleteToken, getBoardEndpoint, getStoredBoardDeleteToken, rememberBoardDeleteToken } from '~/utils/board'
 import { formatBoardDate, getBoardApiErrorState, getContactActionLabel, getInteractionDeleteKey, getReplyActionLabel, getRevealKey } from '~/utils/boardUi'
+import {
+  boardContactMethodOptions,
+  getBoardContactValueAutocomplete,
+  getBoardContactValueInputMode,
+  getBoardContactValueLabel,
+  getBoardContactValuePlaceholder,
+  getBoardContactValueType,
+} from '~/utils/contact'
 
 definePageMeta({
   layout: 'home',
@@ -43,7 +51,9 @@ const storedDeleteToken = ref('')
 
 const replyDraft = ref<BoardReplyDraft>({
   'bot-field': '',
-  'contact': '',
+  'contact_method': 'email',
+  'contact_note': '',
+  'contact_value': '',
   'message': '',
   'name': '',
 })
@@ -124,7 +134,9 @@ function refreshStoredDeleteToken() {
 function resetReplyDraft() {
   replyDraft.value = {
     'bot-field': '',
-    'contact': viewer.value?.email || '',
+    'contact_method': 'email',
+    'contact_note': '',
+    'contact_value': viewer.value?.email || '',
     'message': '',
     'name': viewer.value?.displayName || '',
   }
@@ -145,8 +157,8 @@ function syncReplyDraftWithViewer() {
   if (!replyDraft.value.name)
     replyDraft.value.name = viewer.value.displayName
 
-  if (!replyDraft.value.contact)
-    replyDraft.value.contact = viewer.value.email
+  if (!replyDraft.value.contact_value)
+    replyDraft.value.contact_value = viewer.value.email
 }
 
 function replaceItem(nextItem: BoardItem) {
@@ -854,8 +866,29 @@ watch(routeManagementToken, (nextToken, previousToken) => {
             </label>
 
             <label class="field">
-              <span>{{ viewer ? 'Contact method (optional when signed in)' : 'Email or phone' }}</span>
-              <input v-model="replyDraft.contact" :required="!viewer" autocomplete="email" placeholder="jane@email.com or 555-123-4567" type="text">
+              <span>Contact method</span>
+              <select v-model="replyDraft.contact_method" :required="!viewer">
+                <option v-for="option in boardContactMethodOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>{{ viewer ? `${getBoardContactValueLabel(replyDraft.contact_method)} (optional when signed in)` : getBoardContactValueLabel(replyDraft.contact_method) }}</span>
+              <input
+                v-model="replyDraft.contact_value"
+                :autocomplete="getBoardContactValueAutocomplete(replyDraft.contact_method)"
+                :inputmode="getBoardContactValueInputMode(replyDraft.contact_method)"
+                :placeholder="getBoardContactValuePlaceholder(replyDraft.contact_method)"
+                :required="!viewer"
+                :type="getBoardContactValueType(replyDraft.contact_method)"
+              >
+            </label>
+
+            <label class="field field--wide">
+              <span>Contact note (optional)</span>
+              <input v-model="replyDraft.contact_note" placeholder="Example: text first, evenings are best, or include the item name when you reach out." type="text">
             </label>
 
             <label class="field field--wide">

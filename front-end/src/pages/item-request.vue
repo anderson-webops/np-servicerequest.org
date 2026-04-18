@@ -1,5 +1,14 @@
 <script setup lang="ts">
 import { useBoardSubmission } from '~/composables/useBoardSubmission'
+import {
+  boardContactMethodOptions,
+  getBoardContactValueAutocomplete,
+  getBoardContactValueInputMode,
+  getBoardContactValueLabel,
+  getBoardContactValuePlaceholder,
+  getBoardContactValueType,
+  normalizeBoardContactMethod,
+} from '~/utils/contact'
 
 definePageMeta({
   layout: 'home',
@@ -11,9 +20,15 @@ useSeoMeta({
 })
 
 const { loadBootstrap, securityError, status, submit } = useBoardSubmission('itemRequest')
+const contactMethod = ref(normalizeBoardContactMethod('email'))
 
 onMounted(() => {
   void loadBootstrap()
+})
+
+watch(() => status.success, (nextSuccess) => {
+  if (nextSuccess)
+    contactMethod.value = 'email'
 })
 </script>
 
@@ -40,8 +55,29 @@ onMounted(() => {
     </label>
 
     <label class="field">
-      <span>Email or phone</span>
-      <input autocomplete="email" name="contact" placeholder="jane@email.com or 555-123-4567" required type="text">
+      <span>Contact method</span>
+      <select v-model="contactMethod" name="contact_method" required>
+        <option v-for="option in boardContactMethodOptions" :key="option.value" :value="option.value">
+          {{ option.label }}
+        </option>
+      </select>
+    </label>
+
+    <label class="field">
+      <span>{{ getBoardContactValueLabel(contactMethod) }}</span>
+      <input
+        :autocomplete="getBoardContactValueAutocomplete(contactMethod)"
+        :inputmode="getBoardContactValueInputMode(contactMethod)"
+        :placeholder="getBoardContactValuePlaceholder(contactMethod)"
+        :type="getBoardContactValueType(contactMethod)"
+        name="contact_value"
+        required
+      >
+    </label>
+
+    <label class="field field--wide">
+      <span>Contact note (optional)</span>
+      <input name="contact_note" placeholder="Example: text first, weekdays only, or mention the item name when you reach out." type="text">
     </label>
 
     <label class="field field--wide">

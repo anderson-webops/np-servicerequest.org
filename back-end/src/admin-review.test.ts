@@ -392,3 +392,65 @@ test('public item detail pages can load a visible post and owners can toggle res
   assert.equal(successfulReplyResponse.status, 201)
   assert.equal((successfulReply.interaction as { message: string }).message, 'I can come by tomorrow.')
 })
+
+test('structured contact fields work for new posts and replies while reveal endpoints keep returning readable contact text', async () => {
+  const antiBot = await getAgedAntiBotChallenge()
+
+  const { body: createdSubmission, response: createResponse } = await fetchJson('/api/submissions/service-request', {
+    body: JSON.stringify({
+      challengeIssuedAt: String(antiBot.issuedAt),
+      challengeToken: antiBot.token,
+      contact_method: 'phone',
+      contact_note: 'Text first in the evenings',
+      contact_value: '(555) 321-9876',
+      details: 'Need help moving a bookshelf upstairs.',
+      location: 'Maple block',
+      name: 'Taylor Poster',
+      project_type: 'Moving help',
+      timing: 'This Friday night',
+    }),
+    method: 'POST',
+  })
+
+  assert.equal(createResponse.status, 201)
+  assert.equal(createdSubmission.accepted, true)
+  const createdBoardItem = createdSubmission.boardItem as { id: string }
+
+  const { body: revealedItemContact, response: revealedItemContactResponse } = await fetchJson(`/api/board/items/${createdBoardItem.id}/contact`, {
+    body: JSON.stringify({
+      challengeIssuedAt: String(antiBot.issuedAt),
+      challengeToken: antiBot.token,
+    }),
+    method: 'POST',
+  })
+
+  assert.equal(revealedItemContactResponse.status, 200)
+  assert.equal(revealedItemContact.contact, 'Phone: (555) 321-9876 (Text first in the evenings)')
+
+  const { body: createdReply, response: createdReplyResponse } = await fetchJson(`/api/board/items/${createdBoardItem.id}/interactions`, {
+    body: JSON.stringify({
+      challengeIssuedAt: String(antiBot.issuedAt),
+      challengeToken: antiBot.token,
+      contact_method: 'email',
+      contact_note: 'Subject line should mention bookshelf help',
+      contact_value: 'neighbor@example.com',
+      message: 'I can help carry it after 6 PM.',
+      name: 'Helpful Neighbor',
+    }),
+    method: 'POST',
+  })
+
+  assert.equal(createdReplyResponse.status, 201)
+  const createdInteraction = createdReply.interaction as { id: string }
+
+  const { body: revealedReplyContact, response: revealedReplyContactResponse } = await fetchJson(`/api/board/items/${createdBoardItem.id}/interactions/${createdInteraction.id}/contact`, {
+    body: JSON.stringify({
+      challengeIssuedAt: String(antiBot.issuedAt),
+      challengeToken: antiBot.token,
+    }),
+    method: 'POST',
+  })
+
+  assert.equal(revealedReplyContactResponse.status, 200)
+  assert.equal(revealedReplyContact.contact, 'Email: neighbor@example.com (Subject line should mention bookshelf help)')
+})

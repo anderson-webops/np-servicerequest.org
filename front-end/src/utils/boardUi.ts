@@ -15,7 +15,9 @@ export interface BoardFormStatus {
 
 export interface BoardReplyDraft {
   'bot-field': string
-  'contact': string
+  'contact_method': 'email' | 'phone'
+  'contact_note': string
+  'contact_value': string
   'message': string
   'name': string
 }

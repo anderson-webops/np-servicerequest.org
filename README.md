@@ -46,6 +46,7 @@ The board and intake forms call the separate back-end API instead of relying on 
 The previous PWA/service-worker runtime is intentionally disabled right now so clients do not keep serving stale cached form logic across deploys.
 The live board and admin review filters now stay in the URL query string so refresh, back/forward navigation, and shared links preserve the current view. The optional account page also supports `?tab=login`.
 Each public board post also has a dedicated static-safe detail page at `/post?id=<boardItemId>`, so individual requests can be shared even under static hosting.
+New posts and replies now collect structured contact details instead of one free-text field, so contributors can explicitly choose email or phone and optionally add a short contact note.
 
 Set `NUXT_PUBLIC_API_BASE_URL` when the front-end should target a non-default API host. This value should be the full API base, for example `https://np-servicerequest.org/api`.
 
@@ -83,6 +84,14 @@ Default port: `3006`
 
 Form submissions are written under `SUBMISSIONS_DATA_DIR` when it is set. When it is not set, the back-end falls back to an OS temp directory under `np-servicerequest/submissions`, which is suitable for local development but not durable production storage.
 The live board, optional accounts, and session files are stored under a `_board` subdirectory beneath that same root.
+
+Submission and reply payloads accept either the legacy `contact` field or the newer structured contact fields:
+
+- `contact_method=email|phone`
+- `contact_value=<email-or-phone>`
+- `contact_note=<optional extra instruction>`
+
+The server still accepts legacy `contact` input for backward compatibility, but new UI flows use the structured fields by default.
 
 ### Email Notifications And Management Links
 

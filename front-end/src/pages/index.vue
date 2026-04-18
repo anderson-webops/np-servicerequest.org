@@ -19,6 +19,14 @@ import type { SubmissionKind } from '~/utils/submissions'
 import { isAntiBotChallenge, isAntiBotChallengeExpired, markAntiBotChallengeObserved, waitForAntiBotChallengeMinimumAge } from '~/utils/antiBot'
 import { forgetBoardDeleteToken, getBoardEndpoint, getStoredBoardDeleteToken, listStoredBoardDeleteTokenIds, rememberBoardDeleteToken } from '~/utils/board'
 import { formatBoardDate, getBoardApiErrorState, getBoardDetailPath, getContactActionLabel, getInteractionDeleteKey, getReplyActionLabel, getRevealKey } from '~/utils/boardUi'
+import {
+  boardContactMethodOptions,
+  getBoardContactValueAutocomplete,
+  getBoardContactValueInputMode,
+  getBoardContactValueLabel,
+  getBoardContactValuePlaceholder,
+  getBoardContactValueType,
+} from '~/utils/contact'
 import { submissionKinds } from '~/utils/submissions'
 
 type BoardFilter = 'all' | SubmissionKind
@@ -168,7 +176,9 @@ function getReplyDraft(itemId: string) {
   if (!replyDrafts[itemId]) {
     replyDrafts[itemId] = {
       'bot-field': '',
-      'contact': viewer.value?.email || '',
+      'contact_method': 'email',
+      'contact_note': '',
+      'contact_value': viewer.value?.email || '',
       'message': '',
       'name': viewer.value?.displayName || '',
     }
@@ -178,8 +188,8 @@ function getReplyDraft(itemId: string) {
     if (!replyDrafts[itemId].name)
       replyDrafts[itemId].name = viewer.value.displayName
 
-    if (!replyDrafts[itemId].contact)
-      replyDrafts[itemId].contact = viewer.value.email
+    if (!replyDrafts[itemId].contact_value)
+      replyDrafts[itemId].contact_value = viewer.value.email
   }
 
   return replyDrafts[itemId]
@@ -771,8 +781,8 @@ watch(viewer, (nextViewer) => {
     if (!draft.name)
       draft.name = nextViewer.displayName
 
-    if (!draft.contact)
-      draft.contact = nextViewer.email
+    if (!draft.contact_value)
+      draft.contact_value = nextViewer.email
   }
 })
 
@@ -1122,8 +1132,29 @@ watch(
                   </label>
 
                   <label class="field">
-                    <span>{{ viewer ? 'Contact method (optional when signed in)' : 'Email or phone' }}</span>
-                    <input v-model="replyDrafts[item.id]!.contact" :required="!viewer" autocomplete="email" placeholder="jane@email.com or 555-123-4567" type="text">
+                    <span>Contact method</span>
+                    <select v-model="replyDrafts[item.id]!.contact_method" :required="!viewer">
+                      <option v-for="option in boardContactMethodOptions" :key="option.value" :value="option.value">
+                        {{ option.label }}
+                      </option>
+                    </select>
+                  </label>
+
+                  <label class="field">
+                    <span>{{ viewer ? `${getBoardContactValueLabel(replyDrafts[item.id]!.contact_method)} (optional when signed in)` : getBoardContactValueLabel(replyDrafts[item.id]!.contact_method) }}</span>
+                    <input
+                      v-model="replyDrafts[item.id]!.contact_value"
+                      :autocomplete="getBoardContactValueAutocomplete(replyDrafts[item.id]!.contact_method)"
+                      :inputmode="getBoardContactValueInputMode(replyDrafts[item.id]!.contact_method)"
+                      :placeholder="getBoardContactValuePlaceholder(replyDrafts[item.id]!.contact_method)"
+                      :required="!viewer"
+                      :type="getBoardContactValueType(replyDrafts[item.id]!.contact_method)"
+                    >
+                  </label>
+
+                  <label class="field field--wide">
+                    <span>Contact note (optional)</span>
+                    <input v-model="replyDrafts[item.id]!.contact_note" placeholder="Example: text first, evenings are best, or include the item name when you reach out." type="text">
                   </label>
 
                   <label class="field field--wide">

@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { env } from 'node:process'
 
+import { normalizeStructuredContact } from './contact.js'
+
 const defaultSubmissionsDirectory = resolve(tmpdir(), 'np-servicerequest', 'submissions')
 
 export const submissionKinds = [
@@ -21,16 +23,16 @@ interface SubmissionConfig {
 
 const submissionConfig: Record<SubmissionKind, SubmissionConfig> = {
   'service-request': {
-    requiredFields: ['name', 'contact', 'project_type', 'location', 'timing', 'details'],
-    optionalFields: ['challengeIssuedAt', 'challengeToken', 'bot-field'],
+    requiredFields: ['name', 'project_type', 'location', 'timing', 'details'],
+    optionalFields: ['contact', 'contact_method', 'contact_note', 'contact_value', 'challengeIssuedAt', 'challengeToken', 'bot-field'],
   },
   'item-request': {
-    requiredFields: ['name', 'contact', 'item_needed', 'duration', 'pickup_plan', 'neighborhood', 'details'],
-    optionalFields: ['needed_by', 'challengeIssuedAt', 'challengeToken', 'bot-field'],
+    requiredFields: ['name', 'item_needed', 'duration', 'pickup_plan', 'neighborhood', 'details'],
+    optionalFields: ['contact', 'contact_method', 'contact_note', 'contact_value', 'needed_by', 'challengeIssuedAt', 'challengeToken', 'bot-field'],
   },
   'item-lending': {
-    requiredFields: ['name', 'contact', 'item_available', 'neighborhood', 'availability', 'condition', 'guidelines'],
-    optionalFields: ['challengeIssuedAt', 'challengeToken', 'bot-field'],
+    requiredFields: ['name', 'item_available', 'neighborhood', 'availability', 'condition', 'guidelines'],
+    optionalFields: ['contact', 'contact_method', 'contact_note', 'contact_value', 'challengeIssuedAt', 'challengeToken', 'bot-field'],
   },
 }
 
@@ -113,6 +115,27 @@ function validatePayload(kind: SubmissionKind, payload: Record<string, string>) 
 
   if (missingFieldNames.length > 0)
     throw new SubmissionValidationError(`Missing required fields: ${missingFieldNames.join(', ')}`)
+
+  const contact = normalizeStructuredContact({
+    legacyContact: payload.contact,
+    method: payload.contact_method,
+    note: payload.contact_note,
+    value: payload.contact_value,
+  })
+
+  if (!contact.value)
+    throw new SubmissionValidationError('A contact method is required.')
+
+  if (contact.invalidMethod)
+    throw new SubmissionValidationError('Choose a valid contact method.')
+
+  if (contact.invalidValue) {
+    throw new SubmissionValidationError(
+      contact.method === 'email'
+        ? 'Enter a valid email address.'
+        : 'Enter a valid phone number.',
+    )
+  }
 
   for (const [fieldName, value] of Object.entries(payload)) {
     if (value.length > 4000)

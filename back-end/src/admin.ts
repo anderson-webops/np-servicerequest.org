@@ -154,6 +154,9 @@ const submissionKindLabels: Record<SubmissionKind, string> = {
 const submissionFieldLabels: Record<SubmissionKind, Array<[string, string]>> = {
   'service-request': [
     ['name', 'Name'],
+    ['contact_method', 'Contact method'],
+    ['contact_value', 'Contact detail'],
+    ['contact_note', 'Contact note'],
     ['contact', 'Contact'],
     ['project_type', 'Project type'],
     ['location', 'Location or neighborhood'],
@@ -162,6 +165,9 @@ const submissionFieldLabels: Record<SubmissionKind, Array<[string, string]>> = {
   ],
   'item-request': [
     ['name', 'Name'],
+    ['contact_method', 'Contact method'],
+    ['contact_value', 'Contact detail'],
+    ['contact_note', 'Contact note'],
     ['contact', 'Contact'],
     ['item_needed', 'Item needed'],
     ['needed_by', 'Need it by'],
@@ -172,6 +178,9 @@ const submissionFieldLabels: Record<SubmissionKind, Array<[string, string]>> = {
   ],
   'item-lending': [
     ['name', 'Name'],
+    ['contact_method', 'Contact method'],
+    ['contact_value', 'Contact detail'],
+    ['contact_note', 'Contact note'],
     ['contact', 'Contact'],
     ['item_available', 'Item available'],
     ['neighborhood', 'Neighborhood'],
@@ -227,12 +236,13 @@ function isMatchingAdminKey(candidate: string, configured: string) {
 function buildFieldEntries(kind: SubmissionKind, fields: Record<string, string>) {
   const knownFields = submissionFieldLabels[kind]
   const knownFieldNames = new Set(knownFields.map(([fieldName]) => fieldName))
+  const hideLegacyContact = Boolean(fields.contact_value)
 
   const orderedEntries = knownFields
     .map(([fieldName, label]) => {
       const value = fields[fieldName]
 
-      if (!value)
+      if (!value || (fieldName === 'contact' && hideLegacyContact))
         return null
 
       return {
