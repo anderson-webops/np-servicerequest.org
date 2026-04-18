@@ -12,6 +12,7 @@
 		"build": "tsc -p tsconfig.json",
 		"watch": "tsc -w",
 		"dev": "tsx watch -r dotenv/config src/server.ts",
+		"test": "tsx --test src/**/*.test.ts",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
 		"up": "taze major -I",
 		"lint": "eslint \"src/**/*.{js,ts}\"",

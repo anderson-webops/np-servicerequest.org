@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type {
+  AdminActivityEntry,
   AdminReviewResponse,
   AdminReviewStatus,
   AdminSubmissionCounts,
@@ -21,6 +22,7 @@ interface FormErrorState {
 
 type ReviewFilter = 'all' | AdminReviewStatus
 type KindFilter = 'all' | SubmissionKind
+type ActivityFilter = 'all' | AdminActivityEntry['category']
 
 const emptyCounts: AdminSubmissionCounts = {
   approved: 0,
@@ -40,8 +42,8 @@ const reviewStatusLabels: Record<AdminReviewStatus, string> = {
 const reviewActionOptions = [
   { status: 'approved' as const, label: 'Approve' },
   { status: 'needs-follow-up' as const, label: 'Needs Follow-Up' },
-  { status: 'rejected' as const, label: 'Reject' },
-  { status: 'pending' as const, label: 'Reset' },
+  { status: 'rejected' as const, label: 'Reject + hide' },
+  { status: 'pending' as const, label: 'Reset / restore' },
 ]
 
 const kindLabels: Record<SubmissionKind, string> = {
@@ -70,8 +72,10 @@ const authError = ref<FormErrorState | null>(null)
 const dataError = ref<FormErrorState | null>(null)
 const authNotice = ref('')
 const submissions = ref<AdminSubmissionRecord[]>([])
+const activityEntries = ref<AdminActivityEntry[]>([])
 const reviewFilter = ref<ReviewFilter>('pending')
 const kindFilter = ref<KindFilter>('all')
+const activityFilter = ref<ActivityFilter>('all')
 const adminKeyField = ref<HTMLInputElement | null>(null)
 
 const reviewPending = reactive<Record<string, boolean>>({})
@@ -118,6 +122,28 @@ const kindFilters = computed(() => [
   { key: 'item-lending' as const, label: kindLabels['item-lending'], count: submissions.value.filter(submission => submission.kind === 'item-lending').length },
 ])
 
+const activityCategoryLabels: Record<Exclude<ActivityFilter, 'all'>, string> = {
+  posts: 'Posts',
+  replies: 'Replies',
+  moderation: 'Moderation',
+  deletions: 'Deletions',
+}
+
+const filteredActivityEntries = computed(() => activityEntries.value.filter((entry) => {
+  return activityFilter.value === 'all' || entry.category === activityFilter.value
+}))
+
+const activityFilters = computed(() => {
+  return [
+    { key: 'all' as const, label: 'All activity', count: activityEntries.value.length },
+    ...Object.entries(activityCategoryLabels).map(([key, label]) => ({
+      key: key as Exclude<ActivityFilter, 'all'>,
+      label,
+      count: activityEntries.value.filter(entry => entry.category === key).length,
+    })),
+  ]
+})
+
 function formatSubmissionDate(value: string) {
   return new Intl.DateTimeFormat('en-US', {
     dateStyle: 'medium',
@@ -127,6 +153,35 @@ function formatSubmissionDate(value: string) {
 
 function formatStatusLabel(status: AdminReviewStatus) {
   return reviewStatusLabels[status]
+}
+
+function formatActivityCategory(category: AdminActivityEntry['category']) {
+  return activityCategoryLabels[category]
+}
+
+function formatActivityAction(action: string) {
+  if (action === 'board_item_created')
+    return 'Post created'
+
+  if (action === 'board_interaction_created')
+    return 'Reply posted'
+
+  if (action === 'submission_reviewed')
+    return 'Review saved'
+
+  if (action === 'board_item_hidden_by_admin')
+    return 'Hidden from public board'
+
+  if (action === 'board_item_restored_to_public')
+    return 'Restored to public board'
+
+  if (action === 'board_item_deleted')
+    return 'Post deleted'
+
+  if (action === 'board_interaction_deleted')
+    return 'Reply deleted'
+
+  return action.replaceAll('_', ' ')
 }
 
 function getReviewButtonLabel(submissionId: string, baseLabel: string) {
@@ -205,7 +260,7 @@ function getApiErrorState(error: unknown, endpoint: string, fallbackMessage: str
   }
 }
 
-async function loadAdminSubmissions(candidateKey = activeAdminKey.value, options?: { authAttempt?: boolean }) {
+async function loadAdminSubmissions(candidateKey = activeAdminKey.value, options?: { authAttempt?: boolean, showSessionNotice?: boolean }) {
   const endpoint = getAdminEndpoint(runtimeConfig.public.apiBaseUrl, 'submissions')
   const normalizedKey = candidateKey.trim()
 
@@ -233,11 +288,13 @@ async function loadAdminSubmissions(candidateKey = activeAdminKey.value, options
 
     activeAdminKey.value = normalizedKey
     writeStoredAdminKey(normalizedKey)
+    activityEntries.value = response.activity
     submissions.value = response.submissions
     seedReviewState(response.submissions)
     adminKeyInput.value = ''
     authError.value = null
-    authNotice.value = 'Admin key accepted. It is stored only in this browser session.'
+    if (options?.showSessionNotice !== false)
+      authNotice.value = 'Admin key accepted. It is stored only in this browser session.'
   }
   catch (error) {
     const errorState = getApiErrorState(error, endpoint, 'Unable to load admin submissions right now.')
@@ -283,11 +340,6 @@ function signOutAdmin() {
   authError.value = null
 }
 
-function updateSubmission(submission: AdminSubmissionRecord) {
-  submissions.value = submissions.value.map(existingSubmission => existingSubmission.id === submission.id ? submission : existingSubmission)
-  notesDrafts[submission.id] = submission.review.notes
-}
-
 async function saveReview(submission: AdminSubmissionRecord, status: AdminReviewStatus) {
   const endpoint = getAdminEndpoint(runtimeConfig.public.apiBaseUrl, `submissions/${submission.kind}/${submission.id}/review`)
   reviewPending[submission.id] = true
@@ -306,10 +358,14 @@ async function saveReview(submission: AdminSubmissionRecord, status: AdminReview
       method: 'POST',
     })
 
-    updateSubmission(response.submission)
-    reviewNotices[submission.id] = status === 'pending'
-      ? 'Review reset to pending.'
-      : `Saved as ${formatStatusLabel(status).toLowerCase()}.`
+    await loadAdminSubmissions(activeAdminKey.value, { showSessionNotice: false })
+    reviewNotices[submission.id] = status === 'rejected'
+      ? response.submission.board.publicState === 'hidden_by_admin'
+        ? 'Rejected and hidden from the public board.'
+        : 'Rejected. No linked public board item was hidden.'
+      : status === 'pending'
+        ? 'Review reset. Hidden item restored if it had only been hidden by rejection.'
+        : `Saved as ${formatStatusLabel(status).toLowerCase()}.`
   }
   catch (error) {
     const errorState = getApiErrorState(error, endpoint, 'Unable to save that review right now.')
@@ -339,7 +395,7 @@ onMounted(() => {
     return
   }
 
-  void loadAdminSubmissions(storedAdminKey)
+  void loadAdminSubmissions(storedAdminKey, { showSessionNotice: false })
 })
 </script>
 
@@ -435,7 +491,7 @@ onMounted(() => {
           Review stored submissions and record an admin decision.
         </h2>
         <p class="section-copy">
-          The filters below work against the stored submission queue. Invalid admin keys clear the session immediately and return you to the admin-key prompt.
+          The filters below work against the stored submission queue. Rejecting a submission hides its linked board item from the public board while keeping the internal record. Invalid admin keys clear the session immediately and return you to the admin-key prompt.
         </p>
       </div>
 
@@ -492,11 +548,21 @@ onMounted(() => {
               <span class="admin-card__status" :data-status="submission.review.status">
                 {{ formatStatusLabel(submission.review.status) }}
               </span>
+              <span class="admin-card__status admin-card__status--board" :data-status="submission.board.publicState">
+                {{ submission.board.publicStateLabel }}
+              </span>
             </div>
           </header>
 
           <p class="admin-card__summary">
             {{ submission.summary || 'No summary available.' }}
+          </p>
+
+          <p class="admin-card__board-note">
+            {{ submission.board.visibilityNote }}
+            <span v-if="submission.board.itemId">
+              Item ID: <code>{{ submission.board.itemId }}</code>
+            </span>
           </p>
 
           <dl class="admin-card__fields">
@@ -521,6 +587,9 @@ onMounted(() => {
           </label>
 
           <div class="admin-card__actions">
+            <p class="admin-card__action-note">
+              Reject + hide removes the linked board item from public listings without deleting this stored submission.
+            </p>
             <button
               v-for="action in reviewActionOptions"
               :key="`${submission.id}-${action.status}`"
@@ -546,6 +615,66 @@ onMounted(() => {
           <p v-if="reviewErrors[submission.id]" class="inline-note inline-note--error" role="alert">
             {{ reviewErrors[submission.id]?.message }} {{ reviewErrors[submission.id]?.detail }}
           </p>
+        </article>
+      </div>
+    </section>
+
+    <section v-if="isAuthenticated" class="admin-review admin-review--activity">
+      <div class="section-heading">
+        <p class="eyebrow">
+          Activity log
+        </p>
+        <h2>
+          Track posts, replies, moderation actions, and deletions in one place.
+        </h2>
+        <p class="section-copy">
+          This log keeps the internal moderation trail even when a post is hidden from the public board.
+        </p>
+      </div>
+
+      <div class="admin-review__filters">
+        <div class="filter-strip" role="tablist" aria-label="Activity filters">
+          <button
+            v-for="filter in activityFilters"
+            :key="filter.key"
+            :aria-selected="activityFilter === filter.key"
+            class="filter-chip"
+            :class="{ 'filter-chip--active': activityFilter === filter.key }"
+            type="button"
+            @click="activityFilter = filter.key"
+          >
+            <span>{{ filter.label }}</span>
+            <strong>{{ filter.count }}</strong>
+          </button>
+        </div>
+      </div>
+
+      <div v-if="!filteredActivityEntries.length" class="admin-empty">
+        No activity has been recorded for the current filters yet.
+      </div>
+
+      <div v-else class="admin-activity">
+        <article v-for="entry in filteredActivityEntries" :key="entry.id" class="admin-activity__entry">
+          <div class="admin-activity__meta">
+            <span class="admin-activity__category">{{ formatActivityCategory(entry.category) }}</span>
+            <span>{{ formatSubmissionDate(entry.createdAt) }}</span>
+          </div>
+          <div class="admin-activity__content">
+            <p class="admin-activity__title">
+              {{ formatActivityAction(entry.action) }}: {{ entry.title }}
+            </p>
+            <p class="admin-activity__detail">
+              {{ entry.detail }}
+            </p>
+            <p class="admin-activity__actor">
+              Actor: {{ entry.actor.label }}
+              <span v-if="entry.kind"> · Kind: {{ kindLabels[entry.kind] }}</span>
+              <span v-if="entry.visibilityState"> · State: {{ entry.visibilityState }}</span>
+              <span v-if="entry.submissionId"> · Submission: <code>{{ entry.submissionId }}</code></span>
+              <span v-if="entry.itemId"> · Item: <code>{{ entry.itemId }}</code></span>
+              <span v-if="entry.interactionId"> · Reply: <code>{{ entry.interactionId }}</code></span>
+            </p>
+          </div>
         </article>
       </div>
     </section>
@@ -943,10 +1072,34 @@ onMounted(() => {
   margin: 0;
 }
 
+.admin-card__board-note,
+.admin-card__action-note,
 .admin-card__summary,
 .admin-card__meta-note,
 .admin-card__reviewed-at {
   overflow-wrap: anywhere;
+}
+
+.admin-card__board-note,
+.admin-card__action-note,
+.admin-activity__detail,
+.admin-activity__actor,
+.admin-activity__title {
+  margin: 0;
+}
+
+.admin-card__board-note,
+.admin-card__action-note {
+  color: var(--site-subtle);
+  line-height: 1.6;
+}
+
+.admin-card__board-note code,
+.admin-activity__actor code {
+  padding: 0.14rem 0.42rem;
+  border-radius: 0.55rem;
+  background: var(--site-elevated);
+  font-size: 0.92em;
 }
 
 .admin-card__fields {
@@ -991,6 +1144,81 @@ onMounted(() => {
   gap: 0.75rem;
 }
 
+.admin-card__status--board[data-status='visible'] {
+  background: var(--site-success-bg);
+  color: var(--site-success-text);
+}
+
+.admin-card__status--board[data-status='hidden_by_admin'] {
+  background: var(--site-error-bg);
+  color: var(--site-error-text);
+}
+
+.admin-card__status--board[data-status='deleted_by_owner'],
+.admin-card__status--board[data-status='deleted_by_admin'] {
+  background: var(--site-surface-soft);
+  color: var(--site-subtle);
+}
+
+.admin-review--activity {
+  gap: 1rem;
+}
+
+.admin-activity {
+  display: grid;
+  gap: 1rem;
+}
+
+.admin-activity__entry {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1.25rem 1.35rem;
+  border-radius: 1.35rem;
+  background: var(--site-surface);
+  border: 1px solid var(--site-border);
+  box-shadow: var(--site-shadow);
+}
+
+.admin-activity__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--site-subtle);
+  font-size: 0.86rem;
+}
+
+.admin-activity__category {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.24rem 0.52rem;
+  border-radius: 999px;
+  background: var(--site-accent-soft);
+  color: var(--site-link);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-activity__content {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.admin-activity__title {
+  color: var(--site-heading);
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.admin-activity__detail,
+.admin-activity__actor {
+  color: var(--site-subtle);
+  line-height: 1.6;
+}
+
 @media (max-width: 1080px) {
   .admin-page__panel {
     grid-template-columns: 1fr;
@@ -1022,6 +1250,11 @@ onMounted(() => {
   .secondary-button,
   .submit-button {
     width: 100%;
+  }
+
+  .admin-activity__meta {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

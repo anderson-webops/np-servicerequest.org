@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { env } from 'node:process'
@@ -63,6 +63,9 @@ export interface SaveSubmissionResult {
 }
 
 interface StoredSubmission {
+  board?: {
+    itemId?: string
+  }
   createdAt: string
   fields: Record<string, string>
   id: string
@@ -128,6 +131,25 @@ function buildSubmissionFileName(createdAt: string, id: string) {
   return `${createdAt.replaceAll(':', '-').replaceAll('.', '-')}--${id}.json`
 }
 
+async function findStoredSubmissionFile(kind: SubmissionKind, submissionId: string) {
+  const submissionDirectory = buildSubmissionDirectory(kind)
+  await mkdir(submissionDirectory, { recursive: true })
+  const fileNames = await readdir(submissionDirectory)
+
+  for (const fileName of fileNames) {
+    if (!fileName.endsWith('.json'))
+      continue
+
+    const filePath = resolve(submissionDirectory, fileName)
+    const storedSubmission = JSON.parse(await readFile(filePath, 'utf8')) as StoredSubmission
+
+    if (storedSubmission.id === submissionId)
+      return { filePath, submission: storedSubmission }
+  }
+
+  return null
+}
+
 export async function saveSubmission(input: SaveSubmissionInput): Promise<SaveSubmissionResult> {
   const payload = sanitizePayload(input.kind, input.rawPayload)
   const createdAt = new Date().toISOString()
@@ -177,4 +199,29 @@ export async function saveSubmission(input: SaveSubmissionInput): Promise<SaveSu
     createdAt,
     fields,
   }
+}
+
+export async function attachBoardItemToSubmission(input: {
+  itemId: string
+  kind: SubmissionKind
+  submissionId: string
+}) {
+  const storedSubmission = await findStoredSubmissionFile(input.kind, input.submissionId)
+
+  if (!storedSubmission)
+    return false
+
+  await writeFile(
+    storedSubmission.filePath,
+    `${JSON.stringify({
+      ...storedSubmission.submission,
+      board: {
+        ...storedSubmission.submission.board,
+        itemId: input.itemId,
+      },
+    }, null, 2)}\n`,
+    'utf8',
+  )
+
+  return true
 }

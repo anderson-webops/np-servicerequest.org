@@ -45,6 +45,7 @@ import {
 } from './security.js'
 import {
   AccountValidationError,
+  attachBoardItemToSubmission,
   isSubmissionKind,
   saveSubmission,
   SubmissionValidationError,
@@ -256,7 +257,13 @@ export function createApp() {
       const createdBoardItem = await createBoardItemFromSubmission({
         fields: result.fields,
         kind,
+        submissionId: result.id,
         viewer,
+      })
+      await attachBoardItemToSubmission({
+        itemId: createdBoardItem.item.id,
+        kind,
+        submissionId: result.id,
       })
 
       void sendBoardItemNotificationEmail({

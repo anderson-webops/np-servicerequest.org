@@ -1,10 +1,15 @@
+import type { BoardActivityEntry } from './activity.js'
+import type { SubmissionBoardState } from './board.js'
 import type { SubmissionKind } from './submissions.js'
+
 import { Buffer } from 'node:buffer'
 import { timingSafeEqual } from 'node:crypto'
 import { readdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
-
 import { env } from 'node:process'
+
+import { listBoardActivity, recordBoardActivity } from './activity.js'
+import { describeBoardItemStatus, getBoardStateForSubmission, syncBoardItemVisibilityFromSubmissionReview } from './board.js'
 import { readJsonFile, resolveDataPath, writeJsonFile } from './data.js'
 import { isSubmissionKind, submissionKinds } from './submissions.js'
 
@@ -18,6 +23,9 @@ export const adminReviewStatuses = [
 export type AdminReviewStatus = (typeof adminReviewStatuses)[number]
 
 interface StoredSubmissionRecord {
+  board?: {
+    itemId?: string
+  }
   createdAt: string
   fields: Record<string, string>
   id: string
@@ -38,7 +46,16 @@ export interface AdminFieldEntry {
   value: string
 }
 
+export interface AdminBoardState {
+  itemId: string | null
+  matchedBy: SubmissionBoardState['matchedBy']
+  publicState: SubmissionBoardState['publicState']
+  publicStateLabel: string
+  visibilityNote: string
+}
+
 export interface AdminSubmissionRecord {
+  board: AdminBoardState
   createdAt: string
   fieldEntries: AdminFieldEntry[]
   fields: Record<string, string>
@@ -202,10 +219,38 @@ function buildSubmissionSummary(kind: SubmissionKind, fields: Record<string, str
   return fields.guidelines || [fields.availability, fields.neighborhood].filter(Boolean).join(' · ')
 }
 
-function normalizeSubmissionRecord(submission: StoredSubmissionRecord): AdminSubmissionRecord {
-  const reviewStatus = submission.review?.status || 'pending'
+function buildAdminBoardState(boardState: SubmissionBoardState): AdminBoardState {
+  let visibilityNote = 'No linked public board item was found.'
+
+  if (boardState.publicState === 'visible')
+    visibilityNote = 'Visible on the public board.'
+  else if (boardState.publicState === 'hidden_by_admin')
+    visibilityNote = 'Hidden from the public board but preserved for admin review and audit.'
+  else if (boardState.publicState === 'deleted_by_owner')
+    visibilityNote = 'Removed from the public board by the owner while keeping the internal record.'
+  else if (boardState.publicState === 'deleted_by_admin')
+    visibilityNote = 'Removed from the public board by an admin delete action while keeping the internal record.'
 
   return {
+    itemId: boardState.itemId,
+    matchedBy: boardState.matchedBy,
+    publicState: boardState.publicState,
+    publicStateLabel: describeBoardItemStatus(boardState.publicState),
+    visibilityNote,
+  }
+}
+
+async function normalizeSubmissionRecord(submission: StoredSubmissionRecord, resolvedBoardState?: SubmissionBoardState): Promise<AdminSubmissionRecord> {
+  const reviewStatus = submission.review?.status || 'pending'
+  const boardState = resolvedBoardState || await getBoardStateForSubmission({
+    fields: submission.fields,
+    kind: submission.kind,
+    linkedItemId: submission.board?.itemId,
+    submissionId: submission.id,
+  })
+
+  return {
+    board: buildAdminBoardState(boardState),
     createdAt: submission.createdAt,
     fieldEntries: buildFieldEntries(submission.kind, submission.fields),
     fields: submission.fields,
@@ -268,9 +313,13 @@ async function listKindSubmissions(kind: SubmissionKind) {
       }),
     )
 
-    return submissions
-      .filter((record): record is StoredSubmissionRecord => Boolean(record && isSubmissionKind(record.kind)))
-      .map(normalizeSubmissionRecord)
+    const normalizedSubmissions = await Promise.all(
+      submissions
+        .filter((record): record is StoredSubmissionRecord => Boolean(record && isSubmissionKind(record.kind)))
+        .map(submission => normalizeSubmissionRecord(submission)),
+    )
+
+    return normalizedSubmissions
   }
   catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT')
@@ -307,6 +356,25 @@ async function findStoredSubmission(kind: SubmissionKind, id: string) {
   }
 }
 
+function buildReviewLogDetail(status: AdminReviewStatus, boardState: SubmissionBoardState) {
+  if (status === 'rejected') {
+    return boardState.publicState === 'hidden_by_admin'
+      ? 'Marked rejected and hidden from the public board.'
+      : 'Marked rejected. No linked public board item was hidden.'
+  }
+
+  if (status === 'pending') {
+    return boardState.publicState === 'visible'
+      ? 'Reset to pending. Any admin-only hidden state was restored to the public board.'
+      : 'Reset to pending.'
+  }
+
+  if (status === 'approved')
+    return 'Marked approved.'
+
+  return 'Marked as needing follow-up.'
+}
+
 export function assertValidAdminKey(rawAdminKey: string) {
   const configuredAdminKeys = getConfiguredAdminKeys()
 
@@ -330,6 +398,7 @@ export async function listAdminSubmissions() {
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
 
   return {
+    activity: await listBoardActivity(),
     counts: summarizeSubmissionCounts(submissions),
     submissions,
   }
@@ -354,6 +423,7 @@ export async function reviewAdminSubmission(input: {
   if (!storedSubmission)
     throw new AdminSubmissionNotFoundError('That submission could not be found.')
 
+  const reviewedAt = new Date().toISOString()
   const nextRecord: StoredSubmissionRecord = {
     ...storedSubmission.record,
   }
@@ -364,12 +434,42 @@ export async function reviewAdminSubmission(input: {
   else {
     nextRecord.review = {
       notes,
-      reviewedAt: new Date().toISOString(),
+      reviewedAt,
       status: input.status,
     }
   }
 
-  await writeJsonFile(storedSubmission.filePath, nextRecord)
+  const boardState = await syncBoardItemVisibilityFromSubmissionReview({
+    actorLabel: 'Admin key',
+    fields: nextRecord.fields,
+    kind: input.kind,
+    linkedItemId: nextRecord.board?.itemId,
+    reviewStatus: input.status,
+    submissionId: input.id,
+  })
 
-  return normalizeSubmissionRecord(nextRecord)
+  if (boardState.itemId) {
+    nextRecord.board = {
+      ...nextRecord.board,
+      itemId: boardState.itemId,
+    }
+  }
+
+  await writeJsonFile(storedSubmission.filePath, nextRecord)
+  await recordBoardActivity({
+    action: 'submission_reviewed',
+    actor: { kind: 'admin', label: 'Admin key' },
+    category: 'moderation',
+    createdAt: reviewedAt,
+    detail: buildReviewLogDetail(input.status, boardState),
+    itemId: boardState.itemId || undefined,
+    kind: input.kind,
+    submissionId: input.id,
+    title: buildSubmissionTitle(input.kind, nextRecord.fields),
+    visibilityState: boardState.publicState,
+  })
+
+  return normalizeSubmissionRecord(nextRecord, boardState)
 }
+
+export type { BoardActivityEntry }

@@ -45,7 +45,7 @@ export interface BoardItem {
   kind: SubmissionKind
   kindLabel: string
   lastActivityAt: string
-  status: 'open'
+  status: 'visible' | 'hidden_by_admin' | 'deleted_by_owner' | 'deleted_by_admin'
   summary: string
   summaryLabel: string
   title: string

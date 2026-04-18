@@ -10,12 +10,25 @@ export const adminReviewStatuses = [
 
 export type AdminReviewStatus = (typeof adminReviewStatuses)[number]
 
+export type AdminBoardPublicState = 'visible' | 'hidden_by_admin' | 'deleted_by_owner' | 'deleted_by_admin' | 'not_created'
+
+export type AdminActivityCategory = 'posts' | 'replies' | 'moderation' | 'deletions'
+
+export type AdminActivityActorKind = 'system' | 'admin' | 'account' | 'anonymous' | 'delete_token'
+
 export interface AdminFieldEntry {
   label: string
   value: string
 }
 
 export interface AdminSubmissionRecord {
+  board: {
+    itemId: string | null
+    matchedBy: 'linked_item' | 'source_submission' | 'fingerprint' | 'not_found'
+    publicState: AdminBoardPublicState
+    publicStateLabel: string
+    visibilityNote: string
+  }
   createdAt: string
   fieldEntries: AdminFieldEntry[]
   fields: Record<string, string>
@@ -35,6 +48,24 @@ export interface AdminSubmissionRecord {
   title: string
 }
 
+export interface AdminActivityEntry {
+  action: string
+  actor: {
+    kind: AdminActivityActorKind
+    label: string
+  }
+  category: AdminActivityCategory
+  createdAt: string
+  detail: string
+  id: string
+  interactionId?: string
+  itemId?: string
+  kind?: SubmissionKind
+  submissionId?: string
+  title: string
+  visibilityState?: string
+}
+
 export interface AdminSubmissionCounts {
   approved: number
   needsFollowUp: number
@@ -44,6 +75,7 @@ export interface AdminSubmissionCounts {
 }
 
 export interface AdminSubmissionsResponse {
+  activity: AdminActivityEntry[]
   counts: AdminSubmissionCounts
   ok: boolean
   submissions: AdminSubmissionRecord[]

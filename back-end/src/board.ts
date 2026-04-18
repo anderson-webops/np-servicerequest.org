@@ -3,13 +3,29 @@ import type { SubmissionKind } from './submissions.js'
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
+
+import { recordBoardActivity } from './activity.js'
 import { listJsonDirectory, readJsonFile, removePathIfExists, resolveDataPath, writeJsonFile } from './data.js'
 import { SubmissionValidationError } from './submissions.js'
 
-const boardItemDirectory = resolveDataPath('_board', 'items')
-const boardInteractionDirectory = resolveDataPath('_board', 'interactions')
+export const boardItemStatuses = [
+  'visible',
+  'hidden_by_admin',
+  'deleted_by_owner',
+  'deleted_by_admin',
+] as const
 
-type BoardItemStatus = 'open'
+export type BoardItemStatus = (typeof boardItemStatuses)[number]
+
+export const boardInteractionStatuses = [
+  'visible',
+  'deleted_by_author',
+  'deleted_by_admin',
+] as const
+
+type BoardInteractionStatus = (typeof boardInteractionStatuses)[number]
+
+type SubmissionReviewStatus = 'pending' | 'approved' | 'needs-follow-up' | 'rejected'
 
 interface BoardAuthor {
   accountId?: string
@@ -20,6 +36,11 @@ interface BoardAuthor {
 interface BoardAttribute {
   label: string
   value: string
+}
+
+interface SubmissionSource {
+  id: string
+  kind: SubmissionKind
 }
 
 interface StoredBoardItem {
@@ -34,7 +55,9 @@ interface StoredBoardItem {
   kindLabel: string
   lastActivityAt: string
   managementTokenHash?: string
+  sourceSubmission?: SubmissionSource
   status: BoardItemStatus
+  statusChangedAt?: string
   summary: string
   summaryLabel: string
   title: string
@@ -48,6 +71,8 @@ interface StoredBoardInteraction {
   id: string
   itemId: string
   message: string
+  status: BoardInteractionStatus
+  statusChangedAt?: string
 }
 
 export interface PublicBoardInteraction {
@@ -56,6 +81,7 @@ export interface PublicBoardInteraction {
   hasContact: boolean
   id: string
   message: string
+  status: Extract<BoardInteractionStatus, 'visible'>
 }
 
 export interface PublicBoardItem {
@@ -69,10 +95,16 @@ export interface PublicBoardItem {
   kind: SubmissionKind
   kindLabel: string
   lastActivityAt: string
-  status: BoardItemStatus
+  status: Extract<BoardItemStatus, 'visible'>
   summary: string
   summaryLabel: string
   title: string
+}
+
+export interface SubmissionBoardState {
+  itemId: string | null
+  matchedBy: 'linked_item' | 'source_submission' | 'fingerprint' | 'not_found'
+  publicState: BoardItemStatus | 'not_created'
 }
 
 export class BoardNotFoundError extends Error {
@@ -89,12 +121,20 @@ export class BoardAuthorizationError extends Error {
   }
 }
 
+function getBoardItemDirectory() {
+  return resolveDataPath('_board', 'items')
+}
+
+function getBoardInteractionDirectory() {
+  return resolveDataPath('_board', 'interactions')
+}
+
 function getItemFilePath(itemId: string) {
-  return resolve(boardItemDirectory, `${itemId}.json`)
+  return resolve(getBoardItemDirectory(), `${itemId}.json`)
 }
 
 function getInteractionDirectory(itemId: string) {
-  return resolve(boardInteractionDirectory, itemId)
+  return resolve(getBoardInteractionDirectory(), itemId)
 }
 
 function getInteractionFilePath(itemId: string, interactionId: string) {
@@ -211,6 +251,58 @@ function buildItemSummary(kind: SubmissionKind, fields: Record<string, string>) 
   }
 }
 
+function isBoardItemVisibleToPublic(item: StoredBoardItem) {
+  return item.status === 'visible'
+}
+
+function isBoardInteractionVisibleToPublic(interaction: StoredBoardInteraction) {
+  return interaction.status === 'visible'
+}
+
+function assertPublicBoardItemAvailable(item: StoredBoardItem) {
+  if (!isBoardItemVisibleToPublic(item))
+    throw new BoardNotFoundError('That board item is no longer available on the public board.')
+}
+
+function assertPublicBoardInteractionAvailable(interaction: StoredBoardInteraction) {
+  if (!isBoardInteractionVisibleToPublic(interaction))
+    throw new BoardNotFoundError('That board response is no longer available on the public board.')
+}
+
+function buildSubmissionFingerprint(kind: SubmissionKind, fields: Record<string, string>) {
+  return {
+    authorName: cleanValue(fields.name),
+    contact: cleanValue(fields.contact),
+    summary: buildItemSummary(kind, fields),
+    title: buildItemTitle(kind, fields),
+  }
+}
+
+function doesItemMatchSubmissionFingerprint(item: StoredBoardItem, kind: SubmissionKind, fields: Record<string, string>) {
+  const fingerprint = buildSubmissionFingerprint(kind, fields)
+
+  return item.kind === kind
+    && item.author.displayName === fingerprint.authorName
+    && item.contact === fingerprint.contact
+    && item.title === fingerprint.title
+    && item.summary === fingerprint.summary
+}
+
+export function describeBoardItemStatus(status: BoardItemStatus | 'not_created') {
+  switch (status) {
+    case 'visible':
+      return 'Visible'
+    case 'hidden_by_admin':
+      return 'Hidden by admin'
+    case 'deleted_by_owner':
+      return 'Deleted by owner'
+    case 'deleted_by_admin':
+      return 'Deleted by admin'
+    default:
+      return 'No board item found'
+  }
+}
+
 function toPublicInteraction(interaction: StoredBoardInteraction): PublicBoardInteraction {
   return {
     author: interaction.author,
@@ -218,6 +310,7 @@ function toPublicInteraction(interaction: StoredBoardInteraction): PublicBoardIn
     hasContact: interaction.hasContact,
     id: interaction.id,
     message: interaction.message,
+    status: 'visible',
   }
 }
 
@@ -228,12 +321,12 @@ function toPublicItem(item: StoredBoardItem, interactions: StoredBoardInteractio
     createdAt: item.createdAt,
     hasContact: Boolean(item.contact),
     id: item.id,
-    interactionCount: item.interactionCount,
+    interactionCount: interactions.length,
     interactions: interactions.map(toPublicInteraction),
     kind: item.kind,
     kindLabel: item.kindLabel,
     lastActivityAt: item.lastActivityAt,
-    status: item.status,
+    status: 'visible',
     summary: item.summary,
     summaryLabel: item.summaryLabel,
     title: item.title,
@@ -258,16 +351,116 @@ async function getStoredBoardInteraction(itemId: string, interactionId: string) 
   return interaction
 }
 
+async function listStoredBoardItems() {
+  return listJsonDirectory<StoredBoardItem>(getBoardItemDirectory())
+}
+
 async function listStoredInteractions(itemId: string) {
   const interactions = await listJsonDirectory<StoredBoardInteraction>(getInteractionDirectory(itemId))
   return interactions.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
 }
 
+async function writeStoredBoardItem(item: StoredBoardItem) {
+  await writeJsonFile(getItemFilePath(item.id), item)
+}
+
+async function writeStoredBoardInteraction(interaction: StoredBoardInteraction) {
+  await writeJsonFile(getInteractionFilePath(interaction.itemId, interaction.id), interaction)
+}
+
+async function findStoredBoardItemForSubmission(input: {
+  fields: Record<string, string>
+  kind: SubmissionKind
+  linkedItemId?: string
+  submissionId: string
+}) {
+  if (input.linkedItemId) {
+    try {
+      return {
+        item: await getStoredBoardItem(input.linkedItemId),
+        matchedBy: 'linked_item' as const,
+      }
+    }
+    catch (error) {
+      if (!(error instanceof BoardNotFoundError))
+        throw error
+    }
+  }
+
+  const items = await listStoredBoardItems()
+  const sourceMatch = items.find(item =>
+    item.sourceSubmission?.id === input.submissionId
+    && item.sourceSubmission.kind === input.kind,
+  )
+
+  if (sourceMatch) {
+    return {
+      item: sourceMatch,
+      matchedBy: 'source_submission' as const,
+    }
+  }
+
+  const fingerprintMatch = items.find(item => doesItemMatchSubmissionFingerprint(item, input.kind, input.fields))
+
+  if (fingerprintMatch) {
+    return {
+      item: fingerprintMatch,
+      matchedBy: 'fingerprint' as const,
+    }
+  }
+
+  return {
+    item: null,
+    matchedBy: 'not_found' as const,
+  }
+}
+
+async function ensureSubmissionLinkOnBoardItem(item: StoredBoardItem, submissionId: string, kind: SubmissionKind) {
+  if (item.sourceSubmission?.id === submissionId && item.sourceSubmission.kind === kind)
+    return item
+
+  const nextItem: StoredBoardItem = {
+    ...item,
+    sourceSubmission: {
+      id: submissionId,
+      kind,
+    },
+  }
+
+  await writeStoredBoardItem(nextItem)
+  return nextItem
+}
+
+export async function getBoardStateForSubmission(input: {
+  fields: Record<string, string>
+  kind: SubmissionKind
+  linkedItemId?: string
+  submissionId: string
+}): Promise<SubmissionBoardState> {
+  const match = await findStoredBoardItemForSubmission(input)
+
+  if (!match.item) {
+    return {
+      itemId: null,
+      matchedBy: 'not_found',
+      publicState: 'not_created',
+    }
+  }
+
+  return {
+    itemId: match.item.id,
+    matchedBy: match.matchedBy,
+    publicState: match.item.status,
+  }
+}
+
 export async function listBoardItems() {
-  const items = await listJsonDirectory<StoredBoardItem>(boardItemDirectory)
+  const items = (await listStoredBoardItems())
+    .filter(isBoardItemVisibleToPublic)
+
   const publicItems = await Promise.all(
     items.map(async (item) => {
-      const interactions = await listStoredInteractions(item.id)
+      const interactions = (await listStoredInteractions(item.id)).filter(isBoardInteractionVisibleToPublic)
       return toPublicItem(item, interactions)
     }),
   )
@@ -278,6 +471,7 @@ export async function listBoardItems() {
 export async function createBoardItemFromSubmission(input: {
   fields: Record<string, string>
   kind: SubmissionKind
+  submissionId: string
   viewer: ViewerAccount | null
 }) {
   const createdAt = new Date().toISOString()
@@ -310,13 +504,32 @@ export async function createBoardItemFromSubmission(input: {
     kindLabel: labels.kindLabel,
     lastActivityAt: createdAt,
     managementTokenHash: managementToken ? hashDeleteToken(managementToken) : undefined,
-    status: 'open',
+    sourceSubmission: {
+      id: input.submissionId,
+      kind: input.kind,
+    },
+    status: 'visible',
     summary,
     summaryLabel: labels.summaryLabel,
     title,
   }
 
-  await writeJsonFile(getItemFilePath(item.id), item)
+  await writeStoredBoardItem(item)
+  await recordBoardActivity({
+    action: 'board_item_created',
+    actor: input.viewer
+      ? { kind: 'account', label: authorName }
+      : { kind: 'anonymous', label: authorName },
+    category: 'posts',
+    createdAt,
+    detail: 'Posted to the public board.',
+    itemId: item.id,
+    kind: input.kind,
+    submissionId: input.submissionId,
+    title: item.title,
+    visibilityState: item.status,
+  })
+
   return {
     deleteToken,
     item: toPublicItem(item, []),
@@ -333,6 +546,8 @@ export async function createBoardInteraction(input: {
   viewer: ViewerAccount | null
 }) {
   const item = await getStoredBoardItem(input.itemId)
+  assertPublicBoardItemAvailable(item)
+
   const createdAt = new Date().toISOString()
   const authorName = cleanValue(input.name) || input.viewer?.displayName || ''
   const contact = cleanValue(input.contact) || input.viewer?.email || ''
@@ -354,13 +569,29 @@ export async function createBoardInteraction(input: {
     id: randomUUID(),
     itemId: input.itemId,
     message,
+    status: 'visible',
   }
 
-  await writeJsonFile(getInteractionFilePath(input.itemId, interaction.id), interaction)
-  await writeJsonFile(getItemFilePath(item.id), {
+  await writeStoredBoardInteraction(interaction)
+  await writeStoredBoardItem({
     ...item,
     interactionCount: item.interactionCount + 1,
     lastActivityAt: createdAt,
+  })
+  await recordBoardActivity({
+    action: 'board_interaction_created',
+    actor: input.viewer
+      ? { kind: 'account', label: authorName }
+      : { kind: 'anonymous', label: authorName },
+    category: 'replies',
+    createdAt,
+    detail: `Posted a reply on "${item.title}".`,
+    interactionId: interaction.id,
+    itemId: item.id,
+    kind: item.kind,
+    submissionId: item.sourceSubmission?.id,
+    title: item.title,
+    visibilityState: interaction.status,
   })
 
   return toPublicInteraction(interaction)
@@ -368,6 +599,7 @@ export async function createBoardInteraction(input: {
 
 export async function revealBoardItemContact(itemId: string) {
   const item = await getStoredBoardItem(itemId)
+  assertPublicBoardItemAvailable(item)
 
   if (!item.contact)
     throw new BoardNotFoundError('No contact method is available for that board item.')
@@ -376,8 +608,11 @@ export async function revealBoardItemContact(itemId: string) {
 }
 
 export async function revealBoardInteractionContact(itemId: string, interactionId: string) {
-  await getStoredBoardItem(itemId)
+  const item = await getStoredBoardItem(itemId)
+  assertPublicBoardItemAvailable(item)
+
   const interaction = await getStoredBoardInteraction(itemId, interactionId)
+  assertPublicBoardInteractionAvailable(interaction)
 
   if (!interaction.contact)
     throw new BoardNotFoundError('No contact method is available for that response.')
@@ -401,12 +636,74 @@ export async function claimBoardItemManagement(input: {
     throw new BoardAuthorizationError('That management link is invalid or has expired.')
 
   const deleteToken = createBoardDeleteToken()
-  await writeJsonFile(getItemFilePath(item.id), {
+  await writeStoredBoardItem({
     ...item,
     deleteTokenHash: hashDeleteToken(deleteToken),
   })
 
   return deleteToken
+}
+
+export async function syncBoardItemVisibilityFromSubmissionReview(input: {
+  actorLabel: string
+  fields: Record<string, string>
+  kind: SubmissionKind
+  linkedItemId?: string
+  reviewStatus: SubmissionReviewStatus
+  submissionId: string
+}) {
+  const match = await findStoredBoardItemForSubmission(input)
+
+  if (!match.item) {
+    return {
+      changed: false,
+      itemId: null,
+      matchedBy: 'not_found' as const,
+      publicState: 'not_created' as const,
+    }
+  }
+
+  let nextItem = await ensureSubmissionLinkOnBoardItem(match.item, input.submissionId, input.kind)
+  let changed = nextItem.id !== match.item.id
+  const now = new Date().toISOString()
+  let nextStatus = nextItem.status
+
+  if (input.reviewStatus === 'rejected' && nextItem.status === 'visible')
+    nextStatus = 'hidden_by_admin'
+  else if (input.reviewStatus !== 'rejected' && nextItem.status === 'hidden_by_admin')
+    nextStatus = 'visible'
+
+  if (nextStatus !== nextItem.status) {
+    nextItem = {
+      ...nextItem,
+      status: nextStatus,
+      statusChangedAt: now,
+    }
+    await writeStoredBoardItem(nextItem)
+    changed = true
+
+    await recordBoardActivity({
+      action: nextStatus === 'hidden_by_admin' ? 'board_item_hidden_by_admin' : 'board_item_restored_to_public',
+      actor: { kind: 'admin', label: input.actorLabel },
+      category: 'moderation',
+      createdAt: now,
+      detail: nextStatus === 'hidden_by_admin'
+        ? 'Hidden from the public board because the submission was rejected.'
+        : 'Restored to the public board after a review status change.',
+      itemId: nextItem.id,
+      kind: nextItem.kind,
+      submissionId: input.submissionId,
+      title: nextItem.title,
+      visibilityState: nextStatus,
+    })
+  }
+
+  return {
+    changed,
+    itemId: nextItem.id,
+    matchedBy: match.matchedBy,
+    publicState: nextItem.status,
+  }
 }
 
 export async function deleteBoardItem(input: {
@@ -427,8 +724,32 @@ export async function deleteBoardItem(input: {
   if (!ownsByAdmin && !ownsByAccount && !ownsByDeleteToken)
     throw new BoardAuthorizationError('You are not allowed to delete that board item.')
 
-  await removePathIfExists(getItemFilePath(item.id))
-  await removePathIfExists(getInteractionDirectory(item.id))
+  const nextStatus: BoardItemStatus = ownsByAdmin ? 'deleted_by_admin' : 'deleted_by_owner'
+
+  if (item.status !== nextStatus) {
+    const nextItem: StoredBoardItem = {
+      ...item,
+      status: nextStatus,
+      statusChangedAt: new Date().toISOString(),
+    }
+
+    await writeStoredBoardItem(nextItem)
+    await recordBoardActivity({
+      action: 'board_item_deleted',
+      actor: ownsByAdmin
+        ? { kind: 'admin', label: input.viewer?.displayName || 'Admin account' }
+        : ownsByAccount
+          ? { kind: 'account', label: input.viewer?.displayName || item.author.displayName }
+          : { kind: 'delete_token', label: 'Delete link' },
+      category: 'deletions',
+      detail: 'Removed from the public board while preserving the internal record.',
+      itemId: item.id,
+      kind: item.kind,
+      submissionId: item.sourceSubmission?.id,
+      title: item.title,
+      visibilityState: nextStatus,
+    })
+  }
 }
 
 export async function deleteBoardInteraction(input: {
@@ -444,12 +765,39 @@ export async function deleteBoardInteraction(input: {
   if (!ownsByAdmin && !ownsByAccount)
     throw new BoardAuthorizationError('You are not allowed to delete that board response.')
 
-  await removePathIfExists(getInteractionFilePath(input.itemId, input.interactionId))
+  const nextStatus: BoardInteractionStatus = ownsByAdmin ? 'deleted_by_admin' : 'deleted_by_author'
 
-  const remainingInteractions = await listStoredInteractions(item.id)
-  await writeJsonFile(getItemFilePath(item.id), {
+  if (interaction.status !== nextStatus) {
+    await writeStoredBoardInteraction({
+      ...interaction,
+      status: nextStatus,
+      statusChangedAt: new Date().toISOString(),
+    })
+    await recordBoardActivity({
+      action: 'board_interaction_deleted',
+      actor: ownsByAdmin
+        ? { kind: 'admin', label: input.viewer?.displayName || 'Admin account' }
+        : { kind: 'account', label: input.viewer?.displayName || interaction.author.displayName },
+      category: 'deletions',
+      detail: `Removed a reply from "${item.title}" while preserving the internal record.`,
+      interactionId: interaction.id,
+      itemId: item.id,
+      kind: item.kind,
+      submissionId: item.sourceSubmission?.id,
+      title: item.title,
+      visibilityState: nextStatus,
+    })
+  }
+
+  const remainingVisibleInteractions = (await listStoredInteractions(item.id)).filter(isBoardInteractionVisibleToPublic)
+  await writeStoredBoardItem({
     ...item,
-    interactionCount: remainingInteractions.length,
-    lastActivityAt: remainingInteractions[0]?.createdAt || item.createdAt,
+    interactionCount: remainingVisibleInteractions.length,
+    lastActivityAt: remainingVisibleInteractions[0]?.createdAt || item.createdAt,
   })
+}
+
+export async function purgeBoardItemArtifacts(itemId: string) {
+  await removePathIfExists(getItemFilePath(itemId))
+  await removePathIfExists(getInteractionDirectory(itemId))
 }

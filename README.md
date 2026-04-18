@@ -96,6 +96,7 @@ Admins can delete any board post and any board reply directly from the live boar
 
 The dedicated admin review UI at `/admin` does not use the normal board account session flow.
 It sends an admin key in the `x-admin-key` header to the review API and stores that key only in browser `sessionStorage`.
+Rejected submissions are now soft-hidden from the public board instead of being destructively removed, and the admin UI exposes an activity log for posts, replies, moderation actions, and deletions so review history stays auditable.
 
 The back-end accepts the admin key from the first configured value found in:
 
