@@ -372,13 +372,14 @@ onMounted(() => {
 .account-page {
   display: grid;
   gap: 1.5rem;
-  padding: 2rem 5vw 2.75rem;
+  padding: 0 5vw 2.75rem;
 }
 
 .account-page__hero {
   display: grid;
   gap: 0.9rem;
   max-width: 56rem;
+  padding-block: var(--page-hero-space);
 }
 
 .account-page__back {

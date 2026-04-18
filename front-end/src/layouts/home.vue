@@ -22,6 +22,7 @@
 }
 
 .site-shell__content {
+  --page-hero-space: clamp(1.8rem, 4vw, 3.6rem);
   overflow: clip;
 }
 </style>

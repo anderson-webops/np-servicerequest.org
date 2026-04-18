@@ -109,7 +109,7 @@ const boardGroups = [
 .help-page {
   display: grid;
   gap: 1.5rem;
-  padding: 2rem 5vw 2.75rem;
+  padding: 0 5vw 2.75rem;
 }
 
 .help-page__hero,
@@ -120,6 +120,7 @@ const boardGroups = [
 
 .help-page__hero {
   max-width: 58rem;
+  padding-block: var(--page-hero-space);
 }
 
 .help-page__back {

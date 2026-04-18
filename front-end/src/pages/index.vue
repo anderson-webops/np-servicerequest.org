@@ -996,12 +996,13 @@ onMounted(() => {
   min-height: calc(100svh - 7rem);
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(250px, 0.65fr);
-  align-items: start;
+  align-items: center;
   gap: clamp(2rem, 4vw, 4.5rem);
-  padding-top: clamp(0.35rem, 1vw, 0.9rem);
+  padding-block: var(--page-hero-space);
 }
 
 .hero__copy {
+  align-self: center;
   max-width: 46rem;
   padding-right: clamp(0rem, 2vw, 1.75rem);
   animation: rise-in 700ms ease both;
