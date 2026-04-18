@@ -101,6 +101,28 @@ export interface PublicBoardItem {
   title: string
 }
 
+export interface BoardItemCounts {
+  'all': number
+  'item-lending': number
+  'item-request': number
+  'service-request': number
+}
+
+export interface BoardItemsPage {
+  hasNextPage: boolean
+  hasPreviousPage: boolean
+  page: number
+  pageSize: number
+  totalItems: number
+  totalPages: number
+}
+
+export interface BoardItemListResult {
+  counts: BoardItemCounts
+  items: PublicBoardItem[]
+  pagination: BoardItemsPage
+}
+
 export interface SubmissionBoardState {
   itemId: string | null
   matchedBy: 'linked_item' | 'source_submission' | 'fingerprint' | 'not_found'
@@ -257,6 +279,15 @@ function isBoardItemVisibleToPublic(item: StoredBoardItem) {
 
 function isBoardInteractionVisibleToPublic(interaction: StoredBoardInteraction) {
   return interaction.status === 'visible'
+}
+
+function createEmptyBoardItemCounts(): BoardItemCounts {
+  return {
+    'all': 0,
+    'item-lending': 0,
+    'item-request': 0,
+    'service-request': 0,
+  }
 }
 
 function assertPublicBoardItemAvailable(item: StoredBoardItem) {
@@ -454,18 +485,54 @@ export async function getBoardStateForSubmission(input: {
   }
 }
 
-export async function listBoardItems() {
-  const items = (await listStoredBoardItems())
+export async function listBoardItems(options?: {
+  kind?: SubmissionKind | 'all'
+  page?: number
+  pageSize?: number
+}): Promise<BoardItemListResult> {
+  const kindFilter = options?.kind && options.kind !== 'all' ? options.kind : 'all'
+  const requestedPageSize = options?.pageSize ?? 12
+  const pageSize = Math.min(Math.max(Math.trunc(requestedPageSize) || 12, 1), 50)
+  const requestedPage = Math.max(Math.trunc(options?.page || 1), 1)
+  const allVisibleItems = (await listStoredBoardItems())
     .filter(isBoardItemVisibleToPublic)
+    .sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt))
+
+  const counts = allVisibleItems.reduce<BoardItemCounts>((summary, item) => {
+    summary.all += 1
+    summary[item.kind] += 1
+    return summary
+  }, createEmptyBoardItemCounts())
+
+  const filteredItems = kindFilter === 'all'
+    ? allVisibleItems
+    : allVisibleItems.filter(item => item.kind === kindFilter)
+
+  const totalItems = filteredItems.length
+  const totalPages = totalItems > 0 ? Math.ceil(totalItems / pageSize) : 1
+  const page = Math.min(requestedPage, totalPages)
+  const startIndex = (page - 1) * pageSize
+  const pagedItems = filteredItems.slice(startIndex, startIndex + pageSize)
 
   const publicItems = await Promise.all(
-    items.map(async (item) => {
+    pagedItems.map(async (item) => {
       const interactions = (await listStoredInteractions(item.id)).filter(isBoardInteractionVisibleToPublic)
       return toPublicItem(item, interactions)
     }),
   )
 
-  return publicItems.sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt))
+  return {
+    counts,
+    items: publicItems,
+    pagination: {
+      hasNextPage: page < totalPages,
+      hasPreviousPage: page > 1,
+      page,
+      pageSize,
+      totalItems,
+      totalPages,
+    },
+  }
 }
 
 export async function createBoardItemFromSubmission(input: {

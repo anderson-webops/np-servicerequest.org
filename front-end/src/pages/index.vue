@@ -8,6 +8,8 @@ import type {
   BoardInteractionDeleteResponse,
   BoardInteractionResponse,
   BoardItem,
+  BoardItemCounts,
+  BoardItemsPagination,
   BoardItemsResponse,
   ViewerAccount,
 } from '~/utils/board'
@@ -17,7 +19,6 @@ import { forgetBoardDeleteToken, getBoardEndpoint, getStoredBoardDeleteToken, li
 import { submissionKinds } from '~/utils/submissions'
 
 type BoardFilter = 'all' | SubmissionKind
-type BoardCountMap = Record<BoardFilter, number>
 
 interface FormErrorState {
   detail: string
@@ -55,10 +56,25 @@ const antiBotChallenge = ref<AntiBotChallenge | null>(null)
 const viewer = ref<ViewerAccount | null>(null)
 const boardItems = ref<BoardItem[]>([])
 const boardLoaded = ref(false)
+const boardPending = ref(false)
 const bootstrapLoaded = ref(false)
 const boardError = ref<FormErrorState | null>(null)
 const securityError = ref<FormErrorState | null>(null)
 const boardFilter = ref<BoardFilter>('all')
+const boardCounts = ref<BoardItemCounts>({
+  all: 0,
+  [submissionKinds.service]: 0,
+  [submissionKinds.itemRequest]: 0,
+  [submissionKinds.itemLending]: 0,
+})
+const boardPagination = ref<BoardItemsPagination>({
+  hasNextPage: false,
+  hasPreviousPage: false,
+  page: 1,
+  pageSize: 12,
+  totalItems: 0,
+  totalPages: 1,
+})
 const managementNotice = ref('')
 const managementPending = ref(false)
 const managementError = ref<FormErrorState | null>(null)
@@ -87,31 +103,22 @@ const boardFilters = [
   { key: submissionKinds.itemLending, label: 'Items to lend' },
 ]
 
-const placeholderBoardCounts: BoardCountMap = {
+const placeholderBoardCounts: BoardItemCounts = {
   all: 0,
   [submissionKinds.service]: 0,
   [submissionKinds.itemRequest]: 0,
   [submissionKinds.itemLending]: 0,
 }
 
-const filteredBoardItems = computed(() => {
-  if (boardFilter.value === 'all')
-    return boardItems.value
-
-  return boardItems.value.filter(item => item.kind === boardFilter.value)
-})
-
-const boardCounts = computed<BoardCountMap>(() => ({
-  all: boardItems.value.length,
-  [submissionKinds.service]: boardItems.value.filter(item => item.kind === submissionKinds.service).length,
-  [submissionKinds.itemRequest]: boardItems.value.filter(item => item.kind === submissionKinds.itemRequest).length,
-  [submissionKinds.itemLending]: boardItems.value.filter(item => item.kind === submissionKinds.itemLending).length,
-}))
-
 const boardUiReady = computed(() => hasHydrated.value && boardLoaded.value)
 const accountUiReady = computed(() => hasHydrated.value && bootstrapLoaded.value)
-const displayBoardCounts = computed<BoardCountMap>(() => (
+const displayBoardCounts = computed<BoardItemCounts>(() => (
   boardUiReady.value && !boardError.value ? boardCounts.value : placeholderBoardCounts
+))
+const activeBoardTotal = computed(() => (
+  boardFilter.value === 'all'
+    ? displayBoardCounts.value.all
+    : displayBoardCounts.value[boardFilter.value]
 ))
 const boardAudienceNote = computed(() => {
   if (!accountUiReady.value)
@@ -355,20 +362,27 @@ async function loadBootstrap() {
 }
 
 async function loadBoardItems() {
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'items')
+  const endpoint = new URL(getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'items'))
+  endpoint.searchParams.set('kind', boardFilter.value)
+  endpoint.searchParams.set('page', String(boardPagination.value.page))
+  endpoint.searchParams.set('pageSize', String(boardPagination.value.pageSize))
+  boardPending.value = true
   boardError.value = null
 
   try {
-    const response = await $fetch<BoardItemsResponse>(endpoint, {
+    const response = await $fetch<BoardItemsResponse>(endpoint.toString(), {
       credentials: 'include',
     })
 
+    boardCounts.value = response.counts
+    boardPagination.value = response.pagination
     boardItems.value = sortBoardItems(response.items)
   }
   catch (error) {
-    boardError.value = getApiErrorState(error, endpoint, 'Unable to load the live board right now.')
+    boardError.value = getApiErrorState(error, endpoint.toString(), 'Unable to load the live board right now.')
   }
   finally {
+    boardPending.value = false
     boardLoaded.value = true
   }
 }
@@ -447,6 +461,33 @@ async function claimBoardManagementLink(itemId: string, managementToken: string)
 
 function refreshStoredDeleteTokenIds() {
   storedDeleteTokenItemIds.value = listStoredBoardDeleteTokenIds()
+}
+
+function setBoardFilter(nextFilter: BoardFilter) {
+  if (boardFilter.value === nextFilter && boardPagination.value.page === 1)
+    return
+
+  boardFilter.value = nextFilter
+  boardPagination.value = {
+    ...boardPagination.value,
+    page: 1,
+  }
+
+  void loadBoardItems()
+}
+
+function changeBoardPage(nextPage: number) {
+  const normalizedPage = Math.min(Math.max(nextPage, 1), boardPagination.value.totalPages)
+
+  if (normalizedPage === boardPagination.value.page)
+    return
+
+  boardPagination.value = {
+    ...boardPagination.value,
+    page: normalizedPage,
+  }
+
+  void loadBoardItems()
 }
 
 function canDeleteItem(item: BoardItem) {
@@ -615,7 +656,6 @@ async function deleteBoardPost(item: BoardItem) {
     })
 
     applyServerContext(response)
-    boardItems.value = boardItems.value.filter(existingItem => existingItem.id !== item.id)
     forgetBoardDeleteToken(item.id)
     refreshStoredDeleteTokenIds()
     revealItemContacts[item.id] = ''
@@ -634,6 +674,15 @@ async function deleteBoardPost(item: BoardItem) {
 
     if (openReplyItemId.value === item.id)
       openReplyItemId.value = null
+
+    if (boardItems.value.length <= 1 && boardPagination.value.page > 1) {
+      boardPagination.value = {
+        ...boardPagination.value,
+        page: boardPagination.value.page - 1,
+      }
+    }
+
+    await loadBoardItems()
   }
   catch (error) {
     confirmDeleteItemId.value = item.id
@@ -797,9 +846,10 @@ onMounted(() => {
             v-for="filter in boardFilters"
             :key="filter.key"
             :aria-selected="boardFilter === filter.key"
+            :disabled="boardPending"
             class="board-filter" :class="[{ 'board-filter--active': boardFilter === filter.key }]"
             type="button"
-            @click="boardFilter = filter.key"
+            @click="setBoardFilter(filter.key)"
           >
             <span>{{ filter.label }}</span>
             <strong>{{ displayBoardCounts[filter.key] }}</strong>
@@ -821,13 +871,16 @@ onMounted(() => {
 
           <div class="board-feed__meta">
             <p>
-              {{ displayBoardCounts.all }} live posts
+              {{ activeBoardTotal }} {{ boardFilter === 'all' ? 'live posts' : 'matching posts' }}
             </p>
             <p>
               {{ boardAudienceNote }}
             </p>
             <p v-if="managementPending">
               Claiming management access...
+            </p>
+            <p v-else-if="boardPending && boardUiReady">
+              Refreshing this board view...
             </p>
           </div>
 
@@ -840,7 +893,7 @@ onMounted(() => {
             <p>{{ boardError.detail }}</p>
           </div>
 
-          <div v-else-if="!filteredBoardItems.length" class="board-empty">
+          <div v-else-if="!boardItems.length" class="board-empty">
             <p>No posts match this filter yet.</p>
             <p>
               Create the first one from the dedicated
@@ -858,7 +911,7 @@ onMounted(() => {
           </div>
 
           <div v-else class="board-feed__list">
-            <article v-for="item in filteredBoardItems" :key="item.id" class="board-card">
+            <article v-for="item in boardItems" :key="item.id" class="board-card">
               <header class="board-card__header">
                 <div>
                   <p class="board-card__kind">
@@ -1017,6 +1070,31 @@ onMounted(() => {
                 </button>
               </form>
             </article>
+          </div>
+
+          <div v-if="boardUiReady && !boardError" class="board-pagination">
+            <div class="board-pagination__summary">
+              Page {{ boardPagination.page }} of {{ boardPagination.totalPages }}
+              <span>· {{ boardPagination.totalItems }} total in this view</span>
+            </div>
+            <div class="board-pagination__actions">
+              <button
+                class="secondary-button"
+                :disabled="boardPending || !boardPagination.hasPreviousPage"
+                type="button"
+                @click="changeBoardPage(boardPagination.page - 1)"
+              >
+                Newer posts
+              </button>
+              <button
+                class="secondary-button secondary-button--dark"
+                :disabled="boardPending || !boardPagination.hasNextPage"
+                type="button"
+                @click="changeBoardPage(boardPagination.page + 1)"
+              >
+                Older posts
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1372,6 +1450,26 @@ onMounted(() => {
 .board-feed__list {
   display: grid;
   gap: 1rem;
+}
+
+.board-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem;
+  padding: 1rem 0 0.2rem;
+}
+
+.board-pagination__summary {
+  color: var(--site-subtle);
+  font-size: 0.95rem;
+}
+
+.board-pagination__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
 }
 
 .board-empty {

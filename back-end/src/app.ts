@@ -8,9 +8,11 @@ import {
   loginBoardAccount,
   registerBoardAccount,
 } from './accounts.js'
+import { boardActivityCategories } from './activity.js'
 import {
   AdminAuthorizationError,
   AdminConfigurationError,
+  adminReviewStatuses,
   AdminSubmissionNotFoundError,
   AdminSubmissionValidationError,
   assertValidAdminKey,
@@ -56,6 +58,25 @@ let pageview = 0
 
 function getRequestIp(request: express.Request) {
   return request.ip || request.socket.remoteAddress || 'unknown'
+}
+
+function getSingleQueryValue(value: unknown): string {
+  if (Array.isArray(value))
+    return getSingleQueryValue(value[0])
+
+  if (typeof value === 'string')
+    return value
+
+  return ''
+}
+
+function parsePositiveInt(value: unknown, fallback: number, max: number) {
+  const parsedValue = Number.parseInt(getSingleQueryValue(value), 10)
+
+  if (!Number.isFinite(parsedValue) || parsedValue < 1)
+    return fallback
+
+  return Math.min(parsedValue, max)
 }
 
 function handleApiError(response: express.Response, error: unknown) {
@@ -153,9 +174,25 @@ export function createApp() {
     try {
       assertValidAdminKey(request.get('x-admin-key') || '')
 
+      const reviewFilter = getSingleQueryValue(request.query.review)
+      const kindFilter = getSingleQueryValue(request.query.kind)
+      const activityFilter = getSingleQueryValue(request.query.activityCategory)
+
       response.json({
         ok: true,
-        ...await listAdminSubmissions(),
+        ...await listAdminSubmissions({
+          activityCategory: boardActivityCategories.includes(activityFilter as typeof boardActivityCategories[number])
+            ? activityFilter as typeof boardActivityCategories[number]
+            : 'all',
+          activityPage: parsePositiveInt(request.query.activityPage, 1, 999),
+          activityPageSize: parsePositiveInt(request.query.activityPageSize, 40, 100),
+          kind: isSubmissionKind(kindFilter) ? kindFilter : 'all',
+          review: adminReviewStatuses.includes(reviewFilter as typeof adminReviewStatuses[number])
+            ? reviewFilter as typeof adminReviewStatuses[number]
+            : 'all',
+          submissionsPage: parsePositiveInt(request.query.submissionsPage, 1, 999),
+          submissionsPageSize: parsePositiveInt(request.query.submissionsPageSize, 20, 100),
+        }),
       })
     }
     catch (error) {
@@ -212,9 +249,15 @@ export function createApp() {
     })
   })
 
-  app.get('/api/board/items', async (_request, response) => {
+  app.get('/api/board/items', async (request, response) => {
+    const kindFilter = getSingleQueryValue(request.query.kind)
+
     response.json({
-      items: await listBoardItems(),
+      ...await listBoardItems({
+        kind: isSubmissionKind(kindFilter) ? kindFilter : 'all',
+        page: parsePositiveInt(request.query.page, 1, 999),
+        pageSize: parsePositiveInt(request.query.pageSize, 12, 50),
+      }),
     })
   })
 

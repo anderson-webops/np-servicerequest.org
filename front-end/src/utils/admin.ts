@@ -74,11 +74,39 @@ export interface AdminSubmissionCounts {
   total: number
 }
 
+export interface AdminKindCounts {
+  'all': number
+  'item-lending': number
+  'item-request': number
+  'service-request': number
+}
+
+export interface AdminActivityCounts {
+  deletions: number
+  moderation: number
+  posts: number
+  replies: number
+  total: number
+}
+
+export interface AdminPagination {
+  hasNextPage: boolean
+  hasPreviousPage: boolean
+  page: number
+  pageSize: number
+  totalItems: number
+  totalPages: number
+}
+
 export interface AdminSubmissionsResponse {
   activity: AdminActivityEntry[]
+  activityCounts: AdminActivityCounts
+  activityPagination: AdminPagination
   counts: AdminSubmissionCounts
+  kindCounts: AdminKindCounts
   ok: boolean
   submissions: AdminSubmissionRecord[]
+  submissionsPagination: AdminPagination
 }
 
 export interface AdminReviewResponse {

@@ -88,10 +88,14 @@ export async function recordBoardActivity(input: {
   return entry
 }
 
-export async function listBoardActivity(limit = 200) {
+export async function listBoardActivity(limit?: number) {
   const entries = await listJsonDirectory<BoardActivityEntry>(getBoardActivityDirectory())
 
-  return entries
+  const sortedEntries = entries
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
-    .slice(0, limit)
+
+  if (typeof limit === 'number')
+    return sortedEntries.slice(0, limit)
+
+  return sortedEntries
 }

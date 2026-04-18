@@ -70,6 +70,11 @@ The API lives in `back-end` and exposes:
 - `GET /api/admin/submissions`
 - `POST /api/admin/submissions/:kind/:id/review`
 
+Listing endpoints now support server-side filtering and pagination:
+
+- `GET /api/board/items?kind=all|service-request|item-request|item-lending&page=1&pageSize=12`
+- `GET /api/admin/submissions?review=all|pending|approved|needs-follow-up|rejected&kind=all|service-request|item-request|item-lending&submissionsPage=1&submissionsPageSize=20&activityCategory=all|posts|replies|moderation|deletions&activityPage=1&activityPageSize=40`
+
 Default port: `3006`
 
 Form submissions are written under `SUBMISSIONS_DATA_DIR` when it is set. When it is not set, the back-end falls back to an OS temp directory under `np-servicerequest/submissions`, which is suitable for local development but not durable production storage.

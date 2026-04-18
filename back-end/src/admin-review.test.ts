@@ -222,3 +222,69 @@ test('rejected submissions disappear from the public board while remaining in ad
   assert.equal((restoredBoard.items as Array<{ id: string }>).length, 1)
   assert.equal((restoredBoard.items as Array<{ id: string }>)[0]?.id, createdBoardItem.id)
 })
+
+test('board and admin listings support server-side pagination and filters', async () => {
+  const antiBot = await getAgedAntiBotChallenge()
+  const createdBoardItemIds: string[] = []
+
+  for (const [index, projectType] of ['Cleanup Alpha', 'Cleanup Beta', 'Cleanup Gamma'].entries()) {
+    const { body: createdSubmission, response: createResponse } = await fetchJson('/api/submissions/service-request', {
+      body: JSON.stringify({
+        challengeIssuedAt: String(antiBot.issuedAt),
+        challengeToken: antiBot.token,
+        contact: `service-${index}@example.com`,
+        details: `Need help with ${projectType.toLowerCase()}.`,
+        location: 'West side',
+        name: `Service Poster ${index + 1}`,
+        project_type: projectType,
+        timing: 'This weekend',
+      }),
+      method: 'POST',
+    })
+
+    assert.equal(createResponse.status, 201)
+    assert.equal(createdSubmission.accepted, true)
+    assert.ok(createdSubmission.boardItem)
+    createdBoardItemIds.push((createdSubmission.boardItem as { id: string }).id)
+  }
+
+  const { body: firstBoardPage, response: firstBoardPageResponse } = await fetchJson('/api/board/items?kind=service-request&page=1&pageSize=2', {
+    method: 'GET',
+  })
+
+  assert.equal(firstBoardPageResponse.status, 200)
+  assert.equal((firstBoardPage.pagination as { page: number }).page, 1)
+  assert.equal((firstBoardPage.pagination as { pageSize: number }).pageSize, 2)
+  assert.equal((firstBoardPage.pagination as { totalItems: number }).totalItems, 3)
+  assert.equal((firstBoardPage.items as Array<{ id: string }>).length, 2)
+  assert.equal((firstBoardPage.items as Array<{ id: string }>)[0]?.id, createdBoardItemIds[2])
+  assert.equal((firstBoardPage.items as Array<{ id: string }>)[1]?.id, createdBoardItemIds[1])
+  assert.equal((firstBoardPage.counts as Record<string, number>)['service-request'], 3)
+
+  const { body: secondBoardPage, response: secondBoardPageResponse } = await fetchJson('/api/board/items?kind=service-request&page=2&pageSize=2', {
+    method: 'GET',
+  })
+
+  assert.equal(secondBoardPageResponse.status, 200)
+  assert.equal((secondBoardPage.pagination as { page: number }).page, 2)
+  assert.equal((secondBoardPage.items as Array<{ id: string }>).length, 1)
+  assert.equal((secondBoardPage.items as Array<{ id: string }>)[0]?.id, createdBoardItemIds[0])
+
+  const { body: adminListing, response: adminListingResponse } = await fetchJson('/api/admin/submissions?review=pending&kind=service-request&submissionsPage=1&submissionsPageSize=2&activityCategory=posts&activityPage=1&activityPageSize=2', {
+    headers: {
+      'x-admin-key': adminKey,
+    },
+    method: 'GET',
+  })
+
+  assert.equal(adminListingResponse.status, 200)
+  assert.equal((adminListing.submissionsPagination as { totalItems: number }).totalItems, 3)
+  assert.equal((adminListing.submissions as Array<{ id: string, kind: string, review: { status: string } }>).length, 2)
+  assert.ok((adminListing.submissions as Array<{ kind: string, review: { status: string } }>).every(submission =>
+    submission.kind === 'service-request' && submission.review.status === 'pending',
+  ))
+  assert.equal((adminListing.kindCounts as Record<string, number>)['service-request'], 3)
+  assert.ok((adminListing.activity as Array<{ category: string }>).length <= 2)
+  assert.ok((adminListing.activity as Array<{ category: string }>).every(entry => entry.category === 'posts'))
+  assert.ok(((adminListing.activityCounts as Record<string, number>).posts || 0) >= 3)
+})

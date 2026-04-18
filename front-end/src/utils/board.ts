@@ -56,8 +56,26 @@ export interface BoardBootstrapResponse {
   viewer: ViewerAccount | null
 }
 
+export interface BoardItemCounts {
+  'all': number
+  'item-lending': number
+  'item-request': number
+  'service-request': number
+}
+
+export interface BoardItemsPagination {
+  hasNextPage: boolean
+  hasPreviousPage: boolean
+  page: number
+  pageSize: number
+  totalItems: number
+  totalPages: number
+}
+
 export interface BoardItemsResponse {
+  counts: BoardItemCounts
   items: BoardItem[]
+  pagination: BoardItemsPagination
 }
 
 export interface BoardContactResponse {

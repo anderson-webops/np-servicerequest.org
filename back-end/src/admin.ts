@@ -1,4 +1,4 @@
-import type { BoardActivityEntry } from './activity.js'
+import type { BoardActivityCategory, BoardActivityEntry } from './activity.js'
 import type { SubmissionBoardState } from './board.js'
 import type { SubmissionKind } from './submissions.js'
 
@@ -83,6 +83,40 @@ export interface AdminSubmissionCounts {
   total: number
 }
 
+export interface AdminKindCounts {
+  'all': number
+  'item-lending': number
+  'item-request': number
+  'service-request': number
+}
+
+export interface AdminActivityCounts {
+  deletions: number
+  moderation: number
+  posts: number
+  replies: number
+  total: number
+}
+
+export interface AdminPagination {
+  hasNextPage: boolean
+  hasPreviousPage: boolean
+  page: number
+  pageSize: number
+  totalItems: number
+  totalPages: number
+}
+
+export interface AdminSubmissionsListResult {
+  activity: BoardActivityEntry[]
+  activityCounts: AdminActivityCounts
+  activityPagination: AdminPagination
+  counts: AdminSubmissionCounts
+  kindCounts: AdminKindCounts
+  submissions: AdminSubmissionRecord[]
+  submissionsPagination: AdminPagination
+}
+
 export class AdminAuthorizationError extends Error {
   constructor(message: string) {
     super(message)
@@ -162,6 +196,25 @@ function getConfiguredAdminKeys() {
 
 function isValidAdminReviewStatus(value: string): value is AdminReviewStatus {
   return adminReviewStatuses.includes(value as AdminReviewStatus)
+}
+
+function createEmptyActivityCounts(): AdminActivityCounts {
+  return {
+    deletions: 0,
+    moderation: 0,
+    posts: 0,
+    replies: 0,
+    total: 0,
+  }
+}
+
+function createEmptyKindCounts(): AdminKindCounts {
+  return {
+    'all': 0,
+    'item-lending': 0,
+    'item-request': 0,
+    'service-request': 0,
+  }
 }
 
 function isMatchingAdminKey(candidate: string, configured: string) {
@@ -297,6 +350,36 @@ function summarizeSubmissionCounts(submissions: AdminSubmissionRecord[]) {
   return counts
 }
 
+function summarizeKindCounts(submissions: AdminSubmissionRecord[]) {
+  return submissions.reduce<AdminKindCounts>((summary, submission) => {
+    summary.all += 1
+    summary[submission.kind] += 1
+    return summary
+  }, createEmptyKindCounts())
+}
+
+function paginateItems<T>(items: T[], page: number, pageSize: number): {
+  items: T[]
+  pagination: AdminPagination
+} {
+  const totalItems = items.length
+  const totalPages = totalItems > 0 ? Math.ceil(totalItems / pageSize) : 1
+  const normalizedPage = Math.min(Math.max(Math.trunc(page) || 1, 1), totalPages)
+  const startIndex = (normalizedPage - 1) * pageSize
+
+  return {
+    items: items.slice(startIndex, startIndex + pageSize),
+    pagination: {
+      hasNextPage: normalizedPage < totalPages,
+      hasPreviousPage: normalizedPage > 1,
+      page: normalizedPage,
+      pageSize,
+      totalItems,
+      totalPages,
+    },
+  }
+}
+
 async function listKindSubmissions(kind: SubmissionKind) {
   const directory = resolveDataPath(kind)
 
@@ -390,17 +473,51 @@ export function assertValidAdminKey(rawAdminKey: string) {
     throw new AdminAuthorizationError('That admin key was not accepted.')
 }
 
-export async function listAdminSubmissions() {
+export async function listAdminSubmissions(options?: {
+  activityCategory?: BoardActivityCategory | 'all'
+  activityPage?: number
+  activityPageSize?: number
+  kind?: SubmissionKind | 'all'
+  review?: AdminReviewStatus | 'all'
+  submissionsPage?: number
+  submissionsPageSize?: number
+}): Promise<AdminSubmissionsListResult> {
   const submissions = (
     await Promise.all(submissionKinds.map(kind => listKindSubmissions(kind)))
   )
     .flat()
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
 
+  const reviewFilter = options?.review && options.review !== 'all' ? options.review : 'all'
+  const kindFilter = options?.kind && options.kind !== 'all' ? options.kind : 'all'
+  const submissionsPageSize = Math.min(Math.max(Math.trunc(options?.submissionsPageSize || 20), 1), 100)
+  const activityPageSize = Math.min(Math.max(Math.trunc(options?.activityPageSize || 40), 1), 100)
+  const filteredSubmissions = submissions.filter((submission) => {
+    const matchesReview = reviewFilter === 'all' || submission.review.status === reviewFilter
+    const matchesKind = kindFilter === 'all' || submission.kind === kindFilter
+    return matchesReview && matchesKind
+  })
+  const paginatedSubmissions = paginateItems(filteredSubmissions, options?.submissionsPage || 1, submissionsPageSize)
+  const allActivity = await listBoardActivity()
+  const activityCounts = allActivity.reduce<AdminActivityCounts>((summary, entry) => {
+    summary.total += 1
+    summary[entry.category] += 1
+    return summary
+  }, createEmptyActivityCounts())
+  const activityFilter = options?.activityCategory && options.activityCategory !== 'all'
+    ? options.activityCategory
+    : 'all'
+  const filteredActivity = allActivity.filter(entry => activityFilter === 'all' || entry.category === activityFilter)
+  const paginatedActivity = paginateItems(filteredActivity, options?.activityPage || 1, activityPageSize)
+
   return {
-    activity: await listBoardActivity(),
+    activity: paginatedActivity.items,
+    activityCounts,
+    activityPagination: paginatedActivity.pagination,
     counts: summarizeSubmissionCounts(submissions),
-    submissions,
+    kindCounts: summarizeKindCounts(submissions),
+    submissions: paginatedSubmissions.items,
+    submissionsPagination: paginatedSubmissions.pagination,
   }
 }
 

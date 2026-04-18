@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type {
+  AdminActivityCounts,
   AdminActivityEntry,
+  AdminKindCounts,
+  AdminPagination,
   AdminReviewResponse,
   AdminReviewStatus,
   AdminSubmissionCounts,
@@ -30,6 +33,30 @@ const emptyCounts: AdminSubmissionCounts = {
   pending: 0,
   rejected: 0,
   total: 0,
+}
+
+const emptyKindCounts: AdminKindCounts = {
+  'all': 0,
+  'item-lending': 0,
+  'item-request': 0,
+  'service-request': 0,
+}
+
+const emptyActivityCounts: AdminActivityCounts = {
+  deletions: 0,
+  moderation: 0,
+  posts: 0,
+  replies: 0,
+  total: 0,
+}
+
+const emptyPagination: AdminPagination = {
+  hasNextPage: false,
+  hasPreviousPage: false,
+  page: 1,
+  pageSize: 1,
+  totalItems: 0,
+  totalPages: 1,
 }
 
 const reviewStatusLabels: Record<AdminReviewStatus, string> = {
@@ -73,6 +100,11 @@ const dataError = ref<FormErrorState | null>(null)
 const authNotice = ref('')
 const submissions = ref<AdminSubmissionRecord[]>([])
 const activityEntries = ref<AdminActivityEntry[]>([])
+const counts = ref<AdminSubmissionCounts>({ ...emptyCounts })
+const kindCounts = ref<AdminKindCounts>({ ...emptyKindCounts })
+const activityCounts = ref<AdminActivityCounts>({ ...emptyActivityCounts })
+const submissionsPagination = ref<AdminPagination>({ ...emptyPagination, pageSize: 20 })
+const activityPagination = ref<AdminPagination>({ ...emptyPagination, pageSize: 40 })
 const reviewFilter = ref<ReviewFilter>('pending')
 const kindFilter = ref<KindFilter>('all')
 const activityFilter = ref<ActivityFilter>('all')
@@ -84,28 +116,7 @@ const reviewNotices = reactive<Record<string, string>>({})
 const notesDrafts = reactive<Record<string, string>>({})
 
 const isAuthenticated = computed(() => Boolean(activeAdminKey.value))
-
-const counts = computed<AdminSubmissionCounts>(() => submissions.value.reduce((summary, submission) => {
-  summary.total += 1
-
-  if (submission.review.status === 'approved')
-    summary.approved += 1
-  else if (submission.review.status === 'needs-follow-up')
-    summary.needsFollowUp += 1
-  else if (submission.review.status === 'rejected')
-    summary.rejected += 1
-  else
-    summary.pending += 1
-
-  return summary
-}, { ...emptyCounts }))
-
-const visibleSubmissions = computed(() => submissions.value.filter((submission) => {
-  const matchesKind = kindFilter.value === 'all' || submission.kind === kindFilter.value
-  const matchesReview = reviewFilter.value === 'all' || submission.review.status === reviewFilter.value
-
-  return matchesKind && matchesReview
-}))
+const visibleSubmissions = computed(() => submissions.value)
 
 const statusFilters = computed(() => [
   { key: 'all' as const, label: 'All', count: counts.value.total },
@@ -116,10 +127,10 @@ const statusFilters = computed(() => [
 ])
 
 const kindFilters = computed(() => [
-  { key: 'all' as const, label: 'All kinds', count: counts.value.total },
-  { key: 'service-request' as const, label: kindLabels['service-request'], count: submissions.value.filter(submission => submission.kind === 'service-request').length },
-  { key: 'item-request' as const, label: kindLabels['item-request'], count: submissions.value.filter(submission => submission.kind === 'item-request').length },
-  { key: 'item-lending' as const, label: kindLabels['item-lending'], count: submissions.value.filter(submission => submission.kind === 'item-lending').length },
+  { key: 'all' as const, label: 'All kinds', count: kindCounts.value.all },
+  { key: 'service-request' as const, label: kindLabels['service-request'], count: kindCounts.value['service-request'] },
+  { key: 'item-request' as const, label: kindLabels['item-request'], count: kindCounts.value['item-request'] },
+  { key: 'item-lending' as const, label: kindLabels['item-lending'], count: kindCounts.value['item-lending'] },
 ])
 
 const activityCategoryLabels: Record<Exclude<ActivityFilter, 'all'>, string> = {
@@ -129,17 +140,15 @@ const activityCategoryLabels: Record<Exclude<ActivityFilter, 'all'>, string> = {
   deletions: 'Deletions',
 }
 
-const filteredActivityEntries = computed(() => activityEntries.value.filter((entry) => {
-  return activityFilter.value === 'all' || entry.category === activityFilter.value
-}))
+const filteredActivityEntries = computed(() => activityEntries.value)
 
 const activityFilters = computed(() => {
   return [
-    { key: 'all' as const, label: 'All activity', count: activityEntries.value.length },
+    { key: 'all' as const, label: 'All activity', count: activityCounts.value.total },
     ...Object.entries(activityCategoryLabels).map(([key, label]) => ({
       key: key as Exclude<ActivityFilter, 'all'>,
       label,
-      count: activityEntries.value.filter(entry => entry.category === key).length,
+      count: activityCounts.value[key as Exclude<ActivityFilter, 'all'>],
     })),
   ]
 })
@@ -191,6 +200,12 @@ function getReviewButtonLabel(submissionId: string, baseLabel: string) {
 function clearAdminSession() {
   clearStoredAdminKey()
   activeAdminKey.value = ''
+  counts.value = { ...emptyCounts }
+  kindCounts.value = { ...emptyKindCounts }
+  activityCounts.value = { ...emptyActivityCounts }
+  submissionsPagination.value = { ...emptyPagination, pageSize: submissionsPagination.value.pageSize }
+  activityPagination.value = { ...emptyPagination, pageSize: activityPagination.value.pageSize }
+  activityEntries.value = []
   submissions.value = []
 }
 
@@ -261,7 +276,14 @@ function getApiErrorState(error: unknown, endpoint: string, fallbackMessage: str
 }
 
 async function loadAdminSubmissions(candidateKey = activeAdminKey.value, options?: { authAttempt?: boolean, showSessionNotice?: boolean }) {
-  const endpoint = getAdminEndpoint(runtimeConfig.public.apiBaseUrl, 'submissions')
+  const endpoint = new URL(getAdminEndpoint(runtimeConfig.public.apiBaseUrl, 'submissions'))
+  endpoint.searchParams.set('review', reviewFilter.value)
+  endpoint.searchParams.set('kind', kindFilter.value)
+  endpoint.searchParams.set('activityCategory', activityFilter.value)
+  endpoint.searchParams.set('submissionsPage', String(submissionsPagination.value.page))
+  endpoint.searchParams.set('submissionsPageSize', String(submissionsPagination.value.pageSize))
+  endpoint.searchParams.set('activityPage', String(activityPagination.value.page))
+  endpoint.searchParams.set('activityPageSize', String(activityPagination.value.pageSize))
   const normalizedKey = candidateKey.trim()
 
   if (!normalizedKey) {
@@ -280,7 +302,7 @@ async function loadAdminSubmissions(candidateKey = activeAdminKey.value, options
   dataError.value = null
 
   try {
-    const response = await $fetch<AdminSubmissionsResponse>(endpoint, {
+    const response = await $fetch<AdminSubmissionsResponse>(endpoint.toString(), {
       headers: {
         'x-admin-key': normalizedKey,
       },
@@ -288,8 +310,13 @@ async function loadAdminSubmissions(candidateKey = activeAdminKey.value, options
 
     activeAdminKey.value = normalizedKey
     writeStoredAdminKey(normalizedKey)
+    counts.value = response.counts
+    kindCounts.value = response.kindCounts
     activityEntries.value = response.activity
+    activityCounts.value = response.activityCounts
+    activityPagination.value = response.activityPagination
     submissions.value = response.submissions
+    submissionsPagination.value = response.submissionsPagination
     seedReviewState(response.submissions)
     adminKeyInput.value = ''
     authError.value = null
@@ -297,7 +324,7 @@ async function loadAdminSubmissions(candidateKey = activeAdminKey.value, options
       authNotice.value = 'Admin key accepted. It is stored only in this browser session.'
   }
   catch (error) {
-    const errorState = getApiErrorState(error, endpoint, 'Unable to load admin submissions right now.')
+    const errorState = getApiErrorState(error, endpoint.toString(), 'Unable to load admin submissions right now.')
 
     if ((error as { status?: number })?.status === 401 || (error as { status?: number })?.status === 403) {
       clearAdminSession()
@@ -338,6 +365,69 @@ function signOutAdmin() {
   authNotice.value = ''
   dataError.value = null
   authError.value = null
+}
+
+function setReviewFilter(nextFilter: ReviewFilter) {
+  reviewFilter.value = nextFilter
+  submissionsPagination.value = {
+    ...submissionsPagination.value,
+    page: 1,
+  }
+
+  if (isAuthenticated.value)
+    void loadAdminSubmissions(activeAdminKey.value, { showSessionNotice: false })
+}
+
+function setKindFilter(nextFilter: KindFilter) {
+  kindFilter.value = nextFilter
+  submissionsPagination.value = {
+    ...submissionsPagination.value,
+    page: 1,
+  }
+
+  if (isAuthenticated.value)
+    void loadAdminSubmissions(activeAdminKey.value, { showSessionNotice: false })
+}
+
+function setActivityFilter(nextFilter: ActivityFilter) {
+  activityFilter.value = nextFilter
+  activityPagination.value = {
+    ...activityPagination.value,
+    page: 1,
+  }
+
+  if (isAuthenticated.value)
+    void loadAdminSubmissions(activeAdminKey.value, { showSessionNotice: false })
+}
+
+function changeSubmissionsPage(nextPage: number) {
+  const normalizedPage = Math.min(Math.max(nextPage, 1), submissionsPagination.value.totalPages)
+
+  if (normalizedPage === submissionsPagination.value.page)
+    return
+
+  submissionsPagination.value = {
+    ...submissionsPagination.value,
+    page: normalizedPage,
+  }
+
+  if (isAuthenticated.value)
+    void loadAdminSubmissions(activeAdminKey.value, { showSessionNotice: false })
+}
+
+function changeActivityPage(nextPage: number) {
+  const normalizedPage = Math.min(Math.max(nextPage, 1), activityPagination.value.totalPages)
+
+  if (normalizedPage === activityPagination.value.page)
+    return
+
+  activityPagination.value = {
+    ...activityPagination.value,
+    page: normalizedPage,
+  }
+
+  if (isAuthenticated.value)
+    void loadAdminSubmissions(activeAdminKey.value, { showSessionNotice: false })
 }
 
 async function saveReview(submission: AdminSubmissionRecord, status: AdminReviewStatus) {
@@ -504,7 +594,7 @@ onMounted(() => {
             class="filter-chip"
             :class="{ 'filter-chip--active': reviewFilter === filter.key }"
             type="button"
-            @click="reviewFilter = filter.key"
+            @click="setReviewFilter(filter.key)"
           >
             <span>{{ filter.label }}</span>
             <strong>{{ filter.count }}</strong>
@@ -519,7 +609,7 @@ onMounted(() => {
             class="filter-chip"
             :class="{ 'filter-chip--active': kindFilter === filter.key }"
             type="button"
-            @click="kindFilter = filter.key"
+            @click="setKindFilter(filter.key)"
           >
             <span>{{ filter.label }}</span>
             <strong>{{ filter.count }}</strong>
@@ -534,6 +624,10 @@ onMounted(() => {
         No submissions match the current filters.
       </div>
       <div v-else class="admin-review__list">
+        <div class="admin-pagination admin-pagination--summary">
+          <span>Page {{ submissionsPagination.page }} of {{ submissionsPagination.totalPages }}</span>
+          <span>{{ submissionsPagination.totalItems }} submissions match the current queue filters.</span>
+        </div>
         <article v-for="submission in visibleSubmissions" :key="submission.id" class="admin-card">
           <header class="admin-card__header">
             <div>
@@ -616,6 +710,24 @@ onMounted(() => {
             {{ reviewErrors[submission.id]?.message }} {{ reviewErrors[submission.id]?.detail }}
           </p>
         </article>
+        <div class="admin-pagination">
+          <button
+            class="secondary-button"
+            :disabled="loadPending || !submissionsPagination.hasPreviousPage"
+            type="button"
+            @click="changeSubmissionsPage(submissionsPagination.page - 1)"
+          >
+            Newer submissions
+          </button>
+          <button
+            class="secondary-button secondary-button--dark"
+            :disabled="loadPending || !submissionsPagination.hasNextPage"
+            type="button"
+            @click="changeSubmissionsPage(submissionsPagination.page + 1)"
+          >
+            Older submissions
+          </button>
+        </div>
       </div>
     </section>
 
@@ -641,7 +753,7 @@ onMounted(() => {
             class="filter-chip"
             :class="{ 'filter-chip--active': activityFilter === filter.key }"
             type="button"
-            @click="activityFilter = filter.key"
+            @click="setActivityFilter(filter.key)"
           >
             <span>{{ filter.label }}</span>
             <strong>{{ filter.count }}</strong>
@@ -654,6 +766,10 @@ onMounted(() => {
       </div>
 
       <div v-else class="admin-activity">
+        <div class="admin-pagination admin-pagination--summary">
+          <span>Page {{ activityPagination.page }} of {{ activityPagination.totalPages }}</span>
+          <span>{{ activityPagination.totalItems }} activity entries match the current filter.</span>
+        </div>
         <article v-for="entry in filteredActivityEntries" :key="entry.id" class="admin-activity__entry">
           <div class="admin-activity__meta">
             <span class="admin-activity__category">{{ formatActivityCategory(entry.category) }}</span>
@@ -676,6 +792,24 @@ onMounted(() => {
             </p>
           </div>
         </article>
+        <div class="admin-pagination">
+          <button
+            class="secondary-button"
+            :disabled="loadPending || !activityPagination.hasPreviousPage"
+            type="button"
+            @click="changeActivityPage(activityPagination.page - 1)"
+          >
+            Newer activity
+          </button>
+          <button
+            class="secondary-button secondary-button--dark"
+            :disabled="loadPending || !activityPagination.hasNextPage"
+            type="button"
+            @click="changeActivityPage(activityPagination.page + 1)"
+          >
+            Older activity
+          </button>
+        </div>
       </div>
     </section>
   </div>
@@ -1000,6 +1134,19 @@ onMounted(() => {
 
 .admin-review__list {
   gap: 1rem;
+}
+
+.admin-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+}
+
+.admin-pagination--summary {
+  color: var(--site-subtle);
+  font-size: 0.94rem;
 }
 
 .admin-card {
