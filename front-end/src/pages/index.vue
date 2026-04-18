@@ -78,39 +78,6 @@ const deleteInteractionErrors = reactive<Record<string, FormErrorState | null>>(
 const deleteInteractionPending = reactive<Record<string, boolean>>({})
 const storedDeleteTokenItemIds = ref<string[]>([])
 
-const processSteps = [
-  {
-    number: '01',
-    title: 'Choose the dedicated page',
-    description: 'Service projects, item requests, and lending offers each have their own page so posting stays focused and easier to scan.',
-  },
-  {
-    number: '02',
-    title: 'Reply in public or reveal contact on demand',
-    description: 'Neighbors can respond on the thread immediately, or reveal a contact method only when they intentionally need it.',
-  },
-  {
-    number: '03',
-    title: 'Stay anonymous or create an account',
-    description: 'Anonymous participation stays open, while optional accounts add an identity anchor for repeat contributors.',
-  },
-]
-
-const boardGroups = [
-  {
-    title: 'Service projects',
-    items: ['yard cleanup', 'small repairs', 'moving help', 'accessibility upgrades', 'setup or teardown'],
-  },
-  {
-    title: 'Borrow requests',
-    items: ['axes and hand tools', 'kitchen utensils', 'books', 'ladders', 'seasonal gear'],
-  },
-  {
-    title: 'Items to lend',
-    items: ['power tools', 'cookware', 'study materials', 'gardening supplies', 'one-off specialty items'],
-  },
-]
-
 const boardFilters = [
   { key: 'all' as const, label: 'All posts' },
   { key: submissionKinds.service, label: 'Service projects' },
@@ -1005,49 +972,6 @@ onMounted(() => {
         </div>
       </div>
     </section>
-
-    <section class="process">
-      <div class="section-heading">
-        <p class="eyebrow">
-          How it works
-        </p>
-        <h2>
-          The board is designed for immediate use, not for private gatekeeping.
-        </h2>
-      </div>
-
-      <ol class="process__list">
-        <li v-for="step in processSteps" :key="step.number">
-          <span class="process__number">{{ step.number }}</span>
-          <div>
-            <h3>{{ step.title }}</h3>
-            <p>{{ step.description }}</p>
-          </div>
-        </li>
-      </ol>
-    </section>
-
-    <section class="board-groups">
-      <div class="section-heading">
-        <p class="eyebrow">
-          What belongs here
-        </p>
-        <h2>
-          Keep posts practical, specific, and clear enough for another person to act on them.
-        </h2>
-      </div>
-
-      <div class="board-groups__grid">
-        <article v-for="group in boardGroups" :key="group.title">
-          <h3>{{ group.title }}</h3>
-          <ul>
-            <li v-for="item in group.items" :key="item">
-              {{ item }}
-            </li>
-          </ul>
-        </article>
-      </div>
-    </section>
   </div>
 </template>
 
@@ -1060,9 +984,7 @@ onMounted(() => {
 }
 
 .hero,
-.live-board,
-.process,
-.board-groups {
+.live-board {
   padding-inline: 5vw;
 }
 
@@ -1112,8 +1034,6 @@ onMounted(() => {
 
 .hero__lede,
 .section-copy,
-.process__list p,
-.board-groups li,
 .board-card__summary,
 .board-card__contact-note,
 .board-card__thread-empty,
@@ -1624,65 +1544,6 @@ onMounted(() => {
   background: var(--site-elevated);
 }
 
-.process {
-  display: grid;
-  gap: 1rem;
-}
-
-.process__list {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-
-.process__list li,
-.board-groups__grid article {
-  padding: 1.25rem;
-  border-radius: 1.4rem;
-  background: var(--site-surface-soft);
-  border: 1px solid var(--site-border);
-}
-
-.process__number {
-  display: inline-flex;
-  margin-bottom: 1rem;
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--site-link);
-}
-
-.process__list h3,
-.board-groups__grid h3 {
-  margin: 0;
-  font-family: 'DM Serif Display', serif;
-  font-size: 1.55rem;
-  line-height: 1.05;
-  color: var(--site-text-strong);
-}
-
-.process__list p {
-  margin: 0.75rem 0 0;
-}
-
-.board-groups {
-  display: grid;
-  gap: 1rem;
-}
-
-.board-groups__grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
-}
-
-.board-groups__grid ul {
-  margin: 0.85rem 0 0;
-  padding-left: 1.15rem;
-}
-
 .field-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1798,8 +1659,6 @@ onMounted(() => {
 }
 
 @media (max-width: 860px) {
-  .process__list,
-  .board-groups__grid,
   .field-grid,
   .poster__lanes {
     grid-template-columns: 1fr;
@@ -1818,9 +1677,7 @@ onMounted(() => {
 
 @media (max-width: 760px) {
   .hero,
-  .live-board,
-  .process,
-  .board-groups {
+  .live-board {
     padding-inline: 1.25rem;
   }
 

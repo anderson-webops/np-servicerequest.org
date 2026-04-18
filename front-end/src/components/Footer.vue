@@ -14,6 +14,9 @@
       <NuxtLink to="/account">
         Optional account
       </NuxtLink>
+      <NuxtLink to="/help">
+        Help
+      </NuxtLink>
     </div>
   </footer>
 </template>
