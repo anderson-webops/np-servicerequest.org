@@ -11,7 +11,7 @@
       <NuxtLink to="/item-lending">
         Lend an item
       </NuxtLink>
-      <a href="/#account-hub">Optional account</a>
+      <a href="/#live-board">Optional account</a>
     </div>
   </footer>
 </template>
