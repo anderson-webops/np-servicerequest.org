@@ -101,7 +101,7 @@ const emit = defineEmits<{
 .submission-page__hero {
   display: grid;
   gap: 0.9rem;
-  max-width: 42rem;
+  max-width: 56rem;
 }
 
 .submission-page__back {
@@ -136,9 +136,10 @@ const emit = defineEmits<{
 }
 
 .submission-page h1 {
-  font-size: clamp(2.8rem, 6vw, 4.9rem);
-  line-height: 0.95;
-  max-width: 12ch;
+  font-size: clamp(2.35rem, 4.6vw, 4rem);
+  line-height: 0.92;
+  max-width: 15ch;
+  text-wrap: balance;
 }
 
 .submission-page h2 {
@@ -154,9 +155,9 @@ const emit = defineEmits<{
 }
 
 .submission-page__lede {
-  max-width: 34rem;
+  max-width: 42rem;
   margin: 0;
-  font-size: 1.06rem;
+  font-size: 1.02rem;
 }
 
 .submission-page__panel {
