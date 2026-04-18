@@ -30,7 +30,7 @@ onMounted(() => {
     :security-error="securityError"
     :status="status"
     submit-label="Post lending offer"
-    success-text="Posted. Your lending offer now appears on the live board, and you can delete it there later."
+    success-text="Posted. Your lending offer now appears on the live board. If you used an email address, a management link was sent there so you can delete it later from another browser."
     title="Offer something useful so another person can reach out and borrow it."
     @submit="submit"
   >

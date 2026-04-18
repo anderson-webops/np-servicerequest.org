@@ -33,6 +33,7 @@ interface StoredBoardItem {
   kind: SubmissionKind
   kindLabel: string
   lastActivityAt: string
+  managementTokenHash?: string
   status: BoardItemStatus
   summary: string
   summaryLabel: string
@@ -106,6 +107,18 @@ function cleanValue(value: string | undefined) {
 
 function hashDeleteToken(token: string) {
   return createHash('sha256').update(token).digest('hex')
+}
+
+function isEmailAddress(value: string) {
+  return value.includes('@') && !/\s/.test(value)
+}
+
+function createBoardDeleteToken() {
+  return randomBytes(32).toString('hex')
+}
+
+function createBoardManagementToken() {
+  return randomBytes(32).toString('hex')
 }
 
 function countUrlMentions(value: string) {
@@ -278,7 +291,8 @@ export async function createBoardItemFromSubmission(input: {
   validateHumanText(summary, labels.summaryLabel, 4000)
   validateHumanText(authorName, 'A name', 80)
   validateHumanText(contact, 'A contact method', 320)
-  const deleteToken = randomBytes(32).toString('hex')
+  const deleteToken = createBoardDeleteToken()
+  const managementToken = !input.viewer && isEmailAddress(contact) ? createBoardManagementToken() : ''
 
   const item: StoredBoardItem = {
     id: randomUUID(),
@@ -295,6 +309,7 @@ export async function createBoardItemFromSubmission(input: {
     kind: input.kind,
     kindLabel: labels.kindLabel,
     lastActivityAt: createdAt,
+    managementTokenHash: managementToken ? hashDeleteToken(managementToken) : undefined,
     status: 'open',
     summary,
     summaryLabel: labels.summaryLabel,
@@ -305,6 +320,8 @@ export async function createBoardItemFromSubmission(input: {
   return {
     deleteToken,
     item: toPublicItem(item, []),
+    managementRecipientEmail: managementToken ? contact : '',
+    managementToken,
   }
 }
 
@@ -368,6 +385,30 @@ export async function revealBoardInteractionContact(itemId: string, interactionI
   return interaction.contact
 }
 
+export async function claimBoardItemManagement(input: {
+  itemId: string
+  managementToken: string
+}) {
+  const item = await getStoredBoardItem(input.itemId)
+  const normalizedManagementToken = cleanValue(input.managementToken)
+  const ownsByManagementToken = Boolean(
+    normalizedManagementToken
+    && item.managementTokenHash
+    && hashDeleteToken(normalizedManagementToken) === item.managementTokenHash,
+  )
+
+  if (!ownsByManagementToken)
+    throw new BoardAuthorizationError('That management link is invalid or has expired.')
+
+  const deleteToken = createBoardDeleteToken()
+  await writeJsonFile(getItemFilePath(item.id), {
+    ...item,
+    deleteTokenHash: hashDeleteToken(deleteToken),
+  })
+
+  return deleteToken
+}
+
 export async function deleteBoardItem(input: {
   deleteToken: string
   itemId: string
@@ -375,6 +416,7 @@ export async function deleteBoardItem(input: {
 }) {
   const item = await getStoredBoardItem(input.itemId)
   const normalizedDeleteToken = cleanValue(input.deleteToken)
+  const ownsByAdmin = Boolean(input.viewer?.isAdmin)
   const ownsByAccount = Boolean(input.viewer && item.author.accountId && input.viewer.id === item.author.accountId)
   const ownsByDeleteToken = Boolean(
     normalizedDeleteToken
@@ -382,9 +424,32 @@ export async function deleteBoardItem(input: {
     && hashDeleteToken(normalizedDeleteToken) === item.deleteTokenHash,
   )
 
-  if (!ownsByAccount && !ownsByDeleteToken)
+  if (!ownsByAdmin && !ownsByAccount && !ownsByDeleteToken)
     throw new BoardAuthorizationError('You are not allowed to delete that board item.')
 
   await removePathIfExists(getItemFilePath(item.id))
   await removePathIfExists(getInteractionDirectory(item.id))
+}
+
+export async function deleteBoardInteraction(input: {
+  interactionId: string
+  itemId: string
+  viewer: ViewerAccount | null
+}) {
+  const item = await getStoredBoardItem(input.itemId)
+  const interaction = await getStoredBoardInteraction(input.itemId, input.interactionId)
+  const ownsByAdmin = Boolean(input.viewer?.isAdmin)
+  const ownsByAccount = Boolean(input.viewer && interaction.author.accountId && input.viewer.id === interaction.author.accountId)
+
+  if (!ownsByAdmin && !ownsByAccount)
+    throw new BoardAuthorizationError('You are not allowed to delete that board response.')
+
+  await removePathIfExists(getInteractionFilePath(input.itemId, input.interactionId))
+
+  const remainingInteractions = await listStoredInteractions(item.id)
+  await writeJsonFile(getItemFilePath(item.id), {
+    ...item,
+    interactionCount: remainingInteractions.length,
+    lastActivityAt: remainingInteractions[0]?.createdAt || item.createdAt,
+  })
 }

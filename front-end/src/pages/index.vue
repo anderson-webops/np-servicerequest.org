@@ -3,8 +3,10 @@ import type {
   AntiBotChallenge,
   AuthResponse,
   BoardBootstrapResponse,
+  BoardClaimManagementResponse,
   BoardContactResponse,
   BoardDeleteResponse,
+  BoardInteractionDeleteResponse,
   BoardInteractionResponse,
   BoardItem,
   BoardItemsResponse,
@@ -12,7 +14,7 @@ import type {
 } from '~/utils/board'
 import type { SubmissionKind } from '~/utils/submissions'
 import { isAntiBotChallenge, isAntiBotChallengeExpired, markAntiBotChallengeObserved, waitForAntiBotChallengeMinimumAge } from '~/utils/antiBot'
-import { forgetBoardDeleteToken, getBoardEndpoint, getStoredBoardDeleteToken, listStoredBoardDeleteTokenIds } from '~/utils/board'
+import { forgetBoardDeleteToken, getBoardEndpoint, getStoredBoardDeleteToken, listStoredBoardDeleteTokenIds, rememberBoardDeleteToken } from '~/utils/board'
 import { submissionKinds } from '~/utils/submissions'
 
 type BoardFilter = 'all' | SubmissionKind
@@ -47,6 +49,8 @@ useSeoMeta({
 })
 
 const runtimeConfig = useRuntimeConfig()
+const route = useRoute()
+const router = useRouter()
 
 const hasHydrated = ref(false)
 const antiBotChallenge = ref<AntiBotChallenge | null>(null)
@@ -63,8 +67,12 @@ const authNotice = ref('')
 const authError = ref<FormErrorState | null>(null)
 const authPending = ref(false)
 const logoutPending = ref(false)
+const managementNotice = ref('')
+const managementPending = ref(false)
+const managementError = ref<FormErrorState | null>(null)
 const openReplyItemId = ref<string | null>(null)
 const confirmDeleteItemId = ref<string | null>(null)
+const confirmDeleteInteractionKey = ref<string | null>(null)
 
 const registerForm = reactive({
   'bot-field': '',
@@ -87,6 +95,8 @@ const revealErrors = reactive<Record<string, FormErrorState | null>>({})
 const revealPending = reactive<Record<string, boolean>>({})
 const deleteErrors = reactive<Record<string, FormErrorState | null>>({})
 const deletePending = reactive<Record<string, boolean>>({})
+const deleteInteractionErrors = reactive<Record<string, FormErrorState | null>>({})
+const deleteInteractionPending = reactive<Record<string, boolean>>({})
 const storedDeleteTokenItemIds = ref<string[]>([])
 
 const processSteps = [
@@ -173,7 +183,9 @@ function isViewerAccount(value: unknown): value is ViewerAccount {
     && 'displayName' in value
     && typeof value.displayName === 'string'
     && 'email' in value
-    && typeof value.email === 'string',
+    && typeof value.email === 'string'
+    && 'isAdmin' in value
+    && typeof value.isAdmin === 'boolean',
   )
 }
 
@@ -260,6 +272,18 @@ function ensureDeleteState(itemId: string) {
 
   if (!(itemId in deleteErrors))
     deleteErrors[itemId] = null
+}
+
+function getInteractionDeleteKey(itemId: string, interactionId: string) {
+  return `${itemId}:${interactionId}`
+}
+
+function ensureInteractionDeleteState(key: string) {
+  if (!(key in deleteInteractionPending))
+    deleteInteractionPending[key] = false
+
+  if (!(key in deleteInteractionErrors))
+    deleteInteractionErrors[key] = null
 }
 
 function ensureRevealState(key: string) {
@@ -410,15 +434,59 @@ async function protectedDelete<T>(endpoint: string, body: Record<string, string>
   })
 }
 
+async function claimBoardManagementLink(itemId: string, managementToken: string) {
+  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `items/${itemId}/claim-management`)
+  managementPending.value = true
+  managementError.value = null
+  managementNotice.value = ''
+
+  try {
+    const response = await $fetch<BoardClaimManagementResponse>(endpoint, {
+      body: {
+        token: managementToken,
+      },
+      credentials: 'include',
+      method: 'POST',
+    })
+
+    applyServerContext(response)
+    rememberBoardDeleteToken(response.itemId, response.deleteToken)
+    refreshStoredDeleteTokenIds()
+    managementNotice.value = 'Management access for this post is now saved in this browser. You can delete it from the live board.'
+  }
+  catch (error) {
+    managementError.value = getApiErrorState(error, endpoint, 'We could not claim that management link right now.')
+  }
+  finally {
+    managementPending.value = false
+
+    await router.replace({
+      hash: '#live-board',
+      path: route.path,
+      query: {},
+    })
+  }
+}
+
 function refreshStoredDeleteTokenIds() {
   storedDeleteTokenItemIds.value = listStoredBoardDeleteTokenIds()
 }
 
 function canDeleteItem(item: BoardItem) {
+  if (viewer.value?.isAdmin)
+    return true
+
   if (viewer.value && item.author.accountId && viewer.value.id === item.author.accountId)
     return true
 
   return storedDeleteTokenItemIds.value.includes(item.id)
+}
+
+function canDeleteInteraction(interaction: BoardItem['interactions'][number]) {
+  if (viewer.value?.isAdmin)
+    return true
+
+  return Boolean(viewer.value && interaction.author.accountId && viewer.value.id === interaction.author.accountId)
 }
 
 function getDeleteActionLabel(itemId: string) {
@@ -429,6 +497,37 @@ function getDeleteActionLabel(itemId: string) {
     return 'Click again to delete'
 
   return 'Delete post'
+}
+
+function getDeleteInteractionActionLabel(itemId: string, interactionId: string) {
+  const key = getInteractionDeleteKey(itemId, interactionId)
+
+  if (deleteInteractionPending[key])
+    return 'Deleting...'
+
+  if (confirmDeleteInteractionKey.value === key)
+    return 'Click again to delete'
+
+  return 'Delete reply'
+}
+
+function removeInteractionFromBoard(itemId: string, interactionId: string) {
+  boardItems.value = sortBoardItems(boardItems.value.map((item) => {
+    if (item.id !== itemId)
+      return item
+
+    const remainingInteractions = item.interactions.filter(interaction => interaction.id !== interactionId)
+    return {
+      ...item,
+      interactionCount: remainingInteractions.length,
+      interactions: remainingInteractions,
+      lastActivityAt: remainingInteractions[0]?.createdAt || item.createdAt,
+    }
+  }))
+}
+
+function getQueryValue(value: string | null | Array<string | null> | undefined) {
+  return Array.isArray(value) ? value[0] || '' : value || ''
 }
 
 async function submitBoardReply(item: BoardItem) {
@@ -553,6 +652,40 @@ async function deleteBoardPost(item: BoardItem) {
   }
 }
 
+async function deleteBoardInteraction(item: BoardItem, interaction: BoardItem['interactions'][number]) {
+  const key = getInteractionDeleteKey(item.id, interaction.id)
+
+  if (confirmDeleteInteractionKey.value !== key) {
+    confirmDeleteInteractionKey.value = key
+    ensureInteractionDeleteState(key)
+    deleteInteractionErrors[key] = null
+    return
+  }
+
+  confirmDeleteInteractionKey.value = null
+  ensureInteractionDeleteState(key)
+  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `items/${item.id}/interactions/${interaction.id}`)
+  deleteInteractionPending[key] = true
+  deleteInteractionErrors[key] = null
+
+  try {
+    const response = await protectedDelete<BoardInteractionDeleteResponse>(endpoint, {
+      'bot-field': '',
+    })
+
+    applyServerContext(response)
+    removeInteractionFromBoard(item.id, interaction.id)
+    deleteInteractionErrors[key] = null
+  }
+  catch (error) {
+    confirmDeleteInteractionKey.value = key
+    deleteInteractionErrors[key] = getApiErrorState(error, endpoint, 'We could not delete that board response right now.')
+  }
+  finally {
+    deleteInteractionPending[key] = false
+  }
+}
+
 async function registerAccount() {
   const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'account/register')
   authPending.value = true
@@ -641,6 +774,12 @@ watch(viewer, (nextViewer) => {
 onMounted(() => {
   hasHydrated.value = true
   refreshStoredDeleteTokenIds()
+  const manageItem = getQueryValue(route.query.manageItem)
+  const manageToken = getQueryValue(route.query.manageToken)
+
+  if (manageItem && manageToken)
+    void claimBoardManagementLink(manageItem, manageToken)
+
   void Promise.allSettled([
     loadBootstrap(),
     loadBoardItems(),
@@ -771,6 +910,12 @@ onMounted(() => {
           <p v-if="authError" class="account-panel__note account-panel__note--warning" role="alert">
             {{ authError.message }} {{ authError.detail }}
           </p>
+          <p v-if="managementNotice" class="account-panel__note account-panel__note--success" role="status">
+            {{ managementNotice }}
+          </p>
+          <p v-if="managementError" class="account-panel__note account-panel__note--warning" role="alert">
+            {{ managementError.message }} {{ managementError.detail }}
+          </p>
 
           <div v-if="accountUiReady && viewer" class="account-panel__signed-in">
             <div>
@@ -779,6 +924,9 @@ onMounted(() => {
               </p>
               <strong>{{ viewer.displayName }}</strong>
               <small>{{ viewer.email }}</small>
+              <small v-if="viewer.isAdmin" class="account-panel__admin">
+                Admin tools active
+              </small>
             </div>
 
             <button class="secondary-button" :disabled="logoutPending" type="button" @click="logoutAccount">
@@ -862,6 +1010,9 @@ onMounted(() => {
             </p>
             <p>
               {{ boardAudienceNote }}
+            </p>
+            <p v-if="managementPending">
+              Claiming management access...
             </p>
           </div>
 
@@ -986,8 +1137,20 @@ onMounted(() => {
                     >
                       {{ revealPending[getRevealKey(item.id, interaction.id)] ? 'Revealing...' : 'Reveal reply contact' }}
                     </button>
+                    <button
+                      v-if="canDeleteInteraction(interaction)"
+                      class="thread-item__contact thread-item__contact--danger"
+                      :disabled="deleteInteractionPending[getInteractionDeleteKey(item.id, interaction.id)]"
+                      type="button"
+                      @click="deleteBoardInteraction(item, interaction)"
+                    >
+                      {{ getDeleteInteractionActionLabel(item.id, interaction.id) }}
+                    </button>
                     <p v-if="revealErrors[getRevealKey(item.id, interaction.id)]" class="inline-note inline-note--error" role="alert">
                       {{ revealErrors[getRevealKey(item.id, interaction.id)]?.message }} {{ revealErrors[getRevealKey(item.id, interaction.id)]?.detail }}
+                    </p>
+                    <p v-if="deleteInteractionErrors[getInteractionDeleteKey(item.id, interaction.id)]" class="inline-note inline-note--error" role="alert">
+                      {{ deleteInteractionErrors[getInteractionDeleteKey(item.id, interaction.id)]?.message }} {{ deleteInteractionErrors[getInteractionDeleteKey(item.id, interaction.id)]?.detail }}
                     </p>
                     <p v-if="revealInteractionContacts[getRevealKey(item.id, interaction.id)]" class="inline-note inline-note--success" role="status">
                       Contact: {{ revealInteractionContacts[getRevealKey(item.id, interaction.id)] }}
@@ -1433,6 +1596,11 @@ onMounted(() => {
   color: var(--site-subtle);
 }
 
+.account-panel__admin {
+  color: var(--site-link);
+  font-weight: 700;
+}
+
 .account-tabs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1739,6 +1907,10 @@ onMounted(() => {
 .thread-item__contact:focus-visible {
   text-decoration: underline;
   text-underline-offset: 0.2em;
+}
+
+.thread-item__contact--danger {
+  color: var(--site-error-text);
 }
 
 .reply-form {

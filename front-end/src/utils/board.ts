@@ -12,6 +12,7 @@ export interface ViewerAccount {
   displayName: string
   email: string
   id: string
+  isAdmin: boolean
 }
 
 export interface BoardAuthor {
@@ -71,9 +72,23 @@ export interface BoardDeleteResponse {
   ok: boolean
 }
 
+export interface BoardClaimManagementResponse {
+  antiBot: AntiBotChallenge
+  deleteToken: string
+  itemId: string
+  ok: boolean
+}
+
 export interface BoardInteractionResponse {
   antiBot: AntiBotChallenge
   interaction: BoardInteraction
+  ok: boolean
+}
+
+export interface BoardInteractionDeleteResponse {
+  antiBot: AntiBotChallenge
+  interactionId: string
+  itemId: string
   ok: boolean
 }
 

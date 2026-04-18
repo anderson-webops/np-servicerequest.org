@@ -11,8 +11,10 @@ import {
 import {
   BoardAuthorizationError,
   BoardNotFoundError,
+  claimBoardItemManagement,
   createBoardInteraction,
   createBoardItemFromSubmission,
+  deleteBoardInteraction,
   deleteBoardItem,
   listBoardItems,
   revealBoardInteractionContact,
@@ -20,6 +22,7 @@ import {
 } from './board.js'
 import {
   sendBoardInteractionNotificationEmail,
+  sendBoardItemManagementLinkEmail,
   sendBoardItemNotificationEmail,
 } from './notifications.js'
 import {
@@ -178,6 +181,17 @@ export function createApp() {
         console.error('Failed to send board item notification:', error)
       })
 
+      if (createdBoardItem.managementRecipientEmail && createdBoardItem.managementToken) {
+        void sendBoardItemManagementLinkEmail({
+          itemId: createdBoardItem.item.id,
+          managementToken: createdBoardItem.managementToken,
+          recipientEmail: createdBoardItem.managementRecipientEmail,
+          title: createdBoardItem.item.title,
+        }).catch((error) => {
+          console.error('Failed to send board management email:', error)
+        })
+      }
+
       response.status(result.accepted ? 201 : 202).json({
         ok: true,
         id: result.id,
@@ -196,6 +210,37 @@ export function createApp() {
       response.status(500).json({
         antiBot: createAntiBotChallenge(),
         message: 'Unable to store your submission right now.',
+      })
+    }
+  })
+
+  app.post('/api/board/items/:itemId/claim-management', async (request, response) => {
+    try {
+      consumeRateLimit(`claim:item:${getRequestIp(request)}`, {
+        limit: 20,
+        windowMs: 1000 * 60 * 60,
+      })
+
+      const deleteToken = await claimBoardItemManagement({
+        itemId: request.params.itemId,
+        managementToken: typeof request.body.token === 'string' ? request.body.token : '',
+      })
+
+      response.json({
+        antiBot: createAntiBotChallenge(),
+        deleteToken,
+        itemId: request.params.itemId,
+        ok: true,
+      })
+    }
+    catch (error) {
+      if (handleApiError(response, error))
+        return
+
+      console.error('Failed to claim board management link:', error)
+      response.status(500).json({
+        antiBot: createAntiBotChallenge(),
+        message: 'Unable to claim that management link right now.',
       })
     }
   })
@@ -326,6 +371,39 @@ export function createApp() {
       response.status(500).json({
         antiBot: createAntiBotChallenge(),
         message: 'Unable to reveal that contact right now.',
+      })
+    }
+  })
+
+  app.delete('/api/board/items/:itemId/interactions/:interactionId', async (request, response) => {
+    try {
+      consumeRateLimit(`delete:interaction:${getRequestIp(request)}`, {
+        limit: 12,
+        windowMs: 1000 * 60 * 60,
+      })
+      validateAntiBotPayload(request.body)
+
+      await deleteBoardInteraction({
+        interactionId: request.params.interactionId,
+        itemId: request.params.itemId,
+        viewer: await getViewerFromCookie(request.get('cookie')),
+      })
+
+      response.json({
+        antiBot: createAntiBotChallenge(),
+        interactionId: request.params.interactionId,
+        itemId: request.params.itemId,
+        ok: true,
+      })
+    }
+    catch (error) {
+      if (handleApiError(response, error))
+        return
+
+      console.error('Failed to delete board interaction:', error)
+      response.status(500).json({
+        antiBot: createAntiBotChallenge(),
+        message: 'Unable to delete that board response right now.',
       })
     }
   })

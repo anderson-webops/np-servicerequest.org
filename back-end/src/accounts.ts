@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID, scryptSync } from 'node:crypto'
 import { resolve } from 'node:path'
+import { env } from 'node:process'
 
 import { listJsonDirectory, readJsonFile, removeFileIfExists, resolveDataPath, writeJsonFile } from './data.js'
 import { createSessionExpiry, hashSessionToken, readCookieValue, sessionCookieName } from './security.js'
@@ -31,6 +32,7 @@ export interface ViewerAccount {
   displayName: string
   email: string
   id: string
+  isAdmin: boolean
 }
 
 export interface AccountSessionResult {
@@ -49,6 +51,13 @@ function getSessionFilePath(tokenHash: string) {
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase()
 }
+
+const adminEmailAddresses = new Set(
+  (env.BOARD_ADMIN_EMAILS || '')
+    .split(',')
+    .map(value => normalizeEmail(value))
+    .filter(Boolean),
+)
 
 function normalizeDisplayName(value: string) {
   return value.trim().replace(/\s+/g, ' ')
@@ -85,6 +94,7 @@ function toViewerAccount(account: StoredAccount): ViewerAccount {
     createdAt: account.createdAt,
     displayName: account.displayName,
     email: account.email,
+    isAdmin: adminEmailAddresses.has(account.emailNormalized),
   }
 }
 

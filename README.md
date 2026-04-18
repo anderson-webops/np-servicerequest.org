@@ -57,9 +57,12 @@ The API lives in `back-end` and exposes:
 - `POST /api/submissions/service-request`
 - `POST /api/submissions/item-request`
 - `POST /api/submissions/item-lending`
+- `POST /api/board/items/:itemId/claim-management`
 - `POST /api/board/items/:itemId/interactions`
 - `POST /api/board/items/:itemId/contact`
 - `POST /api/board/items/:itemId/interactions/:interactionId/contact`
+- `DELETE /api/board/items/:itemId`
+- `DELETE /api/board/items/:itemId/interactions/:interactionId`
 - `POST /api/board/account/register`
 - `POST /api/board/account/login`
 - `POST /api/board/account/logout`
@@ -69,14 +72,22 @@ Default port: `3006`
 Form submissions are written under `SUBMISSIONS_DATA_DIR` when it is set. When it is not set, the back-end falls back to an OS temp directory under `np-servicerequest/submissions`, which is suitable for local development but not durable production storage.
 The live board, optional accounts, and session files are stored under a `_board` subdirectory beneath that same root.
 
-### Email Notifications
+### Email Notifications And Management Links
 
 The back-end includes an SMTP notification pipeline for new board items and replies, but it is intentionally off by default.
+Anonymous posters who use an email address can also receive a management link that restores delete access from another browser.
 
 - `ENABLE_BOARD_EMAIL_NOTIFICATIONS=false` keeps notifications disabled
+- `ENABLE_BOARD_MANAGEMENT_EMAILS=true` keeps owner management-link emails enabled when SMTP is configured
 - `BOARD_NOTIFICATION_EMAIL_TO` defaults to `servicerequest@jacobdanderson.net`
 - `BOARD_NOTIFICATION_EMAIL_FROM` overrides the sender address
+- `BOARD_PUBLIC_WEB_URL` sets the site URL used in emailed management links and defaults to `https://np-servicerequest.org`
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, and `SMTP_PASS` configure delivery when notifications are enabled
+
+### Admin Moderation
+
+Signed-in board accounts whose email addresses appear in `BOARD_ADMIN_EMAILS` are treated as admins.
+Admins can delete any board post and any board reply directly from the live board.
 
 ### Bot Protection
 
