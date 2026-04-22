@@ -16,25 +16,30 @@ definePageMeta({
 
 useSeoMeta({
   title: 'Volunteer an item to lend',
-  description: 'Post an item lending offer to the community board so neighbors can ask to borrow something you have available.',
+  description:
+    'Post an item lending offer to the community board so neighbors can ask to borrow something you have available.',
 })
 
-const { loadBootstrap, securityError, status, submit } = useBoardSubmission('itemLending')
+const { loadBootstrap, securityError, status, submit }
+  = useBoardSubmission('itemLending')
 const contactMethod = ref(normalizeBoardContactMethod('email'))
 
 onMounted(() => {
   void loadBootstrap()
 })
 
-watch(() => status.success, (nextSuccess) => {
-  if (nextSuccess)
-    contactMethod.value = 'email'
-})
+watch(
+  () => status.success,
+  (nextSuccess) => {
+    if (nextSuccess)
+      contactMethod.value = 'email'
+  },
+)
 </script>
 
 <template>
   <BoardSubmissionPage
-    description="List items you are willing to share, from tools and kitchen utensils to books and specialty equipment, so people know what is available."
+    description="Use this page to offer an item that someone else can borrow."
     eyebrow="Volunteer an item to lend"
     :examples="[
       'Say what the item is and what condition it is in.',
@@ -46,18 +51,28 @@ watch(() => status.success, (nextSuccess) => {
     :status="status"
     submit-label="Post lending offer"
     success-text="Posted. Your lending offer now appears on the live board. If you used an email address, a management link was sent there so you can delete it later from another browser."
-    title="Offer something useful so another person can reach out and borrow it."
+    title="Offer an item for someone else to borrow."
     @submit="submit"
   >
     <label class="field">
       <span>Your name</span>
-      <input autocomplete="name" name="name" placeholder="Jane Smith" required type="text">
+      <input
+        autocomplete="name"
+        name="name"
+        placeholder="Jane Smith"
+        required
+        type="text"
+      >
     </label>
 
     <label class="field">
       <span>Contact method</span>
       <select v-model="contactMethod" name="contact_method" required>
-        <option v-for="option in boardContactMethodOptions" :key="option.value" :value="option.value">
+        <option
+          v-for="option in boardContactMethodOptions"
+          :key="option.value"
+          :value="option.value"
+        >
           {{ option.label }}
         </option>
       </select>
@@ -77,32 +92,61 @@ watch(() => status.success, (nextSuccess) => {
 
     <label class="field field--wide">
       <span>Contact note (optional)</span>
-      <input name="contact_note" placeholder="Example: text first, porch pickup only, or evenings are easiest." type="text">
+      <input
+        name="contact_note"
+        placeholder="Example: text first, porch pickup only, or evenings are easiest."
+        type="text"
+      >
     </label>
 
     <label class="field field--wide">
       <span>Item available to lend</span>
-      <input name="item_available" placeholder="Cordless drill, bundt pan, pruning shears, history book set..." required type="text">
+      <input
+        name="item_available"
+        placeholder="Cordless drill, bundt pan, pruning shears, history book set..."
+        required
+        type="text"
+      >
     </label>
 
     <label class="field">
       <span>Neighborhood</span>
-      <input name="neighborhood" placeholder="Where pickup can happen" required type="text">
+      <input
+        name="neighborhood"
+        placeholder="Where pickup can happen"
+        required
+        type="text"
+      >
     </label>
 
     <label class="field">
       <span>Availability</span>
-      <input name="availability" placeholder="Weeknights, weekends, most afternoons..." required type="text">
+      <input
+        name="availability"
+        placeholder="Weeknights, weekends, most afternoons..."
+        required
+        type="text"
+      >
     </label>
 
     <label class="field">
       <span>Condition or notes</span>
-      <input name="condition" placeholder="New, gently used, heavy, fragile..." required type="text">
+      <input
+        name="condition"
+        placeholder="New, gently used, heavy, fragile..."
+        required
+        type="text"
+      >
     </label>
 
     <label class="field field--wide">
       <span>Borrowing guidelines</span>
-      <textarea name="guidelines" placeholder="Let people know how long they can borrow the item, whether you need a text before pickup, and anything else they should respect." required rows="6" />
+      <textarea
+        name="guidelines"
+        placeholder="Let people know how long they can borrow the item, whether you need a text before pickup, and anything else they should respect."
+        required
+        rows="6"
+      />
     </label>
   </BoardSubmissionPage>
 </template>

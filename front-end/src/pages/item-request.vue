@@ -16,25 +16,30 @@ definePageMeta({
 
 useSeoMeta({
   title: 'Request an item',
-  description: 'Post an item request to the community board for something you want to borrow, such as a tool, book, or kitchen item.',
+  description:
+    'Post an item request to the community board for something you want to borrow, such as a tool, book, or kitchen item.',
 })
 
-const { loadBootstrap, securityError, status, submit } = useBoardSubmission('itemRequest')
+const { loadBootstrap, securityError, status, submit }
+  = useBoardSubmission('itemRequest')
 const contactMethod = ref(normalizeBoardContactMethod('email'))
 
 onMounted(() => {
   void loadBootstrap()
 })
 
-watch(() => status.success, (nextSuccess) => {
-  if (nextSuccess)
-    contactMethod.value = 'email'
-})
+watch(
+  () => status.success,
+  (nextSuccess) => {
+    if (nextSuccess)
+      contactMethod.value = 'email'
+  },
+)
 </script>
 
 <template>
   <BoardSubmissionPage
-    description="This page is for practical item requests such as an axe, a kitchen utensil, a certain book, a ladder, or another short-term household need."
+    description="Use this page when you want to borrow a practical item such as a tool, book, kitchen item, or ladder."
     eyebrow="Request an item"
     :examples="[
       'Name the exact item if you can.',
@@ -46,18 +51,28 @@ watch(() => status.success, (nextSuccess) => {
     :status="status"
     submit-label="Post item request"
     success-text="Posted. Your item request now appears on the live board. If you used an email address, a management link was sent there so you can delete it later from another browser."
-    title="Ask for something specific that you want to borrow."
+    title="Ask to borrow a specific item."
     @submit="submit"
   >
     <label class="field">
       <span>Your name</span>
-      <input autocomplete="name" name="name" placeholder="Jane Smith" required type="text">
+      <input
+        autocomplete="name"
+        name="name"
+        placeholder="Jane Smith"
+        required
+        type="text"
+      >
     </label>
 
     <label class="field">
       <span>Contact method</span>
       <select v-model="contactMethod" name="contact_method" required>
-        <option v-for="option in boardContactMethodOptions" :key="option.value" :value="option.value">
+        <option
+          v-for="option in boardContactMethodOptions"
+          :key="option.value"
+          :value="option.value"
+        >
           {{ option.label }}
         </option>
       </select>
@@ -77,12 +92,21 @@ watch(() => status.success, (nextSuccess) => {
 
     <label class="field field--wide">
       <span>Contact note (optional)</span>
-      <input name="contact_note" placeholder="Example: text first, weekdays only, or mention the item name when you reach out." type="text">
+      <input
+        name="contact_note"
+        placeholder="Example: text first, weekdays only, or mention the item name when you reach out."
+        type="text"
+      >
     </label>
 
     <label class="field field--wide">
       <span>Item needed</span>
-      <input name="item_needed" placeholder="Axe, stock pot, cookbook, drill, folding table..." required type="text">
+      <input
+        name="item_needed"
+        placeholder="Axe, stock pot, cookbook, drill, folding table..."
+        required
+        type="text"
+      >
     </label>
 
     <label class="field">
@@ -92,15 +116,18 @@ watch(() => status.success, (nextSuccess) => {
 
     <label class="field">
       <span>How long will you need it?</span>
-      <input name="duration" placeholder="A day, a weekend, two weeks..." required type="text">
+      <input
+        name="duration"
+        placeholder="A day, a weekend, two weeks..."
+        required
+        type="text"
+      >
     </label>
 
     <label class="field">
       <span>Pickup plan</span>
       <select name="pickup_plan" required>
-        <option value="">
-          Select one
-        </option>
+        <option value="">Select one</option>
         <option>I can pick it up</option>
         <option>I may need drop-off help</option>
         <option>I am flexible</option>
@@ -109,12 +136,22 @@ watch(() => status.success, (nextSuccess) => {
 
     <label class="field">
       <span>Your neighborhood</span>
-      <input name="neighborhood" placeholder="Where you are located" required type="text">
+      <input
+        name="neighborhood"
+        placeholder="Where you are located"
+        required
+        type="text"
+      >
     </label>
 
     <label class="field field--wide">
       <span>Details</span>
-      <textarea name="details" placeholder="Share any size, edition, quantity, or use-case details that would help a lender know whether they have the right item." required rows="6" />
+      <textarea
+        name="details"
+        placeholder="Share any size, edition, quantity, or use-case details that would help a lender know whether they have the right item."
+        required
+        rows="6"
+      />
     </label>
   </BoardSubmissionPage>
 </template>

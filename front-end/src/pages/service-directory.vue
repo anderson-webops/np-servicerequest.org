@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import type { ServiceDirectoryProviderResult, ServiceDirectoryProviderStatus, ServiceDirectorySearchResponse, ServiceGeoPoint } from '~/utils/serviceDirectory'
+import type {
+  ServiceDirectoryProviderResult,
+  ServiceDirectoryProviderStatus,
+  ServiceDirectorySearchResponse,
+  ServiceGeoPoint,
+} from '~/utils/serviceDirectory'
 
 import {
   findKnownPlace,
   getServiceDirectoryEndpoint,
   nationwideServiceSites,
   searchAreaSpecificSites,
-  serviceDirectoryApiSources,
-  serviceDirectoryApiStatusLabels,
   serviceDirectoryAudienceLabels,
-  serviceDirectoryResearchPrompt,
 } from '~/utils/serviceDirectory'
 
 definePageMeta({
@@ -18,7 +20,8 @@ definePageMeta({
 
 useSeoMeta({
   title: 'Service Directory',
-  description: 'Browse nationwide volunteer platforms, search seeded regional service websites, and evaluate which official APIs could eventually power a fuller service-opportunity finder.',
+  description:
+    'Browse nationwide volunteer platforms, search local service websites, and look for live opportunities when available.',
 })
 
 const runtimeConfig = useRuntimeConfig()
@@ -27,7 +30,6 @@ const radiusMiles = ref(40)
 const browserOrigin = ref<ServiceGeoPoint | null>(null)
 const geoPending = ref(false)
 const geoError = ref('')
-const copyNotice = ref('')
 const hasHydrated = ref(false)
 const providerPending = ref(false)
 const providerError = ref('')
@@ -53,7 +55,9 @@ const providerStatus = ref<ServiceDirectoryProviderStatus>({
 })
 
 const placeMatch = computed(() => findKnownPlace(locationQuery.value))
-const activeOrigin = computed(() => browserOrigin.value ?? placeMatch.value?.coordinates ?? null)
+const activeOrigin = computed(
+  () => browserOrigin.value ?? placeMatch.value?.coordinates ?? null,
+)
 const areaResults = computed(() =>
   searchAreaSpecificSites({
     origin: activeOrigin.value,
@@ -64,24 +68,15 @@ const areaResults = computed(() =>
 
 const searchModeLabel = computed(() => {
   if (browserOrigin.value)
-    return 'Using your current browser location for exact radius filtering.'
+    return 'Using your current location for local matching.'
 
   if (placeMatch.value)
-    return `Using seeded place matching for ${placeMatch.value.label}.`
+    return `Using ${placeMatch.value.label} for local matching.`
 
   if (locationQuery.value.trim())
-    return 'Using text matching only. Exact radius filtering will improve once a geocoder or live directory API is connected.'
+    return 'Using text matching only. Your current location will produce better nearby results.'
 
-  return 'Showing the current seeded local examples. Use your location or type a supported city or region to narrow them.'
-})
-
-const nationwideCounts = computed(() => {
-  return {
-    apiReady: nationwideServiceSites.filter(site => site.apiStatus === 'available').length,
-    manual: nationwideServiceSites.filter(site => site.apiStatus === 'manual').length,
-    partner: nationwideServiceSites.filter(site => site.apiStatus === 'partner').length,
-    total: nationwideServiceSites.length,
-  }
+  return 'Start with the local examples below, or enter a place to narrow them.'
 })
 
 const providerSummaryLabel = computed(() => {
@@ -89,10 +84,10 @@ const providerSummaryLabel = computed(() => {
     return 'Loading live Idealist listings…'
 
   if (providerError.value)
-    return 'Live provider search failed. The seeded directory is still available below.'
+    return 'Live search is unavailable right now. The directory links on this page still work.'
 
   if (!providerStatus.value.configured)
-    return 'Idealist support is wired in source, but this server still needs an API key before live listings can appear.'
+    return 'Live search is not enabled on this server yet. Use the directory links on this page for now.'
 
   return `${providerResults.value.length} live Idealist result${providerResults.value.length === 1 ? '' : 's'} shown from ${providerPagination.value.totalItems} current matches.`
 })
@@ -112,13 +107,15 @@ async function useCurrentLocation() {
   geoError.value = ''
 
   try {
-    const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, {
-        enableHighAccuracy: false,
-        maximumAge: 5 * 60 * 1000,
-        timeout: 10 * 1000,
-      })
-    })
+    const position = await new Promise<GeolocationPosition>(
+      (resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: false,
+          maximumAge: 5 * 60 * 1000,
+          timeout: 10 * 1000,
+        })
+      },
+    )
 
     browserOrigin.value = {
       lat: position.coords.latitude,
@@ -128,7 +125,8 @@ async function useCurrentLocation() {
     await runProviderSearch()
   }
   catch {
-    geoError.value = 'Could not read your current location. You can still search by city or region text.'
+    geoError.value
+      = 'Could not read your current location. You can still search by city or region text.'
   }
   finally {
     geoPending.value = false
@@ -137,7 +135,6 @@ async function useCurrentLocation() {
 
 function clearDirectorySearch() {
   browserOrigin.value = null
-  copyNotice.value = ''
   geoError.value = ''
   locationQuery.value = ''
   radiusMiles.value = 40
@@ -146,33 +143,29 @@ function clearDirectorySearch() {
   void runProviderSearch()
 }
 
-async function copyResearchPrompt() {
-  if (!import.meta.client || !navigator.clipboard) {
-    copyNotice.value = 'Copy is not available in this browser.'
-    return
-  }
-
-  try {
-    await navigator.clipboard.writeText(serviceDirectoryResearchPrompt)
-    copyNotice.value = 'Deep research prompt copied.'
-  }
-  catch {
-    copyNotice.value = 'Copy failed. You can still select the prompt manually.'
-  }
-}
-
-async function runProviderSearch(options?: { page?: number, refresh?: boolean }) {
+async function runProviderSearch(options?: {
+  page?: number
+  refresh?: boolean
+}) {
   providerPending.value = true
   providerError.value = ''
 
   try {
-    const endpoint = new URL(getServiceDirectoryEndpoint(runtimeConfig.public.apiBaseUrl))
+    const endpoint = new URL(
+      getServiceDirectoryEndpoint(runtimeConfig.public.apiBaseUrl),
+    )
 
     endpoint.searchParams.set('provider', 'idealist')
     endpoint.searchParams.set('query', locationQuery.value.trim())
     endpoint.searchParams.set('radiusMiles', String(radiusMiles.value))
-    endpoint.searchParams.set('page', String(options?.page || providerPagination.value.page || 1))
-    endpoint.searchParams.set('pageSize', String(providerPagination.value.pageSize))
+    endpoint.searchParams.set(
+      'page',
+      String(options?.page || providerPagination.value.page || 1),
+    )
+    endpoint.searchParams.set(
+      'pageSize',
+      String(providerPagination.value.pageSize),
+    )
 
     if (activeOrigin.value) {
       endpoint.searchParams.set('lat', String(activeOrigin.value.lat))
@@ -182,7 +175,9 @@ async function runProviderSearch(options?: { page?: number, refresh?: boolean })
     if (options?.refresh)
       endpoint.searchParams.set('refresh', 'true')
 
-    const response = await $fetch<ServiceDirectorySearchResponse>(endpoint.toString())
+    const response = await $fetch<ServiceDirectorySearchResponse>(
+      endpoint.toString(),
+    )
     providerResults.value = response.results
     providerPagination.value = response.pagination
     providerStatus.value = response.provider
@@ -193,8 +188,14 @@ async function runProviderSearch(options?: { page?: number, refresh?: boolean })
     if (error && typeof error === 'object' && 'data' in error) {
       const data = (error as { data?: unknown }).data
 
-      if (data && typeof data === 'object' && 'message' in data && typeof data.message === 'string')
+      if (
+        data
+        && typeof data === 'object'
+        && 'message' in data
+        && typeof data.message === 'string'
+      ) {
         providerError.value = data.message
+      }
     }
   }
   finally {
@@ -203,7 +204,10 @@ async function runProviderSearch(options?: { page?: number, refresh?: boolean })
 }
 
 function changeProviderPage(nextPage: number) {
-  const boundedPage = Math.min(Math.max(nextPage, 1), providerPagination.value.totalPages)
+  const boundedPage = Math.min(
+    Math.max(nextPage, 1),
+    providerPagination.value.totalPages,
+  )
 
   if (boundedPage === providerPagination.value.page)
     return
@@ -215,34 +219,22 @@ function changeProviderPage(nextPage: number) {
 <template>
   <div class="service-directory-page">
     <section class="service-directory-page__hero">
-      <NuxtLink class="service-directory-page__back" prefetch-on="interaction" to="/#live-board">
+      <NuxtLink
+        class="service-directory-page__back"
+        prefetch-on="interaction"
+        to="/#live-board"
+      >
         Back to live board
       </NuxtLink>
 
       <p class="eyebrow">
         Service directory
       </p>
-      <h1>
-        A starter map for finding service opportunities beyond this board.
-      </h1>
+      <h1>Find service opportunities beyond this board.</h1>
       <p class="service-directory-page__lede">
-        This page is a directory framework: seeded nationwide volunteer platforms, searchable area-specific examples, and a clear read on which official APIs could realistically power a broader service-opportunity finder later.
+        Start with the large volunteer networks, then narrow toward local
+        organizations and live opportunity results when they are available.
       </p>
-
-      <div class="directory-hero__metrics">
-        <article>
-          <strong>{{ nationwideCounts.total }}</strong>
-          <span>seeded nationwide websites</span>
-        </article>
-        <article>
-          <strong>{{ serviceDirectoryApiSources.length }}</strong>
-          <span>integration paths reviewed</span>
-        </article>
-        <article>
-          <strong>{{ nationwideCounts.apiReady }}</strong>
-          <span>official API-led candidates</span>
-        </article>
-      </div>
     </section>
 
     <section class="directory-section">
@@ -250,21 +242,22 @@ function changeProviderPage(nextPage: number) {
         <p class="eyebrow">
           Nationwide platforms
         </p>
-        <h2>
-          Start with the large discovery networks before you build a metro-by-metro map.
-        </h2>
+        <h2>Start with the large volunteer networks first.</h2>
         <p class="section-copy">
-          These are the broadest service and volunteer directories I could anchor to official sources right now. The API badge shows whether the site looks automatable, partner-oriented, or still manual for now.
+          These are the broadest directories for service and volunteer
+          opportunities. Use them first when you want a wider search than one
+          city or organization can provide.
         </p>
       </div>
 
       <div class="nationwide-grid">
-        <article v-for="site in nationwideServiceSites" :key="site.id" class="directory-card">
+        <article
+          v-for="site in nationwideServiceSites"
+          :key="site.id"
+          class="directory-card"
+        >
           <div class="directory-card__meta">
             <span>{{ serviceDirectoryAudienceLabels[site.audience] }}</span>
-            <span class="directory-badge" :data-status="site.apiStatus">
-              {{ serviceDirectoryApiStatusLabels[site.apiStatus] }}
-            </span>
           </div>
 
           <h3>{{ site.name }}</h3>
@@ -273,9 +266,6 @@ function changeProviderPage(nextPage: number) {
           </p>
           <p class="directory-card__summary">
             {{ site.summary }}
-          </p>
-          <p class="directory-card__notes">
-            {{ site.apiNotes }}
           </p>
 
           <ul class="directory-card__tags">
@@ -305,7 +295,8 @@ function changeProviderPage(nextPage: number) {
           Search local and metro-specific service websites by place and radius.
         </h2>
         <p class="section-copy">
-          The current release is seeded with a small local dataset so the page works right now. Exact radius filtering already works with your browser location or supported place matches, and the same UI can later sit on top of a real geocoder or listings API.
+          Use your current location or type a place to narrow the local links
+          below.
         </p>
       </div>
 
@@ -346,10 +337,14 @@ function changeProviderPage(nextPage: number) {
               type="button"
               @click="useCurrentLocation"
             >
-              {{ geoPending ? 'Reading location…' : 'Use my current location' }}
+              {{ geoPending ? "Reading location…" : "Use my current location" }}
             </button>
 
-            <button class="secondary-button" type="button" @click="clearDirectorySearch">
+            <button
+              class="secondary-button"
+              type="button"
+              @click="clearDirectorySearch"
+            >
               Clear search
             </button>
 
@@ -359,7 +354,11 @@ function changeProviderPage(nextPage: number) {
               type="button"
               @click="runProviderSearch({ page: 1 })"
             >
-              {{ providerPending ? 'Searching live listings…' : 'Search live Idealist listings' }}
+              {{
+                providerPending
+                  ? "Searching live listings…"
+                  : "Search live Idealist results"
+              }}
             </button>
 
             <button
@@ -368,14 +367,18 @@ function changeProviderPage(nextPage: number) {
               type="button"
               @click="runProviderSearch({ page: 1, refresh: true })"
             >
-              Refresh provider cache
+              Refresh live results
             </button>
           </div>
 
           <p class="finder-panel__note">
             {{ searchModeLabel }}
           </p>
-          <p v-if="geoError" class="inline-note inline-note--error" role="alert">
+          <p
+            v-if="geoError"
+            class="inline-note inline-note--error"
+            role="alert"
+          >
             {{ geoError }}
           </p>
           <p v-if="placeMatch" class="inline-note" role="status">
@@ -385,24 +388,25 @@ function changeProviderPage(nextPage: number) {
 
         <div class="finder-results">
           <div class="finder-results__summary">
-            <span>{{ areaResults.length }} seeded local result<span v-if="areaResults.length !== 1">s</span></span>
-            <span>Framework-ready for more regional entries and live adapters.</span>
+            <span>{{ areaResults.length }} local directory result<span
+              v-if="areaResults.length !== 1"
+            >s</span></span>
+            <span>Use your current location for tighter local matching.</span>
           </div>
 
           <div v-if="!areaResults.length" class="finder-empty">
-            <h3>No seeded local websites match that search yet.</h3>
-            <p>
-              The framework is in place, but this release only seeds a few example regional sites. The next step would be to expand the regional directory manually or plug in a live source such as Idealist, VolunteerMatch, or a partner integration.
-            </p>
+            <h3>No local directory links match that search yet.</h3>
+            <p>Try a broader place name or widen the radius.</p>
           </div>
 
           <div v-else class="finder-results__grid">
-            <article v-for="site in areaResults" :key="site.id" class="finder-card">
+            <article
+              v-for="site in areaResults"
+              :key="site.id"
+              class="finder-card"
+            >
               <div class="directory-card__meta">
                 <span>{{ serviceDirectoryAudienceLabels[site.audience] }}</span>
-                <span class="directory-badge" :data-status="site.apiStatus">
-                  {{ serviceDirectoryApiStatusLabels[site.apiStatus] }}
-                </span>
               </div>
 
               <h3>{{ site.name }}</h3>
@@ -415,7 +419,10 @@ function changeProviderPage(nextPage: number) {
               <p class="finder-card__match">
                 {{ site.matchReason }}
               </p>
-              <p v-if="site.distanceMiles != null" class="finder-card__distance">
+              <p
+                v-if="site.distanceMiles != null"
+                class="finder-card__distance"
+              >
                 Approx. {{ site.distanceMiles.toFixed(1) }} miles away.
               </p>
 
@@ -442,203 +449,136 @@ function changeProviderPage(nextPage: number) {
     <section class="directory-section directory-section--provider">
       <div class="section-heading">
         <p class="eyebrow">
-          Live provider results
+          Live search
         </p>
-        <h2>
-          Idealist is now wired into this page through a backend-maintained local index.
-        </h2>
+        <h2>Search live opportunities when they are available.</h2>
         <p class="section-copy">
-          This search path uses the official Idealist listings feed on the server side when an API key is configured. The server keeps a cached index of live volunteer listings, then this page filters and pages those results using the same location and radius inputs above.
+          The same controls above can also search current Idealist opportunities
+          when live search is enabled on this server.
         </p>
       </div>
 
-      <div class="provider-layout">
-        <article class="provider-status-card">
-          <div class="directory-card__meta">
-            <span>Provider status</span>
-            <span class="directory-badge" :data-status="providerStatus.configured ? 'available' : 'manual'">
-              {{ providerStatus.configured ? 'Configured' : 'Needs API key' }}
-            </span>
-          </div>
-
-          <h3>Idealist live listings</h3>
-          <p class="directory-card__summary">
-            {{ providerStatus.message }}
-          </p>
-          <p class="directory-card__notes">
-            Last sync:
-            <strong>{{ providerStatus.lastSyncedAt ? new Date(providerStatus.lastSyncedAt).toLocaleString() : 'Not synced yet' }}</strong>
-          </p>
-          <p class="directory-card__notes">
-            Cached listings: <strong>{{ providerStatus.listingCount }}</strong>
-          </p>
-          <p v-if="providerStatus.lastError" class="inline-note inline-note--error" role="alert">
-            {{ providerStatus.lastError }}
-          </p>
-
-          <div class="directory-card__actions">
-            <a :href="providerStatus.sourceUrl" rel="noreferrer" target="_blank">
-              Provider docs
-            </a>
-          </div>
-        </article>
-
-        <div class="provider-results">
-          <div class="finder-results__summary">
-            <span>{{ providerSummaryLabel }}</span>
-            <span v-if="providerPagination.totalItems">Page {{ providerPagination.page }} of {{ providerPagination.totalPages }}</span>
-          </div>
-
-          <p v-if="providerError" class="inline-note inline-note--error" role="alert">
-            {{ providerError }}
-          </p>
-
-          <div v-if="providerPending && !providerResults.length" class="finder-empty" role="status">
-            <h3>Loading live listings…</h3>
-            <p>
-              The server is checking the current Idealist-backed cache and will return live opportunities as soon as they are ready.
-            </p>
-          </div>
-
-          <div v-else-if="!providerResults.length" class="finder-empty">
-            <h3>No live Idealist listings matched this search yet.</h3>
-            <p>
-              Try widening the radius, using a simpler keyword, or triggering a provider refresh. If the provider is not configured on the server yet, the seeded directory above still works as a manual discovery path.
-            </p>
-          </div>
-
-          <div v-else class="finder-results__grid">
-            <article v-for="result in providerResults" :key="result.id" class="finder-card">
-              <div class="directory-card__meta">
-                <span>Live {{ result.provider }}</span>
-                <span class="directory-badge" :data-status="result.locationType === 'REMOTE' ? 'partner' : 'available'">
-                  {{ result.locationType }}
-                </span>
-              </div>
-
-              <h3>{{ result.title }}</h3>
-              <p class="directory-card__coverage">
-                {{ result.organizationName }}
-              </p>
-              <p class="directory-card__summary">
-                {{ result.summary }}
-              </p>
-              <p class="finder-card__match">
-                {{ result.matchReason }}
-              </p>
-              <p class="finder-card__distance">
-                {{ result.locationLabel }}
-                <span v-if="result.distanceMiles != null"> · {{ result.distanceMiles.toFixed(1) }} miles away</span>
-              </p>
-
-              <ul class="directory-card__tags">
-                <li v-for="tag in [...result.areasOfFocus, ...result.functionTags].slice(0, 5)" :key="tag">
-                  {{ tag }}
-                </li>
-                <li v-if="result.isRecurring">
-                  recurring
-                </li>
-              </ul>
-
-              <div class="directory-card__actions">
-                <a :href="result.opportunityUrl" rel="noreferrer" target="_blank">
-                  Open listing
-                </a>
-                <a :href="result.applyUrl" rel="noreferrer" target="_blank">
-                  Apply / learn more
-                </a>
-              </div>
-            </article>
-          </div>
-
-          <div v-if="providerPagination.totalPages > 1" class="admin-pagination">
-            <button
-              class="secondary-button"
-              :disabled="providerPending || !providerPagination.hasPreviousPage"
-              type="button"
-              @click="changeProviderPage(providerPagination.page - 1)"
-            >
-              Newer results
-            </button>
-            <button
-              class="secondary-button secondary-button--dark"
-              :disabled="providerPending || !providerPagination.hasNextPage"
-              type="button"
-              @click="changeProviderPage(providerPagination.page + 1)"
-            >
-              More results
-            </button>
-          </div>
+      <div class="provider-results">
+        <div class="finder-results__summary">
+          <span>{{ providerSummaryLabel }}</span>
+          <span v-if="providerPagination.totalItems">Page {{ providerPagination.page }} of
+            {{ providerPagination.totalPages }}</span>
         </div>
-      </div>
-    </section>
 
-    <section class="directory-section">
-      <div class="section-heading">
-        <p class="eyebrow">
-          API and integration outlook
+        <p
+          v-if="providerError"
+          class="inline-note inline-note--error"
+          role="alert"
+        >
+          {{ providerError }}
         </p>
-        <h2>
-          These are the most plausible data feeds if this evolves from a directory into a live search product.
-        </h2>
-        <p class="section-copy">
-          Not every service website exposes a public API. The cards below separate direct listings APIs from partner-style integrations and site-only sources that still need manual curation.
+        <p
+          v-else-if="!providerStatus.configured"
+          class="inline-note"
+          role="status"
+        >
+          Live Idealist search is not enabled on this server yet.
         </p>
-      </div>
-
-      <div class="integration-grid">
-        <article v-for="source in serviceDirectoryApiSources" :key="source.id" class="integration-card">
-          <div class="directory-card__meta">
-            <span>{{ source.coverageLabel }}</span>
-            <span class="directory-badge" :data-status="source.status">
-              {{ serviceDirectoryApiStatusLabels[source.status] }}
-            </span>
-          </div>
-
-          <h3>{{ source.name }}</h3>
-          <p class="directory-card__summary">
-            {{ source.summary }}
-          </p>
-          <p class="directory-card__notes">
-            {{ source.notes }}
-          </p>
-
-          <div class="directory-card__actions">
-            <a :href="source.url" rel="noreferrer" target="_blank">
-              Open source
-            </a>
-            <a v-if="source.integrationUrl" :href="source.integrationUrl" rel="noreferrer" target="_blank">
-              Integration details
-            </a>
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <section class="directory-section directory-section--prompt">
-      <div class="section-heading">
-        <p class="eyebrow">
-          Deep research prompt
+        <p
+          v-else-if="providerStatus.lastError"
+          class="inline-note inline-note--error"
+          role="alert"
+        >
+          {{ providerStatus.lastError }}
         </p>
-        <h2>
-          Use this prompt to expand the directory city by city.
-        </h2>
-        <p class="section-copy">
-          This is written for a ChatGPT deep research pass so you can systematically grow the directory, confirm which sites are still active, and separate real integration paths from manual-only websites.
-        </p>
-      </div>
 
-      <div class="prompt-card">
-        <div class="prompt-card__actions">
-          <button class="submit-button" type="button" @click="copyResearchPrompt">
-            Copy prompt
+        <div
+          v-if="providerPending && !providerResults.length"
+          class="finder-empty"
+          role="status"
+        >
+          <h3>Loading live listings…</h3>
+          <p>Checking current Idealist opportunities now.</p>
+        </div>
+
+        <div v-else-if="!providerResults.length" class="finder-empty">
+          <h3>No live Idealist listings matched this search yet.</h3>
+          <p>Try a broader keyword or a wider radius.</p>
+        </div>
+
+        <div v-else class="finder-results__grid">
+          <article
+            v-for="result in providerResults"
+            :key="result.id"
+            class="finder-card"
+          >
+            <div class="directory-card__meta">
+              <span>Live {{ result.provider }}</span>
+              <span
+                class="directory-badge"
+                :data-status="
+                  result.locationType === 'REMOTE' ? 'partner' : 'available'
+                "
+              >
+                {{ result.locationType }}
+              </span>
+            </div>
+
+            <h3>{{ result.title }}</h3>
+            <p class="directory-card__coverage">
+              {{ result.organizationName }}
+            </p>
+            <p class="directory-card__summary">
+              {{ result.summary }}
+            </p>
+            <p class="finder-card__match">
+              {{ result.matchReason }}
+            </p>
+            <p class="finder-card__distance">
+              {{ result.locationLabel }}
+              <span v-if="result.distanceMiles != null">
+                · {{ result.distanceMiles.toFixed(1) }} miles away</span>
+            </p>
+
+            <ul class="directory-card__tags">
+              <li
+                v-for="tag in [
+                  ...result.areasOfFocus,
+                  ...result.functionTags,
+                ].slice(0, 5)"
+                :key="tag"
+              >
+                {{ tag }}
+              </li>
+              <li v-if="result.isRecurring">
+                recurring
+              </li>
+            </ul>
+
+            <div class="directory-card__actions">
+              <a :href="result.opportunityUrl" rel="noreferrer" target="_blank">
+                Open listing
+              </a>
+              <a :href="result.applyUrl" rel="noreferrer" target="_blank">
+                Apply / learn more
+              </a>
+            </div>
+          </article>
+        </div>
+
+        <div v-if="providerPagination.totalPages > 1" class="admin-pagination">
+          <button
+            class="secondary-button"
+            :disabled="providerPending || !providerPagination.hasPreviousPage"
+            type="button"
+            @click="changeProviderPage(providerPagination.page - 1)"
+          >
+            Newer results
           </button>
-          <p v-if="copyNotice" class="inline-note" role="status">
-            {{ copyNotice }}
-          </p>
+          <button
+            class="secondary-button secondary-button--dark"
+            :disabled="providerPending || !providerPagination.hasNextPage"
+            type="button"
+            @click="changeProviderPage(providerPagination.page + 1)"
+          >
+            More results
+          </button>
         </div>
-
-        <textarea readonly :value="serviceDirectoryResearchPrompt" />
       </div>
     </section>
   </div>

@@ -1,8 +1,18 @@
 <script setup lang="ts">
-import type { AntiBotChallenge, AuthResponse, BoardBootstrapResponse, ViewerAccount } from '~/utils/board'
+import type {
+  AntiBotChallenge,
+  AuthResponse,
+  BoardBootstrapResponse,
+  ViewerAccount,
+} from '~/utils/board'
 
 import { readStoredAdminKey } from '~/utils/admin'
-import { isAntiBotChallenge, isAntiBotChallengeExpired, markAntiBotChallengeObserved, waitForAntiBotChallengeMinimumAge } from '~/utils/antiBot'
+import {
+  isAntiBotChallenge,
+  isAntiBotChallengeExpired,
+  markAntiBotChallengeObserved,
+  waitForAntiBotChallengeMinimumAge,
+} from '~/utils/antiBot'
 import { getBoardEndpoint } from '~/utils/board'
 
 type AuthTab = 'login' | 'register'
@@ -33,7 +43,8 @@ definePageMeta({
 
 useSeoMeta({
   title: 'Optional account',
-  description: 'Create or sign in to an optional account for repeat participation on the live community board.',
+  description:
+    'Create or sign in to an optional account for repeat participation on the live community board.',
 })
 
 const runtimeConfig = useRuntimeConfig()
@@ -65,8 +76,12 @@ const loginForm = reactive({
   'password': '',
 })
 
-const accountUiReady = computed(() => hasHydrated.value && bootstrapLoaded.value)
-const showAdminSessionCard = computed(() => accountUiReady.value && adminSessionActive.value && !viewer.value)
+const accountUiReady = computed(
+  () => hasHydrated.value && bootstrapLoaded.value,
+)
+const showAdminSessionCard = computed(
+  () => accountUiReady.value && adminSessionActive.value && !viewer.value,
+)
 
 function getQueryValue(value: unknown) {
   if (Array.isArray(value))
@@ -90,8 +105,12 @@ function syncAuthTabFromRoute() {
 }
 
 async function pushAuthTab(nextTab: AuthTab) {
-  if (nextTab === authTab.value && getQueryValue(route.query.tab) === (nextTab === 'register' ? '' : nextTab))
+  if (
+    nextTab === authTab.value
+    && getQueryValue(route.query.tab) === (nextTab === 'register' ? '' : nextTab)
+  ) {
     return
+  }
 
   await router.push({
     hash: route.hash,
@@ -118,7 +137,11 @@ function applyServerContext(payload: unknown) {
     viewer.value = record.viewer
 }
 
-function getApiErrorState(error: unknown, endpoint: string, fallbackMessage: string): FormErrorState {
+function getApiErrorState(
+  error: unknown,
+  endpoint: string,
+  fallbackMessage: string,
+): FormErrorState {
   const fallbackDetail = `Request URL: ${endpoint}. Please try again in a moment.`
   let statusCode: number | null = null
   let serverMessage = ''
@@ -131,8 +154,14 @@ function getApiErrorState(error: unknown, endpoint: string, fallbackMessage: str
       const data = (error as { data?: unknown }).data
       applyServerContext(data)
 
-      if (data && typeof data === 'object' && 'message' in data && typeof data.message === 'string')
+      if (
+        data
+        && typeof data === 'object'
+        && 'message' in data
+        && typeof data.message === 'string'
+      ) {
         serverMessage = data.message
+      }
     }
   }
 
@@ -146,7 +175,8 @@ function getApiErrorState(error: unknown, endpoint: string, fallbackMessage: str
   if (statusCode === 429) {
     return {
       message: serverMessage || 'Too many requests arrived from this browser.',
-      detail: 'The board is rate-limiting repeat actions for bot protection. Wait a moment, then try again.',
+      detail:
+        'The board is rate-limiting repeat actions for bot protection. Wait a moment, then try again.',
     }
   }
 
@@ -164,7 +194,10 @@ function getApiErrorState(error: unknown, endpoint: string, fallbackMessage: str
 }
 
 async function loadBootstrap() {
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'bootstrap')
+  const endpoint = getBoardEndpoint(
+    runtimeConfig.public.apiBaseUrl,
+    'bootstrap',
+  )
 
   try {
     const response = await $fetch<BoardBootstrapResponse>(endpoint, {
@@ -175,7 +208,11 @@ async function loadBootstrap() {
     securityError.value = null
   }
   catch (error) {
-    securityError.value = getApiErrorState(error, endpoint, 'Unable to initialize board security right now.')
+    securityError.value = getApiErrorState(
+      error,
+      endpoint,
+      'Unable to initialize board security right now.',
+    )
   }
   finally {
     bootstrapLoaded.value = true
@@ -183,8 +220,12 @@ async function loadBootstrap() {
 }
 
 async function ensureAntiBotReady() {
-  if (!antiBotChallenge.value || isAntiBotChallengeExpired(antiBotChallenge.value))
+  if (
+    !antiBotChallenge.value
+    || isAntiBotChallengeExpired(antiBotChallenge.value)
+  ) {
     await loadBootstrap()
+  }
 
   if (!antiBotChallenge.value)
     throw new Error('Missing anti-bot challenge.')
@@ -192,7 +233,10 @@ async function ensureAntiBotReady() {
   await waitForAntiBotChallengeMinimumAge(antiBotChallenge.value)
 }
 
-async function protectedPost<T>(endpoint: string, body: Record<string, string>) {
+async function protectedPost<T>(
+  endpoint: string,
+  body: Record<string, string>,
+) {
   await ensureAntiBotReady()
 
   return $fetch<T>(endpoint, {
@@ -207,7 +251,10 @@ async function protectedPost<T>(endpoint: string, body: Record<string, string>) 
 }
 
 async function registerAccount() {
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'account/register')
+  const endpoint = getBoardEndpoint(
+    runtimeConfig.public.apiBaseUrl,
+    'account/register',
+  )
   authPending.value = true
   authError.value = null
   authNotice.value = ''
@@ -217,10 +264,15 @@ async function registerAccount() {
     applyServerContext(response)
 
     registerForm.password = ''
-    authNotice.value = 'Account ready. You can still keep using the board without one, but replies now have a consistent identity.'
+    authNotice.value
+      = 'Account ready. You can still keep using the board without one, but replies now have a consistent identity.'
   }
   catch (error) {
-    authError.value = getApiErrorState(error, endpoint, 'We could not create an account right now.')
+    authError.value = getApiErrorState(
+      error,
+      endpoint,
+      'We could not create an account right now.',
+    )
   }
   finally {
     authPending.value = false
@@ -228,7 +280,10 @@ async function registerAccount() {
 }
 
 async function loginAccount() {
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'account/login')
+  const endpoint = getBoardEndpoint(
+    runtimeConfig.public.apiBaseUrl,
+    'account/login',
+  )
   authPending.value = true
   authError.value = null
   authNotice.value = ''
@@ -238,10 +293,15 @@ async function loginAccount() {
     applyServerContext(response)
 
     loginForm.password = ''
-    authNotice.value = 'Signed in. Anonymous posting still stays open for everyone else.'
+    authNotice.value
+      = 'Signed in. Anonymous posting still stays open for everyone else.'
   }
   catch (error) {
-    authError.value = getApiErrorState(error, endpoint, 'We could not sign you in right now.')
+    authError.value = getApiErrorState(
+      error,
+      endpoint,
+      'We could not sign you in right now.',
+    )
   }
   finally {
     authPending.value = false
@@ -249,23 +309,33 @@ async function loginAccount() {
 }
 
 async function logoutAccount() {
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'account/logout')
+  const endpoint = getBoardEndpoint(
+    runtimeConfig.public.apiBaseUrl,
+    'account/logout',
+  )
   logoutPending.value = true
   authError.value = null
   authNotice.value = ''
 
   try {
-    const response = await $fetch<{ antiBot?: AntiBotChallenge, ok: boolean }>(endpoint, {
-      credentials: 'include',
-      method: 'POST',
-    })
+    const response = await $fetch<{ antiBot?: AntiBotChallenge, ok: boolean }>(
+      endpoint,
+      {
+        credentials: 'include',
+        method: 'POST',
+      },
+    )
 
     applyServerContext(response)
     viewer.value = null
     authNotice.value = 'Signed out. The board still works without an account.'
   }
   catch (error) {
-    authError.value = getApiErrorState(error, endpoint, 'We could not sign you out right now.')
+    authError.value = getApiErrorState(
+      error,
+      endpoint,
+      'We could not sign you out right now.',
+    )
   }
   finally {
     logoutPending.value = false
@@ -279,18 +349,25 @@ onMounted(() => {
   void loadBootstrap()
 })
 
-watch(() => getQueryValue(route.query.tab), () => {
-  if (!hasHydrated.value)
-    return
+watch(
+  () => getQueryValue(route.query.tab),
+  () => {
+    if (!hasHydrated.value)
+      return
 
-  syncAuthTabFromRoute()
-})
+    syncAuthTabFromRoute()
+  },
+)
 </script>
 
 <template>
   <div class="account-page">
     <section class="account-page__hero">
-      <NuxtLink class="account-page__back" prefetch-on="interaction" to="/#live-board">
+      <NuxtLink
+        class="account-page__back"
+        prefetch-on="interaction"
+        to="/#live-board"
+      >
         Back to live board
       </NuxtLink>
 
@@ -298,37 +375,43 @@ watch(() => getQueryValue(route.query.tab), () => {
         Account optional
       </p>
       <h1>
-        Keep the board open to everyone, then add an account only if it helps.
+        Use an account only if you want a saved identity for repeat
+        participation.
       </h1>
       <p class="account-page__lede">
-        Anonymous replies and submissions are fully allowed. A board account just gives repeat participants a stable identity and quicker follow-up.
+        You can browse, post, and reply without signing in. This page is only
+        for people who want a reusable board identity.
       </p>
     </section>
 
     <section class="account-page__panel">
-      <div class="account-page__copy">
-        <ul class="account-panel__benefits">
-          <li>Anonymous use stays open by default.</li>
-          <li>Account-backed posts show a stronger identity marker.</li>
-          <li>Logged-in replies can reuse the email already on the account.</li>
-        </ul>
-
-        <p class="account-panel__privacy">
-          Contact details are intentionally hidden from the page markup and only revealed through a separate, rate-limited action.
-        </p>
-      </div>
-
       <div class="account-panel">
+        <p class="account-panel__intro">
+          The board still works without an account. Create one only if you want
+          your posts and replies to carry the same name each time.
+        </p>
         <p v-if="!accountUiReady" class="account-panel__note" role="status">
           Account tools load after the page initializes.
         </p>
-        <p v-else-if="securityError" class="account-panel__note account-panel__note--warning" role="alert">
+        <p
+          v-else-if="securityError"
+          class="account-panel__note account-panel__note--warning"
+          role="alert"
+        >
           {{ securityError.message }} {{ securityError.detail }}
         </p>
-        <p v-if="authNotice" class="account-panel__note account-panel__note--success" role="status">
+        <p
+          v-if="authNotice"
+          class="account-panel__note account-panel__note--success"
+          role="status"
+        >
           {{ authNotice }}
         </p>
-        <p v-if="authError" class="account-panel__note account-panel__note--warning" role="alert">
+        <p
+          v-if="authError"
+          class="account-panel__note account-panel__note--warning"
+          role="alert"
+        >
           {{ authError.message }} {{ authError.detail }}
         </p>
 
@@ -344,14 +427,22 @@ watch(() => getQueryValue(route.query.tab), () => {
             </small>
           </div>
 
-          <button class="secondary-button" :disabled="logoutPending" type="button" @click="logoutAccount">
-            {{ logoutPending ? 'Signing out...' : 'Sign out' }}
+          <button
+            class="secondary-button"
+            :disabled="logoutPending"
+            type="button"
+            @click="logoutAccount"
+          >
+            {{ logoutPending ? "Signing out..." : "Sign out" }}
           </button>
         </div>
 
         <div v-else-if="showAdminSessionCard" class="account-panel__signed-in">
           <div>
-            <p class="account-panel__note account-panel__note--success" role="status">
+            <p
+              class="account-panel__note account-panel__note--success"
+              role="status"
+            >
               Admin key accepted. It is stored only in this browser session.
             </p>
             <p class="account-panel__label">
@@ -364,7 +455,11 @@ watch(() => getQueryValue(route.query.tab), () => {
             </small>
           </div>
 
-          <NuxtLink class="secondary-button" prefetch-on="interaction" to="/admin">
+          <NuxtLink
+            class="secondary-button"
+            prefetch-on="interaction"
+            to="/admin"
+          >
             Open admin review
           </NuxtLink>
         </div>
@@ -372,14 +467,18 @@ watch(() => getQueryValue(route.query.tab), () => {
         <template v-else-if="accountUiReady">
           <div class="account-tabs">
             <button
-              class="account-tabs__button" :class="[{ 'account-tabs__button--active': authTab === 'register' }]"
+              class="account-tabs__button"
+              :class="[
+                { 'account-tabs__button--active': authTab === 'register' },
+              ]"
               type="button"
               @click="pushAuthTab('register')"
             >
               Create account
             </button>
             <button
-              class="account-tabs__button" :class="[{ 'account-tabs__button--active': authTab === 'login' }]"
+              class="account-tabs__button"
+              :class="[{ 'account-tabs__button--active': authTab === 'login' }]"
               type="button"
               @click="pushAuthTab('login')"
             >
@@ -387,48 +486,94 @@ watch(() => getQueryValue(route.query.tab), () => {
             </button>
           </div>
 
-          <form v-if="authTab === 'register'" class="account-form" @submit.prevent="registerAccount">
+          <form
+            v-if="authTab === 'register'"
+            class="account-form"
+            @submit.prevent="registerAccount"
+          >
             <p class="sr-only">
-              <label>Do not fill this field if you are human. <input v-model="registerForm['bot-field']" name="bot-field" type="text"></label>
+              <label>Do not fill this field if you are human.
+                <input
+                  v-model="registerForm['bot-field']"
+                  name="bot-field"
+                  type="text"
+                ></label>
             </p>
 
             <label class="field">
               <span>Display name</span>
-              <input v-model="registerForm.displayName" autocomplete="name" placeholder="Jane Smith" required type="text">
+              <input
+                v-model="registerForm.displayName"
+                autocomplete="name"
+                placeholder="Jane Smith"
+                required
+                type="text"
+              >
             </label>
 
             <label class="field">
               <span>Email</span>
-              <input v-model="registerForm.email" autocomplete="email" placeholder="jane@email.com" required type="email">
+              <input
+                v-model="registerForm.email"
+                autocomplete="email"
+                placeholder="jane@email.com"
+                required
+                type="email"
+              >
             </label>
 
             <label class="field">
               <span>Password</span>
-              <input v-model="registerForm.password" autocomplete="new-password" minlength="10" required type="password">
+              <input
+                v-model="registerForm.password"
+                autocomplete="new-password"
+                minlength="10"
+                required
+                type="password"
+              >
             </label>
 
             <button class="submit-button" :disabled="authPending" type="submit">
-              {{ authPending ? 'Creating account...' : 'Create optional account' }}
+              {{
+                authPending ? "Creating account..." : "Create optional account"
+              }}
             </button>
           </form>
 
           <form v-else class="account-form" @submit.prevent="loginAccount">
             <p class="sr-only">
-              <label>Do not fill this field if you are human. <input v-model="loginForm['bot-field']" name="bot-field" type="text"></label>
+              <label>Do not fill this field if you are human.
+                <input
+                  v-model="loginForm['bot-field']"
+                  name="bot-field"
+                  type="text"
+                ></label>
             </p>
 
             <label class="field">
               <span>Email</span>
-              <input v-model="loginForm.email" autocomplete="email" placeholder="jane@email.com" required type="email">
+              <input
+                v-model="loginForm.email"
+                autocomplete="email"
+                placeholder="jane@email.com"
+                required
+                type="email"
+              >
             </label>
 
             <label class="field">
               <span>Password</span>
-              <input v-model="loginForm.password" autocomplete="current-password" minlength="10" required type="password">
+              <input
+                v-model="loginForm.password"
+                autocomplete="current-password"
+                minlength="10"
+                required
+                type="password"
+              >
             </label>
 
             <button class="submit-button" :disabled="authPending" type="submit">
-              {{ authPending ? 'Signing in...' : 'Sign in' }}
+              {{ authPending ? "Signing in..." : "Sign in" }}
             </button>
           </form>
         </template>
@@ -495,8 +640,7 @@ watch(() => getQueryValue(route.query.tab), () => {
 }
 
 .account-page__lede,
-.account-page__copy,
-.account-panel__benefits {
+.account-panel__intro {
   color: var(--site-text);
   line-height: 1.7;
 }
@@ -508,14 +652,12 @@ watch(() => getQueryValue(route.query.tab), () => {
 }
 
 .account-page__panel {
-  display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  gap: 1.2rem;
-  align-items: start;
+  max-width: 42rem;
 }
 
-.account-page__copy,
 .account-panel {
+  display: grid;
+  gap: 1rem;
   min-width: 0;
   padding: 1.5rem;
   border-radius: 1.65rem;
@@ -524,14 +666,8 @@ watch(() => getQueryValue(route.query.tab), () => {
   box-shadow: var(--site-shadow);
 }
 
-.account-page__copy {
-  display: grid;
-  gap: 1rem;
-}
-
-.account-panel {
-  display: grid;
-  gap: 1rem;
+.account-panel__intro {
+  margin: 0;
 }
 
 .account-tabs {
@@ -640,11 +776,6 @@ watch(() => getQueryValue(route.query.tab), () => {
   box-shadow: 0 0 0 3px var(--site-focus-ring);
 }
 
-.account-panel__benefits {
-  margin: 0;
-  padding-left: 1.2rem;
-}
-
 .account-panel__signed-in {
   padding: 1rem;
   display: flex;
@@ -679,12 +810,6 @@ watch(() => getQueryValue(route.query.tab), () => {
   font-weight: 700;
 }
 
-.account-panel__privacy {
-  margin: 0;
-  font-size: 0.94rem;
-  color: var(--site-subtle);
-}
-
 .account-panel__note {
   margin: 0;
   padding: 0.9rem 1rem;
@@ -704,18 +829,11 @@ watch(() => getQueryValue(route.query.tab), () => {
   color: var(--site-error-text);
 }
 
-@media (max-width: 1080px) {
-  .account-page__panel {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media (max-width: 760px) {
   .account-page h1 {
     max-width: 100%;
   }
 
-  .account-page__copy,
   .account-panel {
     padding: 1.2rem;
   }

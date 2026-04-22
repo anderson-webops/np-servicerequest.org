@@ -1,7 +1,8 @@
 <template>
   <div class="site-shell">
+    <a class="skip-link" href="#main-content">Skip to content</a>
     <SiteHeader />
-    <main class="site-shell__content">
+    <main id="main-content" class="site-shell__content" tabindex="-1">
       <slot />
     </main>
     <Footer />
@@ -24,5 +25,26 @@
 .site-shell__content {
   --page-hero-space: clamp(1.8rem, 4vw, 3.6rem);
   overflow: clip;
+}
+
+.skip-link {
+  position: absolute;
+  top: 0.75rem;
+  left: var(--page-inline-start, 1rem);
+  z-index: 80;
+  padding: 0.8rem 1rem;
+  border-radius: 999px;
+  background: var(--site-button-bg);
+  color: var(--site-button-text);
+  text-decoration: none;
+  font-weight: 700;
+  transform: translateY(-180%);
+  transition: transform 180ms ease;
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+  outline: 2px solid var(--site-focus);
+  outline-offset: 3px;
 }
 </style>

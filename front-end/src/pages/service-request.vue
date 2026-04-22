@@ -16,25 +16,30 @@ definePageMeta({
 
 useSeoMeta({
   title: 'Request a service project',
-  description: 'Post a service project to the community board and describe the job, timing, and location so someone can respond.',
+  description:
+    'Post a service project to the community board and describe the job, timing, and location so someone can respond.',
 })
 
-const { loadBootstrap, securityError, status, submit } = useBoardSubmission('service')
+const { loadBootstrap, securityError, status, submit }
+  = useBoardSubmission('service')
 const contactMethod = ref(normalizeBoardContactMethod('email'))
 
 onMounted(() => {
   void loadBootstrap()
 })
 
-watch(() => status.success, (nextSuccess) => {
-  if (nextSuccess)
-    contactMethod.value = 'email'
-})
+watch(
+  () => status.success,
+  (nextSuccess) => {
+    if (nextSuccess)
+      contactMethod.value = 'email'
+  },
+)
 </script>
 
 <template>
   <BoardSubmissionPage
-    description="Use this page for hands-on help: cleanups, repair tasks, home setup, small moves, accessibility work, or any project that needs volunteer time."
+    description="Use this page for hands-on help such as cleanups, repairs, setup, moving help, or accessibility work."
     eyebrow="Request a service project"
     :examples="[
       'Give a short title to the project.',
@@ -46,18 +51,28 @@ watch(() => status.success, (nextSuccess) => {
     :status="status"
     submit-label="Post service request"
     success-text="Posted. Your service project now appears on the live board. If you used an email address, a management link was sent there so you can delete it later from another browser."
-    title="Describe the job, the timing, and the best way for someone to reach you."
+    title="Describe the work, the timing, and how someone should reach you."
     @submit="submit"
   >
     <label class="field">
       <span>Your name</span>
-      <input autocomplete="name" name="name" placeholder="Jane Smith" required type="text">
+      <input
+        autocomplete="name"
+        name="name"
+        placeholder="Jane Smith"
+        required
+        type="text"
+      >
     </label>
 
     <label class="field">
       <span>Contact method</span>
       <select v-model="contactMethod" name="contact_method" required>
-        <option v-for="option in boardContactMethodOptions" :key="option.value" :value="option.value">
+        <option
+          v-for="option in boardContactMethodOptions"
+          :key="option.value"
+          :value="option.value"
+        >
           {{ option.label }}
         </option>
       </select>
@@ -77,15 +92,17 @@ watch(() => status.success, (nextSuccess) => {
 
     <label class="field field--wide">
       <span>Contact note (optional)</span>
-      <input name="contact_note" placeholder="Example: text first, evenings are best, or include the address in the subject line." type="text">
+      <input
+        name="contact_note"
+        placeholder="Example: text first, evenings are best, or include the address in the subject line."
+        type="text"
+      >
     </label>
 
     <label class="field">
       <span>Project type</span>
       <select name="project_type" required>
-        <option value="">
-          Select one
-        </option>
+        <option value="">Select one</option>
         <option>Cleanup</option>
         <option>Repair</option>
         <option>Accessibility</option>
@@ -97,17 +114,33 @@ watch(() => status.success, (nextSuccess) => {
 
     <label class="field">
       <span>Location or neighborhood</span>
-      <input autocomplete="street-address" name="location" placeholder="Where the project is happening" required type="text">
+      <input
+        autocomplete="street-address"
+        name="location"
+        placeholder="Where the project is happening"
+        required
+        type="text"
+      >
     </label>
 
     <label class="field field--wide">
       <span>Timing</span>
-      <input name="timing" placeholder="Example: Saturday morning or sometime next week" required type="text">
+      <input
+        name="timing"
+        placeholder="Example: Saturday morning or sometime next week"
+        required
+        type="text"
+      >
     </label>
 
     <label class="field field--wide">
       <span>Project details</span>
-      <textarea name="details" placeholder="Explain what needs to be done, what supplies are already available, and anything someone should know before responding." required rows="6" />
+      <textarea
+        name="details"
+        placeholder="Explain what needs to be done, what supplies are already available, and anything someone should know before responding."
+        required
+        rows="6"
+      />
     </label>
   </BoardSubmissionPage>
 </template>

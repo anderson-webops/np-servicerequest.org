@@ -4,13 +4,19 @@
       <NuxtLink class="site-footer__help" prefetch-on="interaction" to="/help">
         Help
       </NuxtLink>
-      <NuxtLink class="site-footer__help" prefetch-on="interaction" to="/service-directory">
+      <NuxtLink
+        class="site-footer__help"
+        prefetch-on="interaction"
+        to="/service-directory"
+      >
         Service directory
       </NuxtLink>
     </div>
 
     <div class="site-footer__links">
-      <a href="/#live-board">Live board</a>
+      <NuxtLink prefetch-on="interaction" to="/#live-board">
+        Live board
+      </NuxtLink>
       <NuxtLink prefetch-on="interaction" to="/service-request">
         Service projects
       </NuxtLink>

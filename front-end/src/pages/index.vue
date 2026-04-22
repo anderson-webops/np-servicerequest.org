@@ -4,29 +4,27 @@ import type {
   BoardBootstrapResponse,
   BoardClaimManagementResponse,
   BoardContactResponse,
-  BoardDeleteResponse,
-  BoardInteractionDeleteResponse,
-  BoardInteractionResponse,
   BoardItem,
   BoardItemCounts,
-  BoardItemResolutionResponse,
   BoardItemsPagination,
   BoardItemsResponse,
-  ViewerAccount,
 } from '~/utils/board'
-import type { BoardFormErrorState, BoardFormStatus, BoardReplyDraft } from '~/utils/boardUi'
+import type { BoardFormErrorState } from '~/utils/boardUi'
 import type { SubmissionKind } from '~/utils/submissions'
-import { isAntiBotChallenge, isAntiBotChallengeExpired, markAntiBotChallengeObserved, waitForAntiBotChallengeMinimumAge } from '~/utils/antiBot'
-import { forgetBoardDeleteToken, getBoardEndpoint, getStoredBoardDeleteToken, listStoredBoardDeleteTokenIds, rememberBoardDeleteToken } from '~/utils/board'
-import { formatBoardDate, getBoardApiErrorState, getBoardDetailPath, getContactActionLabel, getInteractionDeleteKey, getReplyActionLabel, getRevealKey } from '~/utils/boardUi'
 import {
-  boardContactMethodOptions,
-  getBoardContactValueAutocomplete,
-  getBoardContactValueInputMode,
-  getBoardContactValueLabel,
-  getBoardContactValuePlaceholder,
-  getBoardContactValueType,
-} from '~/utils/contact'
+  isAntiBotChallenge,
+  isAntiBotChallengeExpired,
+  markAntiBotChallengeObserved,
+  waitForAntiBotChallengeMinimumAge,
+} from '~/utils/antiBot'
+import { getBoardEndpoint, rememberBoardDeleteToken } from '~/utils/board'
+import {
+  formatBoardDate,
+  getBoardApiErrorState,
+  getBoardDetailPath,
+  getContactActionLabel,
+  getRevealKey,
+} from '~/utils/boardUi'
 import { submissionKinds } from '~/utils/submissions'
 
 type BoardFilter = 'all' | SubmissionKind
@@ -37,7 +35,8 @@ definePageMeta({
 
 useSeoMeta({
   title: 'Live request board for service projects, borrowing, and lending',
-  description: 'Post service projects, borrow requests, and lending offers on a live community board. Anonymous use is open, and optional accounts are available for repeat participants.',
+  description:
+    'Post service projects, borrow requests, and lending offers on a live community board.',
 })
 
 const runtimeConfig = useRuntimeConfig()
@@ -46,11 +45,9 @@ const router = useRouter()
 
 const hasHydrated = ref(false)
 const antiBotChallenge = ref<AntiBotChallenge | null>(null)
-const viewer = ref<ViewerAccount | null>(null)
 const boardItems = ref<BoardItem[]>([])
 const boardLoaded = ref(false)
 const boardPending = ref(false)
-const bootstrapLoaded = ref(false)
 const boardError = ref<BoardFormErrorState | null>(null)
 const securityError = ref<BoardFormErrorState | null>(null)
 const boardFilter = ref<BoardFilter>('all')
@@ -71,25 +68,11 @@ const boardPagination = ref<BoardItemsPagination>({
 const managementNotice = ref('')
 const managementPending = ref(false)
 const managementError = ref<BoardFormErrorState | null>(null)
-const openReplyItemId = ref<string | null>(null)
-const confirmDeleteItemId = ref<string | null>(null)
-const confirmDeleteInteractionKey = ref<string | null>(null)
 
-const replyDrafts = reactive<Record<string, BoardReplyDraft>>({})
-const replyStatuses = reactive<Record<string, BoardFormStatus>>({})
 const revealItemContacts = reactive<Record<string, string>>({})
-const revealInteractionContacts = reactive<Record<string, string>>({})
 const revealItemContactVisibility = reactive<Record<string, boolean>>({})
-const revealInteractionContactVisibility = reactive<Record<string, boolean>>({})
 const revealErrors = reactive<Record<string, BoardFormErrorState | null>>({})
 const revealPending = reactive<Record<string, boolean>>({})
-const deleteErrors = reactive<Record<string, BoardFormErrorState | null>>({})
-const deletePending = reactive<Record<string, boolean>>({})
-const deleteInteractionErrors = reactive<Record<string, BoardFormErrorState | null>>({})
-const deleteInteractionPending = reactive<Record<string, boolean>>({})
-const resolveErrors = reactive<Record<string, BoardFormErrorState | null>>({})
-const resolvePending = reactive<Record<string, boolean>>({})
-const storedDeleteTokenItemIds = ref<string[]>([])
 
 const boardFilters = [
   { key: 'all' as const, label: 'All posts' },
@@ -106,38 +89,16 @@ const placeholderBoardCounts: BoardItemCounts = {
 }
 
 const boardUiReady = computed(() => hasHydrated.value && boardLoaded.value)
-const accountUiReady = computed(() => hasHydrated.value && bootstrapLoaded.value)
-const displayBoardCounts = computed<BoardItemCounts>(() => (
-  boardUiReady.value && !boardError.value ? boardCounts.value : placeholderBoardCounts
-))
-const activeBoardTotal = computed(() => (
+const displayBoardCounts = computed<BoardItemCounts>(() =>
+  boardUiReady.value && !boardError.value
+    ? boardCounts.value
+    : placeholderBoardCounts,
+)
+const activeBoardTotal = computed(() =>
   boardFilter.value === 'all'
     ? displayBoardCounts.value.all
-    : displayBoardCounts.value[boardFilter.value]
-))
-const boardAudienceNote = computed(() => {
-  if (!accountUiReady.value)
-    return 'Board tools load after the page initializes.'
-
-  return viewer.value
-    ? 'You can reply with your account or anonymously.'
-    : 'You can reply anonymously right now, even without signing in.'
-})
-
-function isViewerAccount(value: unknown): value is ViewerAccount {
-  return Boolean(
-    value
-    && typeof value === 'object'
-    && 'id' in value
-    && typeof value.id === 'string'
-    && 'displayName' in value
-    && typeof value.displayName === 'string'
-    && 'email' in value
-    && typeof value.email === 'string'
-    && 'isAdmin' in value
-    && typeof value.isAdmin === 'boolean',
-  )
-}
+    : displayBoardCounts.value[boardFilter.value],
+)
 
 function applyServerContext(payload: unknown) {
   if (!payload || typeof payload !== 'object')
@@ -147,88 +108,37 @@ function applyServerContext(payload: unknown) {
 
   if (isAntiBotChallenge(record.antiBot))
     antiBotChallenge.value = markAntiBotChallengeObserved(record.antiBot)
-
-  if (record.viewer === null)
-    viewer.value = null
-  else if (isViewerAccount(record.viewer))
-    viewer.value = record.viewer
 }
 
 function sortBoardItems(items: BoardItem[]) {
-  return [...items].sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt))
+  return [...items].sort(
+    (left, right) =>
+      Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt),
+  )
 }
 
-function appendInteraction(itemId: string, interaction: BoardInteractionResponse['interaction']) {
-  boardItems.value = sortBoardItems(boardItems.value.map((item) => {
-    if (item.id !== itemId)
-      return item
+function getQueryValue(value: unknown) {
+  if (Array.isArray(value))
+    return getQueryValue(value[0])
 
-    return {
-      ...item,
-      interactionCount: item.interactionCount + 1,
-      interactions: [interaction, ...item.interactions],
-      lastActivityAt: interaction.createdAt,
-    }
-  }))
+  return typeof value === 'string' ? value : ''
 }
 
-function getReplyDraft(itemId: string) {
-  if (!replyDrafts[itemId]) {
-    replyDrafts[itemId] = {
-      'bot-field': '',
-      'contact_method': 'email',
-      'contact_note': '',
-      'contact_value': viewer.value?.email || '',
-      'message': '',
-      'name': viewer.value?.displayName || '',
-    }
-  }
-
-  if (viewer.value) {
-    if (!replyDrafts[itemId].name)
-      replyDrafts[itemId].name = viewer.value.displayName
-
-    if (!replyDrafts[itemId].contact_value)
-      replyDrafts[itemId].contact_value = viewer.value.email
-  }
-
-  return replyDrafts[itemId]
+function parseBoardFilter(value: string): BoardFilter {
+  return value === submissionKinds.service
+    || value === submissionKinds.itemRequest
+    || value === submissionKinds.itemLending
+    ? value
+    : 'all'
 }
 
-function getReplyStatus(itemId: string) {
-  if (!replyStatuses[itemId]) {
-    replyStatuses[itemId] = {
-      error: null,
-      pending: false,
-      success: false,
-    }
-  }
+function parsePositivePage(value: string) {
+  const parsedValue = Number.parseInt(value, 10)
 
-  return replyStatuses[itemId]
-}
+  if (!Number.isFinite(parsedValue) || parsedValue < 1)
+    return 1
 
-function ensureDeleteState(itemId: string) {
-  if (!(itemId in deletePending))
-    deletePending[itemId] = false
-
-  if (!(itemId in deleteErrors))
-    deleteErrors[itemId] = null
-}
-
-function ensureInteractionDeleteState(key: string) {
-  if (!(key in deleteInteractionPending))
-    deleteInteractionPending[key] = false
-
-  if (!(key in deleteInteractionErrors))
-    deleteInteractionErrors[key] = null
-}
-
-function ensureResolutionState(itemId: string) {
-  if (!(itemId in resolvePending))
-    resolvePending[itemId] = false
-
-  if (!(itemId in resolveErrors))
-    resolveErrors[itemId] = null
+  return parsedValue
 }
 
 function ensureRevealState(key: string) {
@@ -240,38 +150,29 @@ function ensureRevealState(key: string) {
 }
 
 function isItemContactVisible(itemId: string) {
-  return Boolean(revealItemContactVisibility[itemId] && revealItemContacts[itemId])
-}
-
-function isInteractionContactVisible(itemId: string, interactionId: string) {
-  const key = getRevealKey(itemId, interactionId)
-  return Boolean(revealInteractionContactVisibility[key] && revealInteractionContacts[key])
+  return Boolean(
+    revealItemContactVisibility[itemId] && revealItemContacts[itemId],
+  )
 }
 
 function getItemContactActionLabel(item: BoardItem) {
   if (revealPending[item.id])
     return 'Revealing...'
 
-  if (isItemContactVisible(item.id))
-    return item.kind === submissionKinds.itemLending ? 'Hide lender contact' : 'Hide contact'
+  if (isItemContactVisible(item.id)) {
+    return item.kind === submissionKinds.itemLending
+      ? 'Hide lender contact'
+      : 'Hide contact'
+  }
 
   return getContactActionLabel(item.kind)
 }
 
-function getInteractionContactActionLabel(itemId: string, interactionId: string) {
-  const key = getRevealKey(itemId, interactionId)
-
-  if (revealPending[key])
-    return 'Revealing...'
-
-  if (isInteractionContactVisible(itemId, interactionId))
-    return 'Hide reply contact'
-
-  return 'Reveal reply contact'
-}
-
 async function loadBootstrap() {
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'bootstrap')
+  const endpoint = getBoardEndpoint(
+    runtimeConfig.public.apiBaseUrl,
+    'bootstrap',
+  )
 
   try {
     const response = await $fetch<BoardBootstrapResponse>(endpoint, {
@@ -282,15 +183,19 @@ async function loadBootstrap() {
     securityError.value = null
   }
   catch (error) {
-    securityError.value = getBoardApiErrorState(error, endpoint, 'Unable to initialize board security right now.', applyServerContext)
-  }
-  finally {
-    bootstrapLoaded.value = true
+    securityError.value = getBoardApiErrorState(
+      error,
+      endpoint,
+      'Unable to initialize board security right now.',
+      applyServerContext,
+    )
   }
 }
 
 async function loadBoardItems() {
-  const endpoint = new URL(getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'items'))
+  const endpoint = new URL(
+    getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'items'),
+  )
   endpoint.searchParams.set('kind', boardFilter.value)
   endpoint.searchParams.set('page', String(boardPagination.value.page))
   endpoint.searchParams.set('pageSize', String(boardPagination.value.pageSize))
@@ -307,7 +212,12 @@ async function loadBoardItems() {
     boardItems.value = sortBoardItems(response.items)
   }
   catch (error) {
-    boardError.value = getBoardApiErrorState(error, endpoint.toString(), 'Unable to load the live board right now.', applyServerContext)
+    boardError.value = getBoardApiErrorState(
+      error,
+      endpoint.toString(),
+      'Unable to load the live board right now.',
+      applyServerContext,
+    )
   }
   finally {
     boardPending.value = false
@@ -316,8 +226,12 @@ async function loadBoardItems() {
 }
 
 async function ensureAntiBotReady() {
-  if (!antiBotChallenge.value || isAntiBotChallengeExpired(antiBotChallenge.value))
+  if (
+    !antiBotChallenge.value
+    || isAntiBotChallengeExpired(antiBotChallenge.value)
+  ) {
     await loadBootstrap()
+  }
 
   if (!antiBotChallenge.value)
     throw new Error('Missing anti-bot challenge.')
@@ -325,7 +239,10 @@ async function ensureAntiBotReady() {
   await waitForAntiBotChallengeMinimumAge(antiBotChallenge.value)
 }
 
-async function protectedPost<T>(endpoint: string, body: Record<string, string>) {
+async function protectedPost<T>(
+  endpoint: string,
+  body: Record<string, string>,
+) {
   await ensureAntiBotReady()
 
   return $fetch<T>(endpoint, {
@@ -339,22 +256,14 @@ async function protectedPost<T>(endpoint: string, body: Record<string, string>) 
   })
 }
 
-async function protectedDelete<T>(endpoint: string, body: Record<string, string>) {
-  await ensureAntiBotReady()
-
-  return $fetch<T>(endpoint, {
-    body: {
-      ...body,
-      challengeIssuedAt: String(antiBotChallenge.value?.issuedAt || ''),
-      challengeToken: antiBotChallenge.value?.token || '',
-    },
-    credentials: 'include',
-    method: 'DELETE',
-  })
-}
-
-async function claimBoardManagementLink(itemId: string, managementToken: string) {
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `items/${itemId}/claim-management`)
+async function claimBoardManagementLink(
+  itemId: string,
+  managementToken: string,
+) {
+  const endpoint = getBoardEndpoint(
+    runtimeConfig.public.apiBaseUrl,
+    `items/${itemId}/claim-management`,
+  )
   managementPending.value = true
   managementError.value = null
   managementNotice.value = ''
@@ -370,11 +279,16 @@ async function claimBoardManagementLink(itemId: string, managementToken: string)
 
     applyServerContext(response)
     rememberBoardDeleteToken(response.itemId, response.deleteToken)
-    refreshStoredDeleteTokenIds()
-    managementNotice.value = 'Management access for this post is now saved in this browser. You can delete it from the live board.'
+    managementNotice.value
+      = 'Management access for this post is now saved in this browser. Open the full post to manage or delete it.'
   }
   catch (error) {
-    managementError.value = getBoardApiErrorState(error, endpoint, 'We could not claim that management link right now.', applyServerContext)
+    managementError.value = getBoardApiErrorState(
+      error,
+      endpoint,
+      'We could not claim that management link right now.',
+      applyServerContext,
+    )
   }
   finally {
     managementPending.value = false
@@ -387,114 +301,57 @@ async function claimBoardManagementLink(itemId: string, managementToken: string)
         filter: boardFilter.value === 'all' ? undefined : boardFilter.value,
         manageItem: undefined,
         manageToken: undefined,
-        page: boardPagination.value.page > 1 ? String(boardPagination.value.page) : undefined,
+        page:
+          boardPagination.value.page > 1
+            ? String(boardPagination.value.page)
+            : undefined,
       },
     })
   }
 }
 
-function refreshStoredDeleteTokenIds() {
-  storedDeleteTokenItemIds.value = listStoredBoardDeleteTokenIds()
-}
+async function revealItemContact(item: BoardItem) {
+  const key = getRevealKey(item.id)
+  ensureRevealState(key)
 
-function canDeleteItem(item: BoardItem) {
-  if (viewer.value?.isAdmin)
-    return true
+  if (revealItemContacts[item.id]) {
+    revealItemContactVisibility[item.id] = !isItemContactVisible(item.id)
+    revealErrors[key] = null
+    return
+  }
 
-  if (viewer.value && item.author.accountId && viewer.value.id === item.author.accountId)
-    return true
+  const endpoint = getBoardEndpoint(
+    runtimeConfig.public.apiBaseUrl,
+    `items/${item.id}/contact`,
+  )
+  revealPending[key] = true
+  revealErrors[key] = null
 
-  return storedDeleteTokenItemIds.value.includes(item.id)
-}
+  try {
+    const response = await protectedPost<BoardContactResponse>(endpoint, {
+      'bot-field': '',
+    })
 
-function canResolveItem(item: BoardItem) {
-  return canDeleteItem(item)
-}
-
-function canDeleteInteraction(interaction: BoardItem['interactions'][number]) {
-  if (viewer.value?.isAdmin)
-    return true
-
-  return Boolean(viewer.value && interaction.author.accountId && viewer.value.id === interaction.author.accountId)
-}
-
-function canReplyToItem(item: BoardItem) {
-  return item.resolutionStatus === 'open'
+    applyServerContext(response)
+    revealItemContacts[item.id] = response.contact
+    revealItemContactVisibility[item.id] = true
+  }
+  catch (error) {
+    revealErrors[key] = getBoardApiErrorState(
+      error,
+      endpoint,
+      'We could not reveal that contact right now.',
+      applyServerContext,
+    )
+  }
+  finally {
+    revealPending[key] = false
+  }
 }
 
 function getResolvedNote(item: BoardItem) {
   const resolvedAt = item.resolutionChangedAt || item.lastActivityAt
-  return `This post was marked resolved ${formatBoardDate(resolvedAt)}. It stays visible for reference, and new public replies are closed until it is reopened.`
-}
-
-function getDeleteActionLabel(itemId: string) {
-  if (deletePending[itemId])
-    return 'Deleting...'
-
-  if (confirmDeleteItemId.value === itemId)
-    return 'Click again to delete'
-
-  return 'Delete post'
-}
-
-function getDeleteInteractionActionLabel(itemId: string, interactionId: string) {
-  const key = getInteractionDeleteKey(itemId, interactionId)
-
-  if (deleteInteractionPending[key])
-    return 'Deleting...'
-
-  if (confirmDeleteInteractionKey.value === key)
-    return 'Click again to delete'
-
-  return 'Delete reply'
-}
-
-function getResolutionActionLabel(item: BoardItem) {
-  if (resolvePending[item.id])
-    return 'Saving...'
-
-  return item.resolutionStatus === 'resolved' ? 'Mark open' : 'Mark resolved'
-}
-
-function removeInteractionFromBoard(itemId: string, interactionId: string) {
-  boardItems.value = sortBoardItems(boardItems.value.map((item) => {
-    if (item.id !== itemId)
-      return item
-
-    const remainingInteractions = item.interactions.filter(interaction => interaction.id !== interactionId)
-    return {
-      ...item,
-      interactionCount: remainingInteractions.length,
-      interactions: remainingInteractions,
-      lastActivityAt: remainingInteractions[0]?.createdAt || item.createdAt,
-    }
-  }))
-}
-
-function replaceBoardItem(nextItem: BoardItem) {
-  boardItems.value = sortBoardItems(boardItems.value.map(item => item.id === nextItem.id ? nextItem : item))
-}
-
-function getQueryValue(value: unknown) {
-  if (Array.isArray(value))
-    return getQueryValue(value[0])
-
-  return typeof value === 'string' ? value : ''
-}
-
-function parseBoardFilter(value: string): BoardFilter {
-  return value === submissionKinds.service || value === submissionKinds.itemRequest || value === submissionKinds.itemLending
-    ? value
-    : 'all'
-}
-
-function parsePositivePage(value: string) {
-  const parsedValue = Number.parseInt(value, 10)
-
-  if (!Number.isFinite(parsedValue) || parsedValue < 1)
-    return 1
-
-  return parsedValue
+  return `This post was marked resolved ${formatBoardDate(resolvedAt)}. It stays visible for reference on its full post page.`
 }
 
 function syncBoardStateFromRoute() {
@@ -547,7 +404,10 @@ function setBoardFilter(nextFilter: BoardFilter) {
 }
 
 function changeBoardPage(nextPage: number) {
-  const normalizedPage = Math.min(Math.max(nextPage, 1), boardPagination.value.totalPages)
+  const normalizedPage = Math.min(
+    Math.max(nextPage, 1),
+    boardPagination.value.totalPages,
+  )
 
   if (normalizedPage === boardPagination.value.page)
     return
@@ -557,238 +417,8 @@ function changeBoardPage(nextPage: number) {
   })
 }
 
-async function submitBoardReply(item: BoardItem) {
-  const draft = getReplyDraft(item.id)
-  const status = getReplyStatus(item.id)
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `items/${item.id}/interactions`)
-  status.pending = true
-  status.success = false
-  status.error = null
-
-  try {
-    const response = await protectedPost<BoardInteractionResponse>(endpoint, {
-      ...draft,
-      itemTitle: item.title,
-    })
-
-    applyServerContext(response)
-    appendInteraction(item.id, response.interaction)
-    draft.message = ''
-    status.success = true
-  }
-  catch (error) {
-    status.error = getBoardApiErrorState(error, endpoint, 'We could not post that board response right now.', applyServerContext)
-  }
-  finally {
-    status.pending = false
-  }
-}
-
-async function revealItemContact(item: BoardItem) {
-  const key = getRevealKey(item.id)
-  ensureRevealState(key)
-  if (revealItemContacts[item.id]) {
-    revealItemContactVisibility[item.id] = !isItemContactVisible(item.id)
-    revealErrors[key] = null
-    return
-  }
-
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `items/${item.id}/contact`)
-  revealPending[key] = true
-  revealErrors[key] = null
-
-  try {
-    const response = await protectedPost<BoardContactResponse>(endpoint, {
-      'bot-field': '',
-    })
-
-    applyServerContext(response)
-    revealItemContacts[item.id] = response.contact
-    revealItemContactVisibility[item.id] = true
-  }
-  catch (error) {
-    revealErrors[key] = getBoardApiErrorState(error, endpoint, 'We could not reveal that contact right now.', applyServerContext)
-  }
-  finally {
-    revealPending[key] = false
-  }
-}
-
-async function revealInteractionContact(itemId: string, interactionId: string) {
-  const key = getRevealKey(itemId, interactionId)
-  ensureRevealState(key)
-  if (revealInteractionContacts[key]) {
-    revealInteractionContactVisibility[key] = !isInteractionContactVisible(itemId, interactionId)
-    revealErrors[key] = null
-    return
-  }
-
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `items/${itemId}/interactions/${interactionId}/contact`)
-  revealPending[key] = true
-  revealErrors[key] = null
-
-  try {
-    const response = await protectedPost<BoardContactResponse>(endpoint, {
-      'bot-field': '',
-    })
-
-    applyServerContext(response)
-    revealInteractionContacts[key] = response.contact
-    revealInteractionContactVisibility[key] = true
-  }
-  catch (error) {
-    revealErrors[key] = getBoardApiErrorState(error, endpoint, 'We could not reveal that contact right now.', applyServerContext)
-  }
-  finally {
-    revealPending[key] = false
-  }
-}
-
-async function toggleBoardResolution(item: BoardItem) {
-  ensureResolutionState(item.id)
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `items/${item.id}/resolution`)
-  resolvePending[item.id] = true
-  resolveErrors[item.id] = null
-
-  try {
-    const response = await protectedPost<BoardItemResolutionResponse>(endpoint, {
-      'bot-field': '',
-      'deleteToken': getStoredBoardDeleteToken(item.id),
-      'status': item.resolutionStatus === 'resolved' ? 'open' : 'resolved',
-    })
-
-    applyServerContext(response)
-    replaceBoardItem(response.item)
-
-    if (response.item.resolutionStatus === 'resolved' && openReplyItemId.value === item.id)
-      openReplyItemId.value = null
-  }
-  catch (error) {
-    resolveErrors[item.id] = getBoardApiErrorState(error, endpoint, 'We could not update that post right now.', applyServerContext)
-  }
-  finally {
-    resolvePending[item.id] = false
-  }
-}
-
-async function deleteBoardPost(item: BoardItem) {
-  if (confirmDeleteItemId.value !== item.id) {
-    confirmDeleteItemId.value = item.id
-    ensureDeleteState(item.id)
-    deleteErrors[item.id] = null
-    return
-  }
-
-  confirmDeleteItemId.value = null
-  ensureDeleteState(item.id)
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `items/${item.id}`)
-  deletePending[item.id] = true
-  deleteErrors[item.id] = null
-
-  try {
-    const response = await protectedDelete<BoardDeleteResponse>(endpoint, {
-      'bot-field': '',
-      'deleteToken': getStoredBoardDeleteToken(item.id),
-    })
-
-    applyServerContext(response)
-    forgetBoardDeleteToken(item.id)
-    refreshStoredDeleteTokenIds()
-    revealItemContacts[item.id] = ''
-    revealItemContactVisibility[item.id] = false
-
-    for (const interaction of item.interactions) {
-      const key = getRevealKey(item.id, interaction.id)
-      revealInteractionContacts[key] = ''
-      revealInteractionContactVisibility[key] = false
-      revealErrors[key] = null
-      revealPending[key] = false
-    }
-
-    deleteErrors[item.id] = null
-    deletePending[item.id] = false
-
-    if (openReplyItemId.value === item.id)
-      openReplyItemId.value = null
-
-    if (boardItems.value.length <= 1 && boardPagination.value.page > 1) {
-      await pushBoardRouteState({
-        page: boardPagination.value.page - 1,
-      })
-      return
-    }
-
-    await loadBoardItems()
-  }
-  catch (error) {
-    confirmDeleteItemId.value = item.id
-    deleteErrors[item.id] = getBoardApiErrorState(error, endpoint, 'We could not delete that board item right now.', applyServerContext)
-  }
-  finally {
-    if (item.id in deletePending)
-      deletePending[item.id] = false
-  }
-}
-
-async function deleteBoardInteraction(item: BoardItem, interaction: BoardItem['interactions'][number]) {
-  const key = getInteractionDeleteKey(item.id, interaction.id)
-
-  if (confirmDeleteInteractionKey.value !== key) {
-    confirmDeleteInteractionKey.value = key
-    ensureInteractionDeleteState(key)
-    deleteInteractionErrors[key] = null
-    return
-  }
-
-  confirmDeleteInteractionKey.value = null
-  ensureInteractionDeleteState(key)
-  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `items/${item.id}/interactions/${interaction.id}`)
-  deleteInteractionPending[key] = true
-  deleteInteractionErrors[key] = null
-
-  try {
-    const response = await protectedDelete<BoardInteractionDeleteResponse>(endpoint, {
-      'bot-field': '',
-    })
-
-    applyServerContext(response)
-    removeInteractionFromBoard(item.id, interaction.id)
-    deleteInteractionErrors[key] = null
-  }
-  catch (error) {
-    confirmDeleteInteractionKey.value = key
-    deleteInteractionErrors[key] = getBoardApiErrorState(error, endpoint, 'We could not delete that board response right now.', applyServerContext)
-  }
-  finally {
-    deleteInteractionPending[key] = false
-  }
-}
-
-function openReplyForm(item: BoardItem) {
-  if (!canReplyToItem(item))
-    return
-
-  getReplyDraft(item.id)
-  getReplyStatus(item.id)
-  openReplyItemId.value = openReplyItemId.value === item.id ? null : item.id
-}
-
-watch(viewer, (nextViewer) => {
-  if (!nextViewer)
-    return
-
-  for (const draft of Object.values(replyDrafts)) {
-    if (!draft.name)
-      draft.name = nextViewer.displayName
-
-    if (!draft.contact_value)
-      draft.contact_value = nextViewer.email
-  }
-})
-
 onMounted(() => {
   hasHydrated.value = true
-  refreshStoredDeleteTokenIds()
   syncBoardStateFromRoute()
   const manageItem = getQueryValue(route.query.manageItem)
   const manageToken = getQueryValue(route.query.manageToken)
@@ -796,17 +426,11 @@ onMounted(() => {
   if (manageItem && manageToken)
     void claimBoardManagementLink(manageItem, manageToken)
 
-  void Promise.allSettled([
-    loadBootstrap(),
-    loadBoardItems(),
-  ])
+  void Promise.allSettled([loadBootstrap(), loadBoardItems()])
 })
 
 watch(
-  () => [
-    getQueryValue(route.query.filter),
-    getQueryValue(route.query.page),
-  ],
+  () => [getQueryValue(route.query.filter), getQueryValue(route.query.page)],
   () => {
     if (!hasHydrated.value)
       return
@@ -827,11 +451,10 @@ watch(
           <p class="eyebrow">
             One shared place for community requests
           </p>
-          <h1>
-            A live request board for help, borrowing, and lending.
-          </h1>
+          <h1>A live request board for help, borrowing, and lending.</h1>
           <p class="hero__lede">
-            Post service projects, ask to borrow something practical, or lend useful items to a neighbor. The board stays open to everyone, and optional accounts are available for repeat contributors.
+            Post a service project, ask to borrow something practical, or lend
+            an item to a neighbor.
           </p>
 
           <div class="hero__actions">
@@ -846,10 +469,6 @@ watch(
               Lend item
             </NuxtLink>
           </div>
-
-          <p class="hero__caption">
-            Contact details stay hidden until someone intentionally reveals them, and rate limits plus honeypots help reduce bot traffic.
-          </p>
         </div>
 
         <div aria-hidden="true" class="hero__poster">
@@ -864,15 +483,21 @@ watch(
             <div class="poster__lanes">
               <div>
                 <small>service</small>
-                <strong>{{ displayBoardCounts[submissionKinds.service] }}</strong>
+                <strong>{{
+                  displayBoardCounts[submissionKinds.service]
+                }}</strong>
               </div>
               <div>
                 <small>borrow</small>
-                <strong>{{ displayBoardCounts[submissionKinds.itemRequest] }}</strong>
+                <strong>{{
+                  displayBoardCounts[submissionKinds.itemRequest]
+                }}</strong>
               </div>
               <div>
                 <small>lend</small>
-                <strong>{{ displayBoardCounts[submissionKinds.itemLending] }}</strong>
+                <strong>{{
+                  displayBoardCounts[submissionKinds.itemLending]
+                }}</strong>
               </div>
             </div>
             <p class="poster__note">
@@ -889,21 +514,24 @@ watch(
           <p class="eyebrow">
             Live board
           </p>
-          <h2>
-            Requests and offers now live in a board that anyone can browse and answer.
-          </h2>
+          <h2>Browse the live board.</h2>
           <p class="section-copy">
-            Post publicly, respond publicly, or reveal a contact method only when you need it. The email notification pipeline exists in the backend, but the board itself is the primary interaction surface.
+            Open any post for the full thread, replies, and management tools.
           </p>
         </div>
 
-        <div class="board-filter-strip" role="tablist" aria-label="Board filters">
+        <div
+          class="board-filter-strip"
+          role="tablist"
+          aria-label="Board filters"
+        >
           <button
             v-for="filter in boardFilters"
             :key="filter.key"
             :aria-selected="boardFilter === filter.key"
             :disabled="boardPending"
-            class="board-filter" :class="[{ 'board-filter--active': boardFilter === filter.key }]"
+            class="board-filter"
+            :class="[{ 'board-filter--active': boardFilter === filter.key }]"
             type="button"
             @click="setBoardFilter(filter.key)"
           >
@@ -915,23 +543,34 @@ watch(
 
       <div class="live-board__layout">
         <div class="board-feed">
-          <p v-if="securityError" class="inline-note inline-note--error" role="alert">
+          <p
+            v-if="securityError"
+            class="inline-note inline-note--error"
+            role="alert"
+          >
             {{ securityError.message }} {{ securityError.detail }}
           </p>
-          <p v-if="managementNotice" class="inline-note inline-note--success" role="status">
+          <p
+            v-if="managementNotice"
+            class="inline-note inline-note--success"
+            role="status"
+          >
             {{ managementNotice }}
           </p>
-          <p v-if="managementError" class="inline-note inline-note--error" role="alert">
+          <p
+            v-if="managementError"
+            class="inline-note inline-note--error"
+            role="alert"
+          >
             {{ managementError.message }} {{ managementError.detail }}
           </p>
 
           <div class="board-feed__meta">
             <p>
-              {{ activeBoardTotal }} {{ boardFilter === 'all' ? 'live posts' : 'matching posts' }}
+              {{ activeBoardTotal }}
+              {{ boardFilter === "all" ? "live posts" : "matching posts" }}
             </p>
-            <p>
-              {{ boardAudienceNote }}
-            </p>
+            <p>Open a post for replies and the full thread.</p>
             <p v-if="managementPending">
               Claiming management access...
             </p>
@@ -940,11 +579,19 @@ watch(
             </p>
           </div>
 
-          <div v-if="!boardUiReady" class="board-empty board-empty--loading" role="status">
+          <div
+            v-if="!boardUiReady"
+            class="board-empty board-empty--loading"
+            role="status"
+          >
             Loading the live board...
           </div>
 
-          <div v-else-if="boardError" class="board-empty board-empty--error" role="alert">
+          <div
+            v-else-if="boardError"
+            class="board-empty board-empty--error"
+            role="alert"
+          >
             <p>{{ boardError.message }}</p>
             <p>{{ boardError.detail }}</p>
           </div>
@@ -952,7 +599,7 @@ watch(
           <div v-else-if="!boardItems.length" class="board-empty">
             <p>No posts match this filter yet.</p>
             <p>
-              Create the first one from the dedicated
+              Start one from the dedicated
               <NuxtLink prefetch-on="interaction" to="/service-request">
                 service project
               </NuxtLink>,
@@ -967,7 +614,11 @@ watch(
           </div>
 
           <div v-else class="board-feed__list">
-            <article v-for="item in boardItems" :key="item.id" class="board-card">
+            <article
+              v-for="item in boardItems"
+              :key="item.id"
+              class="board-card"
+            >
               <header class="board-card__header">
                 <div>
                   <p class="board-card__kind">
@@ -985,7 +636,10 @@ watch(
               <div class="board-card__author">
                 <strong>{{ item.author.displayName }}</strong>
                 <span v-if="item.author.hasAccount" class="board-card__badge">account-backed</span>
-                <span v-if="item.resolutionStatus === 'resolved'" class="board-card__badge board-card__badge--resolved">resolved</span>
+                <span
+                  v-if="item.resolutionStatus === 'resolved'"
+                  class="board-card__badge board-card__badge--resolved"
+                >resolved</span>
               </div>
 
               <p class="board-card__summary-label">
@@ -996,15 +650,22 @@ watch(
               </p>
 
               <dl v-if="item.attributes.length" class="board-card__attributes">
-                <div v-for="attribute in item.attributes" :key="`${item.id}-${attribute.label}`">
+                <div
+                  v-for="attribute in item.attributes"
+                  :key="`${item.id}-${attribute.label}`"
+                >
                   <dt>{{ attribute.label }}</dt>
                   <dd>{{ attribute.value }}</dd>
                 </div>
               </dl>
 
               <div class="board-card__actions">
-                <NuxtLink class="secondary-button" prefetch-on="interaction" :to="getBoardDetailPath(item.id)">
-                  View details
+                <NuxtLink
+                  class="secondary-button"
+                  prefetch-on="interaction"
+                  :to="getBoardDetailPath(item.id)"
+                >
+                  Open post
                 </NuxtLink>
                 <button
                   class="secondary-button"
@@ -1014,172 +675,35 @@ watch(
                 >
                   {{ getItemContactActionLabel(item) }}
                 </button>
-                <button
-                  v-if="canReplyToItem(item)"
-                  class="secondary-button secondary-button--dark"
-                  type="button"
-                  @click="openReplyForm(item)"
-                >
-                  {{ openReplyItemId === item.id ? 'Hide reply form' : getReplyActionLabel(item.kind) }}
-                </button>
-                <button
-                  v-if="canResolveItem(item)"
-                  class="secondary-button"
-                  :disabled="resolvePending[item.id]"
-                  type="button"
-                  @click="toggleBoardResolution(item)"
-                >
-                  {{ getResolutionActionLabel(item) }}
-                </button>
-                <button
-                  v-if="canDeleteItem(item)"
-                  class="secondary-button secondary-button--danger"
-                  :disabled="deletePending[item.id]"
-                  type="button"
-                  @click="deleteBoardPost(item)"
-                >
-                  {{ getDeleteActionLabel(item.id) }}
-                </button>
               </div>
-
-              <p class="board-card__contact-note">
-                Contact details are hidden until you deliberately reveal them to reduce scraping.
-              </p>
-              <p v-if="item.resolutionStatus === 'resolved'" class="board-card__resolved-note">
+              <p
+                v-if="item.resolutionStatus === 'resolved'"
+                class="board-card__resolved-note"
+              >
                 {{ getResolvedNote(item) }}
               </p>
-
-              <p v-if="deleteErrors[item.id]" class="inline-note inline-note--error" role="alert">
-                {{ deleteErrors[item.id]?.message }} {{ deleteErrors[item.id]?.detail }}
+              <p
+                v-if="revealErrors[item.id]"
+                class="inline-note inline-note--error"
+                role="alert"
+              >
+                {{ revealErrors[item.id]?.message }}
+                {{ revealErrors[item.id]?.detail }}
               </p>
-              <p v-if="resolveErrors[item.id]" class="inline-note inline-note--error" role="alert">
-                {{ resolveErrors[item.id]?.message }} {{ resolveErrors[item.id]?.detail }}
-              </p>
-              <p v-if="revealErrors[item.id]" class="inline-note inline-note--error" role="alert">
-                {{ revealErrors[item.id]?.message }} {{ revealErrors[item.id]?.detail }}
-              </p>
-              <p v-if="isItemContactVisible(item.id)" class="inline-note inline-note--success" role="status">
+              <p
+                v-if="isItemContactVisible(item.id)"
+                class="inline-note inline-note--success"
+                role="status"
+              >
                 Contact: {{ revealItemContacts[item.id] }}
               </p>
-
-              <div class="board-card__thread">
-                <p class="board-card__thread-label">
-                  Board responses
-                </p>
-
-                <div v-if="item.interactions.length" class="thread-list">
-                  <article v-for="interaction in item.interactions" :key="interaction.id" class="thread-item">
-                    <div class="thread-item__header">
-                      <div>
-                        <strong>{{ interaction.author.displayName }}</strong>
-                        <span v-if="interaction.author.hasAccount" class="board-card__badge">account-backed</span>
-                      </div>
-                      <span>{{ formatBoardDate(interaction.createdAt) }}</span>
-                    </div>
-                    <p>{{ interaction.message }}</p>
-                    <button
-                      class="thread-item__contact"
-                      :disabled="revealPending[getRevealKey(item.id, interaction.id)]"
-                      type="button"
-                      @click="revealInteractionContact(item.id, interaction.id)"
-                    >
-                      {{ getInteractionContactActionLabel(item.id, interaction.id) }}
-                    </button>
-                    <button
-                      v-if="canDeleteInteraction(interaction)"
-                      class="thread-item__contact thread-item__contact--danger"
-                      :disabled="deleteInteractionPending[getInteractionDeleteKey(item.id, interaction.id)]"
-                      type="button"
-                      @click="deleteBoardInteraction(item, interaction)"
-                    >
-                      {{ getDeleteInteractionActionLabel(item.id, interaction.id) }}
-                    </button>
-                    <p v-if="revealErrors[getRevealKey(item.id, interaction.id)]" class="inline-note inline-note--error" role="alert">
-                      {{ revealErrors[getRevealKey(item.id, interaction.id)]?.message }} {{ revealErrors[getRevealKey(item.id, interaction.id)]?.detail }}
-                    </p>
-                    <p v-if="deleteInteractionErrors[getInteractionDeleteKey(item.id, interaction.id)]" class="inline-note inline-note--error" role="alert">
-                      {{ deleteInteractionErrors[getInteractionDeleteKey(item.id, interaction.id)]?.message }} {{ deleteInteractionErrors[getInteractionDeleteKey(item.id, interaction.id)]?.detail }}
-                    </p>
-                    <p v-if="isInteractionContactVisible(item.id, interaction.id)" class="inline-note inline-note--success" role="status">
-                      Contact: {{ revealInteractionContacts[getRevealKey(item.id, interaction.id)] }}
-                    </p>
-                  </article>
-                </div>
-
-                <p v-else class="board-card__thread-empty">
-                  No responses yet. This is the place where neighbors can answer the request directly.
-                </p>
-              </div>
-
-              <p v-if="item.resolutionStatus === 'resolved'" class="board-card__thread-empty">
-                This post is resolved, so new public replies are closed unless the owner or an admin reopens it.
-              </p>
-
-              <form
-                v-if="openReplyItemId === item.id && canReplyToItem(item)"
-                class="reply-form"
-                :aria-busy="replyStatuses[item.id]?.pending"
-                @submit.prevent="submitBoardReply(item)"
-              >
-                <p class="sr-only">
-                  <label>Do not fill this field if you are human. <input v-model="replyDrafts[item.id]!['bot-field']" name="bot-field" type="text"></label>
-                </p>
-
-                <div class="field-grid">
-                  <label class="field">
-                    <span>Your name</span>
-                    <input v-model="replyDrafts[item.id]!.name" :required="!viewer" autocomplete="name" placeholder="Jane Smith" type="text">
-                  </label>
-
-                  <label class="field">
-                    <span>Contact method</span>
-                    <select v-model="replyDrafts[item.id]!.contact_method" :required="!viewer">
-                      <option v-for="option in boardContactMethodOptions" :key="option.value" :value="option.value">
-                        {{ option.label }}
-                      </option>
-                    </select>
-                  </label>
-
-                  <label class="field">
-                    <span>{{ viewer ? `${getBoardContactValueLabel(replyDrafts[item.id]!.contact_method)} (optional when signed in)` : getBoardContactValueLabel(replyDrafts[item.id]!.contact_method) }}</span>
-                    <input
-                      v-model="replyDrafts[item.id]!.contact_value"
-                      :autocomplete="getBoardContactValueAutocomplete(replyDrafts[item.id]!.contact_method)"
-                      :inputmode="getBoardContactValueInputMode(replyDrafts[item.id]!.contact_method)"
-                      :placeholder="getBoardContactValuePlaceholder(replyDrafts[item.id]!.contact_method)"
-                      :required="!viewer"
-                      :type="getBoardContactValueType(replyDrafts[item.id]!.contact_method)"
-                    >
-                  </label>
-
-                  <label class="field field--wide">
-                    <span>Contact note (optional)</span>
-                    <input v-model="replyDrafts[item.id]!.contact_note" placeholder="Example: text first, evenings are best, or include the item name when you reach out." type="text">
-                  </label>
-
-                  <label class="field field--wide">
-                    <span>Message</span>
-                    <textarea v-model="replyDrafts[item.id]!.message" placeholder="Tell them what you can offer, what timing works, and anything they should know before reaching out." required rows="5" />
-                  </label>
-                </div>
-
-                <p v-if="replyStatuses[item.id]?.error" class="inline-note inline-note--error" role="alert">
-                  {{ replyStatuses[item.id]?.error?.message }} {{ replyStatuses[item.id]?.error?.detail }}
-                </p>
-                <p v-if="replyStatuses[item.id]?.success" class="inline-note inline-note--success" role="status">
-                  Your response is now on the board.
-                </p>
-
-                <button class="submit-button submit-button--slim" :disabled="replyStatuses[item.id]?.pending" type="submit">
-                  {{ replyStatuses[item.id]?.pending ? 'Posting response...' : 'Post board response' }}
-                </button>
-              </form>
             </article>
           </div>
 
           <div v-if="boardUiReady && !boardError" class="board-pagination">
             <div class="board-pagination__summary">
-              Page {{ boardPagination.page }} of {{ boardPagination.totalPages }}
+              Page {{ boardPagination.page }} of
+              {{ boardPagination.totalPages }}
               <span>· {{ boardPagination.totalItems }} total in this view</span>
             </div>
             <div class="board-pagination__actions">

@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import type { FormErrorState, FormStatus } from '~/composables/useBoardSubmission'
+import type {
+  FormErrorState,
+  FormStatus,
+} from '~/composables/useBoardSubmission'
 
 defineProps<{
   description: string
@@ -21,7 +24,11 @@ const emit = defineEmits<{
 <template>
   <div class="submission-page">
     <section class="submission-page__hero">
-      <NuxtLink class="submission-page__back" prefetch-on="interaction" to="/#live-board">
+      <NuxtLink
+        class="submission-page__back"
+        prefetch-on="interaction"
+        to="/#live-board"
+      >
         Back to live board
       </NuxtLink>
 
@@ -35,20 +42,22 @@ const emit = defineEmits<{
     </section>
 
     <section class="submission-page__panel">
-      <div class="submission-page__copy">
+      <div class="submission-page__tips">
         <p class="eyebrow">
-          Before you post
+          Quick checklist
         </p>
-        <h2>
-          Keep the request specific enough for another person to respond quickly.
-        </h2>
-
         <ul class="submission-page__examples">
           <li v-for="example in examples" :key="example">
             {{ example }}
           </li>
         </ul>
+      </div>
 
+      <form
+        class="submission-page__form"
+        :aria-busy="status.pending"
+        @submit.prevent="emit('submit', $event)"
+      >
         <p v-if="status.success" class="success-note" role="status">
           {{ successText }}
         </p>
@@ -68,15 +77,10 @@ const emit = defineEmits<{
             {{ securityError.detail }}
           </p>
         </div>
-      </div>
 
-      <form
-        class="submission-page__form"
-        :aria-busy="status.pending"
-        @submit.prevent="emit('submit', $event)"
-      >
         <p class="sr-only">
-          <label>Do not fill this field if you are human. <input name="bot-field" type="text"></label>
+          <label>Do not fill this field if you are human.
+            <input name="bot-field" type="text"></label>
         </p>
 
         <div class="field-grid">
@@ -148,13 +152,8 @@ const emit = defineEmits<{
   text-wrap: balance;
 }
 
-.submission-page h2 {
-  font-size: clamp(1.8rem, 4vw, 2.6rem);
-  line-height: 1;
-}
-
 .submission-page__lede,
-.submission-page__copy,
+.submission-page__tips,
 .submission-page__examples {
   color: var(--site-text);
   line-height: 1.7;
@@ -168,24 +167,24 @@ const emit = defineEmits<{
 
 .submission-page__panel {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  gap: 1.2rem;
+  gap: 0.95rem;
   align-items: start;
+  max-width: 48rem;
 }
 
-.submission-page__copy,
+.submission-page__tips,
 .submission-page__form {
   min-width: 0;
-  padding: 1.5rem;
-  border-radius: 1.65rem;
+  padding: 1.2rem 1.3rem;
+  border-radius: 1.35rem;
   background: var(--site-surface);
   border: 1px solid var(--site-border);
   box-shadow: var(--site-shadow);
 }
 
-.submission-page__copy {
+.submission-page__tips {
   display: grid;
-  gap: 1rem;
+  gap: 0.7rem;
 }
 
 .submission-page__examples {
@@ -322,14 +321,8 @@ const emit = defineEmits<{
   border: 0;
 }
 
-@media (max-width: 1080px) {
-  .submission-page__panel {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media (max-width: 760px) {
-  .submission-page__copy,
+  .submission-page__tips,
   .submission-page__form {
     padding: 1.2rem;
   }

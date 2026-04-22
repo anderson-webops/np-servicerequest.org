@@ -7,7 +7,9 @@
 
     <div class="site-header__actions">
       <nav aria-label="Primary" class="site-header__nav">
-        <a href="/#live-board">Live board</a>
+        <NuxtLink prefetch-on="interaction" to="/#live-board">
+          Live board
+        </NuxtLink>
         <NuxtLink prefetch-on="interaction" to="/service-request">
           Service projects
         </NuxtLink>
@@ -16,9 +18,6 @@
         </NuxtLink>
         <NuxtLink prefetch-on="interaction" to="/item-lending">
           Lend an item
-        </NuxtLink>
-        <NuxtLink prefetch-on="interaction" to="/account">
-          Optional account
         </NuxtLink>
       </nav>
 

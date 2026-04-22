@@ -5,39 +5,61 @@ definePageMeta({
 
 useSeoMeta({
   title: 'Help',
-  description: 'Learn how the live community board works and what kinds of requests and lending offers belong there.',
+  description:
+    'Learn how the live community board works and what kinds of requests and lending offers belong there.',
 })
 
 const processSteps = [
   {
     number: '01',
     title: 'Choose the dedicated page',
-    description: 'Service projects, item requests, and lending offers each have their own page so posting stays focused and easier to scan.',
+    description:
+      'Use the matching page so the post lands in the right category from the start.',
   },
   {
     number: '02',
-    title: 'Reply in public or reveal contact on demand',
-    description: 'Neighbors can respond on the thread immediately, or reveal a contact method only when they intentionally need it.',
+    title: 'Reply on the board or reveal contact when needed',
+    description:
+      'People can answer publicly on the thread or reveal contact only when they are ready to reach out directly.',
   },
   {
     number: '03',
     title: 'Stay anonymous or create an account',
-    description: 'Anonymous participation stays open, while optional accounts add an identity anchor for repeat contributors.',
+    description:
+      'An account is optional. It only helps if you want a consistent identity across repeat posts and replies.',
   },
 ]
 
 const boardGroups = [
   {
     title: 'Service projects',
-    items: ['yard cleanup', 'small repairs', 'moving help', 'accessibility upgrades', 'setup or teardown'],
+    items: [
+      'yard cleanup',
+      'small repairs',
+      'moving help',
+      'accessibility upgrades',
+      'setup or teardown',
+    ],
   },
   {
     title: 'Borrow requests',
-    items: ['axes and hand tools', 'kitchen utensils', 'books', 'ladders', 'seasonal gear'],
+    items: [
+      'axes and hand tools',
+      'kitchen utensils',
+      'books',
+      'ladders',
+      'seasonal gear',
+    ],
   },
   {
     title: 'Items to lend',
-    items: ['power tools', 'cookware', 'study materials', 'gardening supplies', 'one-off specialty items'],
+    items: [
+      'power tools',
+      'cookware',
+      'study materials',
+      'gardening supplies',
+      'one-off specialty items',
+    ],
   },
 ]
 </script>
@@ -45,18 +67,21 @@ const boardGroups = [
 <template>
   <div class="help-page">
     <section class="help-page__hero">
-      <NuxtLink class="help-page__back" prefetch-on="interaction" to="/#live-board">
+      <NuxtLink
+        class="help-page__back"
+        prefetch-on="interaction"
+        to="/#live-board"
+      >
         Back to live board
       </NuxtLink>
 
       <p class="eyebrow">
         Help
       </p>
-      <h1>
-        How the board works and what belongs here.
-      </h1>
+      <h1>Quick guidance for using the board well.</h1>
       <p class="help-page__lede">
-        Use this page when you need the structure behind the board: which page to post from, how contact reveal works, and the kinds of requests or lending offers that fit best.
+        Use the right posting page, keep requests specific, and make it easy for
+        someone else to act.
       </p>
     </section>
 
@@ -66,7 +91,7 @@ const boardGroups = [
           How it works
         </p>
         <h2>
-          The board is designed for immediate use, not for private gatekeeping.
+          Post clearly, reply clearly, and reveal contact only when needed.
         </h2>
       </div>
 
@@ -87,7 +112,8 @@ const boardGroups = [
           What belongs here
         </p>
         <h2>
-          Keep posts practical, specific, and clear enough for another person to act on them.
+          Keep posts practical and specific enough for another person to respond
+          quickly.
         </h2>
       </div>
 

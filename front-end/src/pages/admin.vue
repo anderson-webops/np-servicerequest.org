@@ -85,7 +85,8 @@ definePageMeta({
 
 useSeoMeta({
   title: 'Admin review',
-  description: 'Review stored submissions with an admin key. This page is separate from normal board user accounts.',
+  description:
+    'Review stored submissions with an admin key. This page is separate from normal board user accounts.',
 })
 
 const runtimeConfig = useRuntimeConfig()
@@ -106,8 +107,14 @@ const activityEntries = ref<AdminActivityEntry[]>([])
 const counts = ref<AdminSubmissionCounts>({ ...emptyCounts })
 const kindCounts = ref<AdminKindCounts>({ ...emptyKindCounts })
 const activityCounts = ref<AdminActivityCounts>({ ...emptyActivityCounts })
-const submissionsPagination = ref<AdminPagination>({ ...emptyPagination, pageSize: 20 })
-const activityPagination = ref<AdminPagination>({ ...emptyPagination, pageSize: 40 })
+const submissionsPagination = ref<AdminPagination>({
+  ...emptyPagination,
+  pageSize: 20,
+})
+const activityPagination = ref<AdminPagination>({
+  ...emptyPagination,
+  pageSize: 40,
+})
 const reviewFilter = ref<ReviewFilter>('pending')
 const kindFilter = ref<KindFilter>('all')
 const activityFilter = ref<ActivityFilter>('all')
@@ -125,15 +132,31 @@ const statusFilters = computed(() => [
   { key: 'all' as const, label: 'All', count: counts.value.total },
   { key: 'pending' as const, label: 'Pending', count: counts.value.pending },
   { key: 'approved' as const, label: 'Approved', count: counts.value.approved },
-  { key: 'needs-follow-up' as const, label: 'Needs Follow-Up', count: counts.value.needsFollowUp },
+  {
+    key: 'needs-follow-up' as const,
+    label: 'Needs Follow-Up',
+    count: counts.value.needsFollowUp,
+  },
   { key: 'rejected' as const, label: 'Rejected', count: counts.value.rejected },
 ])
 
 const kindFilters = computed(() => [
   { key: 'all' as const, label: 'All kinds', count: kindCounts.value.all },
-  { key: 'service-request' as const, label: kindLabels['service-request'], count: kindCounts.value['service-request'] },
-  { key: 'item-request' as const, label: kindLabels['item-request'], count: kindCounts.value['item-request'] },
-  { key: 'item-lending' as const, label: kindLabels['item-lending'], count: kindCounts.value['item-lending'] },
+  {
+    key: 'service-request' as const,
+    label: kindLabels['service-request'],
+    count: kindCounts.value['service-request'],
+  },
+  {
+    key: 'item-request' as const,
+    label: kindLabels['item-request'],
+    count: kindCounts.value['item-request'],
+  },
+  {
+    key: 'item-lending' as const,
+    label: kindLabels['item-lending'],
+    count: kindCounts.value['item-lending'],
+  },
 ])
 
 const activityCategoryLabels: Record<Exclude<ActivityFilter, 'all'>, string> = {
@@ -147,7 +170,11 @@ const filteredActivityEntries = computed(() => activityEntries.value)
 
 const activityFilters = computed(() => {
   return [
-    { key: 'all' as const, label: 'All activity', count: activityCounts.value.total },
+    {
+      key: 'all' as const,
+      label: 'All activity',
+      count: activityCounts.value.total,
+    },
     ...Object.entries(activityCategoryLabels).map(([key, label]) => ({
       key: key as Exclude<ActivityFilter, 'all'>,
       label,
@@ -170,15 +197,21 @@ function parseReviewFilter(value: string): ReviewFilter {
   if (value === 'all')
     return 'all'
 
-  return reviewStatusLabels[value as AdminReviewStatus] ? value as AdminReviewStatus : 'pending'
+  return reviewStatusLabels[value as AdminReviewStatus]
+    ? (value as AdminReviewStatus)
+    : 'pending'
 }
 
 function parseKindFilter(value: string): KindFilter {
-  return kindLabels[value as SubmissionKind] ? value as SubmissionKind : 'all'
+  return kindLabels[value as SubmissionKind]
+    ? (value as SubmissionKind)
+    : 'all'
 }
 
 function parseActivityFilter(value: string): ActivityFilter {
-  return activityCategoryLabels[value as Exclude<ActivityFilter, 'all'>] ? value as Exclude<ActivityFilter, 'all'> : 'all'
+  return activityCategoryLabels[value as Exclude<ActivityFilter, 'all'>]
+    ? (value as Exclude<ActivityFilter, 'all'>)
+    : 'all'
 }
 
 function parsePositivePage(value: string) {
@@ -194,9 +227,15 @@ function syncAdminStateFromRoute() {
   let changed = false
   const nextReviewFilter = parseReviewFilter(getQueryValue(route.query.review))
   const nextKindFilter = parseKindFilter(getQueryValue(route.query.kind))
-  const nextActivityFilter = parseActivityFilter(getQueryValue(route.query.activity))
-  const nextSubmissionsPage = parsePositivePage(getQueryValue(route.query.submissionsPage))
-  const nextActivityPage = parsePositivePage(getQueryValue(route.query.activityPage))
+  const nextActivityFilter = parseActivityFilter(
+    getQueryValue(route.query.activity),
+  )
+  const nextSubmissionsPage = parsePositivePage(
+    getQueryValue(route.query.submissionsPage),
+  )
+  const nextActivityPage = parsePositivePage(
+    getQueryValue(route.query.activityPage),
+  )
 
   if (reviewFilter.value !== nextReviewFilter) {
     reviewFilter.value = nextReviewFilter
@@ -242,8 +281,14 @@ async function pushAdminRouteState(nextState: {
   const nextReviewFilter = nextState.reviewFilter ?? reviewFilter.value
   const nextKindFilter = nextState.kindFilter ?? kindFilter.value
   const nextActivityFilter = nextState.activityFilter ?? activityFilter.value
-  const nextSubmissionsPage = Math.max(nextState.submissionsPage ?? submissionsPagination.value.page, 1)
-  const nextActivityPage = Math.max(nextState.activityPage ?? activityPagination.value.page, 1)
+  const nextSubmissionsPage = Math.max(
+    nextState.submissionsPage ?? submissionsPagination.value.page,
+    1,
+  )
+  const nextActivityPage = Math.max(
+    nextState.activityPage ?? activityPagination.value.page,
+    1,
+  )
 
   await router.push({
     hash: route.hash,
@@ -254,7 +299,8 @@ async function pushAdminRouteState(nextState: {
       activityPage: nextActivityPage > 1 ? String(nextActivityPage) : undefined,
       kind: nextKindFilter === 'all' ? undefined : nextKindFilter,
       review: nextReviewFilter === 'pending' ? undefined : nextReviewFilter,
-      submissionsPage: nextSubmissionsPage > 1 ? String(nextSubmissionsPage) : undefined,
+      submissionsPage:
+        nextSubmissionsPage > 1 ? String(nextSubmissionsPage) : undefined,
     },
   })
 }
@@ -309,8 +355,14 @@ function clearAdminSession() {
   counts.value = { ...emptyCounts }
   kindCounts.value = { ...emptyKindCounts }
   activityCounts.value = { ...emptyActivityCounts }
-  submissionsPagination.value = { ...emptyPagination, pageSize: submissionsPagination.value.pageSize }
-  activityPagination.value = { ...emptyPagination, pageSize: activityPagination.value.pageSize }
+  submissionsPagination.value = {
+    ...emptyPagination,
+    pageSize: submissionsPagination.value.pageSize,
+  }
+  activityPagination.value = {
+    ...emptyPagination,
+    pageSize: activityPagination.value.pageSize,
+  }
   activityEntries.value = []
   submissions.value = []
 }
@@ -330,7 +382,11 @@ function seedReviewState(nextSubmissions: AdminSubmissionRecord[]) {
   }
 }
 
-function getApiErrorState(error: unknown, endpoint: string, fallbackMessage: string): FormErrorState {
+function getApiErrorState(
+  error: unknown,
+  endpoint: string,
+  fallbackMessage: string,
+): FormErrorState {
   const fallbackDetail = `Request URL: ${endpoint}. Please try again in a moment.`
   let statusCode: number | null = null
   let serverMessage = ''
@@ -342,28 +398,37 @@ function getApiErrorState(error: unknown, endpoint: string, fallbackMessage: str
     if ('data' in error) {
       const data = (error as { data?: unknown }).data
 
-      if (data && typeof data === 'object' && 'message' in data && typeof data.message === 'string')
+      if (
+        data
+        && typeof data === 'object'
+        && 'message' in data
+        && typeof data.message === 'string'
+      ) {
         serverMessage = data.message
+      }
     }
   }
 
   if (statusCode === 401 || statusCode === 403) {
     return {
       message: serverMessage || 'The admin key was missing or invalid.',
-      detail: 'Re-enter a valid admin key to continue. This admin access path is separate from normal board user accounts.',
+      detail:
+        'Re-enter a valid admin key to continue. This admin access path is separate from normal board user accounts.',
     }
   }
 
   if (statusCode === 404) {
     return {
-      message: serverMessage || 'The admin review API is not available at this URL.',
+      message:
+        serverMessage || 'The admin review API is not available at this URL.',
       detail: `Request URL: ${endpoint}.`,
     }
   }
 
   if (statusCode === 503) {
     return {
-      message: serverMessage || 'Admin review is not configured on this server.',
+      message:
+        serverMessage || 'Admin review is not configured on this server.',
       detail: `Request URL: ${endpoint}.`,
     }
   }
@@ -381,15 +446,36 @@ function getApiErrorState(error: unknown, endpoint: string, fallbackMessage: str
   }
 }
 
-async function loadAdminSubmissions(candidateKey = activeAdminKey.value, options?: { authAttempt?: boolean, background?: boolean, showSessionNotice?: boolean }) {
-  const endpoint = new URL(getAdminEndpoint(runtimeConfig.public.apiBaseUrl, 'submissions'))
+async function loadAdminSubmissions(
+  candidateKey = activeAdminKey.value,
+  options?: {
+    authAttempt?: boolean
+    background?: boolean
+    showSessionNotice?: boolean
+  },
+) {
+  const endpoint = new URL(
+    getAdminEndpoint(runtimeConfig.public.apiBaseUrl, 'submissions'),
+  )
   endpoint.searchParams.set('review', reviewFilter.value)
   endpoint.searchParams.set('kind', kindFilter.value)
   endpoint.searchParams.set('activityCategory', activityFilter.value)
-  endpoint.searchParams.set('submissionsPage', String(submissionsPagination.value.page))
-  endpoint.searchParams.set('submissionsPageSize', String(submissionsPagination.value.pageSize))
-  endpoint.searchParams.set('activityPage', String(activityPagination.value.page))
-  endpoint.searchParams.set('activityPageSize', String(activityPagination.value.pageSize))
+  endpoint.searchParams.set(
+    'submissionsPage',
+    String(submissionsPagination.value.page),
+  )
+  endpoint.searchParams.set(
+    'submissionsPageSize',
+    String(submissionsPagination.value.pageSize),
+  )
+  endpoint.searchParams.set(
+    'activityPage',
+    String(activityPagination.value.page),
+  )
+  endpoint.searchParams.set(
+    'activityPageSize',
+    String(activityPagination.value.pageSize),
+  )
   const normalizedKey = candidateKey.trim()
 
   if (!normalizedKey) {
@@ -408,17 +494,19 @@ async function loadAdminSubmissions(candidateKey = activeAdminKey.value, options
 
   if (useBackgroundRefresh)
     refreshPending.value = true
-  else
-    loadPending.value = true
+  else loadPending.value = true
 
   dataError.value = null
 
   try {
-    const response = await $fetch<AdminSubmissionsResponse>(endpoint.toString(), {
-      headers: {
-        'x-admin-key': normalizedKey,
+    const response = await $fetch<AdminSubmissionsResponse>(
+      endpoint.toString(),
+      {
+        headers: {
+          'x-admin-key': normalizedKey,
+        },
       },
-    })
+    )
 
     activeAdminKey.value = normalizedKey
     writeStoredAdminKey(normalizedKey)
@@ -432,13 +520,22 @@ async function loadAdminSubmissions(candidateKey = activeAdminKey.value, options
     seedReviewState(response.submissions)
     adminKeyInput.value = ''
     authError.value = null
-    if (options?.showSessionNotice !== false)
-      authNotice.value = 'Admin key accepted. It is stored only in this browser session.'
+    if (options?.showSessionNotice !== false) {
+      authNotice.value
+        = 'Admin key accepted. It is stored only in this browser session.'
+    }
   }
   catch (error) {
-    const errorState = getApiErrorState(error, endpoint.toString(), 'Unable to load admin submissions right now.')
+    const errorState = getApiErrorState(
+      error,
+      endpoint.toString(),
+      'Unable to load admin submissions right now.',
+    )
 
-    if ((error as { status?: number })?.status === 401 || (error as { status?: number })?.status === 403) {
+    if (
+      (error as { status?: number })?.status === 401
+      || (error as { status?: number })?.status === 403
+    ) {
       clearAdminSession()
       authError.value = errorState
       authNotice.value = ''
@@ -450,14 +547,12 @@ async function loadAdminSubmissions(candidateKey = activeAdminKey.value, options
 
     if (options?.authAttempt)
       authError.value = errorState
-    else
-      dataError.value = errorState
+    else dataError.value = errorState
   }
   finally {
     if (useBackgroundRefresh)
       refreshPending.value = false
-    else
-      loadPending.value = false
+    else loadPending.value = false
   }
 }
 
@@ -483,8 +578,12 @@ function signOutAdmin() {
 }
 
 function setReviewFilter(nextFilter: ReviewFilter) {
-  if (reviewFilter.value === nextFilter && submissionsPagination.value.page === 1)
+  if (
+    reviewFilter.value === nextFilter
+    && submissionsPagination.value.page === 1
+  ) {
     return
+  }
 
   void pushAdminRouteState({
     reviewFilter: nextFilter,
@@ -503,8 +602,12 @@ function setKindFilter(nextFilter: KindFilter) {
 }
 
 function setActivityFilter(nextFilter: ActivityFilter) {
-  if (activityFilter.value === nextFilter && activityPagination.value.page === 1)
+  if (
+    activityFilter.value === nextFilter
+    && activityPagination.value.page === 1
+  ) {
     return
+  }
 
   void pushAdminRouteState({
     activityFilter: nextFilter,
@@ -513,7 +616,10 @@ function setActivityFilter(nextFilter: ActivityFilter) {
 }
 
 function changeSubmissionsPage(nextPage: number) {
-  const normalizedPage = Math.min(Math.max(nextPage, 1), submissionsPagination.value.totalPages)
+  const normalizedPage = Math.min(
+    Math.max(nextPage, 1),
+    submissionsPagination.value.totalPages,
+  )
 
   if (normalizedPage === submissionsPagination.value.page)
     return
@@ -524,7 +630,10 @@ function changeSubmissionsPage(nextPage: number) {
 }
 
 function changeActivityPage(nextPage: number) {
-  const normalizedPage = Math.min(Math.max(nextPage, 1), activityPagination.value.totalPages)
+  const normalizedPage = Math.min(
+    Math.max(nextPage, 1),
+    activityPagination.value.totalPages,
+  )
 
   if (normalizedPage === activityPagination.value.page)
     return
@@ -534,8 +643,14 @@ function changeActivityPage(nextPage: number) {
   })
 }
 
-async function saveReview(submission: AdminSubmissionRecord, status: AdminReviewStatus) {
-  const endpoint = getAdminEndpoint(runtimeConfig.public.apiBaseUrl, `submissions/${submission.kind}/${submission.id}/review`)
+async function saveReview(
+  submission: AdminSubmissionRecord,
+  status: AdminReviewStatus,
+) {
+  const endpoint = getAdminEndpoint(
+    runtimeConfig.public.apiBaseUrl,
+    `submissions/${submission.kind}/${submission.id}/review`,
+  )
   const previousScrollY = import.meta.client ? window.scrollY : 0
   reviewPending[submission.id] = true
   reviewErrors[submission.id] = null
@@ -553,28 +668,42 @@ async function saveReview(submission: AdminSubmissionRecord, status: AdminReview
       method: 'POST',
     })
 
-    await loadAdminSubmissions(activeAdminKey.value, { background: true, showSessionNotice: false })
+    await loadAdminSubmissions(activeAdminKey.value, {
+      background: true,
+      showSessionNotice: false,
+    })
     await nextTick()
 
     if (import.meta.client) {
-      const maxScrollTop = Math.max(document.documentElement.scrollHeight - window.innerHeight, 0)
+      const maxScrollTop = Math.max(
+        document.documentElement.scrollHeight - window.innerHeight,
+        0,
+      )
       window.scrollTo({
         top: Math.min(previousScrollY, maxScrollTop),
       })
     }
 
-    reviewNotices[submission.id] = status === 'rejected'
-      ? response.submission.board.publicState === 'hidden_by_admin'
-        ? 'Rejected and hidden from the public board.'
-        : 'Rejected. No linked public board item was hidden.'
-      : status === 'pending'
-        ? 'Review reset. Hidden item restored if it had only been hidden by rejection.'
-        : `Saved as ${formatStatusLabel(status).toLowerCase()}.`
+    reviewNotices[submission.id]
+      = status === 'rejected'
+        ? response.submission.board.publicState === 'hidden_by_admin'
+          ? 'Rejected and hidden from the public board.'
+          : 'Rejected. No linked public board item was hidden.'
+        : status === 'pending'
+          ? 'Review reset. Hidden item restored if it had only been hidden by rejection.'
+          : `Saved as ${formatStatusLabel(status).toLowerCase()}.`
   }
   catch (error) {
-    const errorState = getApiErrorState(error, endpoint, 'Unable to save that review right now.')
+    const errorState = getApiErrorState(
+      error,
+      endpoint,
+      'Unable to save that review right now.',
+    )
 
-    if ((error as { status?: number })?.status === 401 || (error as { status?: number })?.status === 403) {
+    if (
+      (error as { status?: number })?.status === 401
+      || (error as { status?: number })?.status === 403
+    ) {
       clearAdminSession()
       authError.value = errorState
       dataError.value = null
@@ -617,8 +746,12 @@ watch(
 
     const changed = syncAdminStateFromRoute()
 
-    if (changed && isAuthenticated.value)
-      void loadAdminSubmissions(activeAdminKey.value, { background: true, showSessionNotice: false })
+    if (changed && isAuthenticated.value) {
+      void loadAdminSubmissions(activeAdminKey.value, {
+        background: true,
+        showSessionNotice: false,
+      })
+    }
   },
 )
 </script>
@@ -626,18 +759,21 @@ watch(
 <template>
   <div class="admin-page">
     <section class="admin-page__hero">
-      <NuxtLink class="admin-page__back" prefetch-on="interaction" to="/#live-board">
+      <NuxtLink
+        class="admin-page__back"
+        prefetch-on="interaction"
+        to="/#live-board"
+      >
         Back to live board
       </NuxtLink>
 
       <p class="eyebrow">
         Admin review
       </p>
-      <h1>
-        Review stored submissions with an admin key, not a board user account.
-      </h1>
+      <h1>Review submissions with the separate admin key.</h1>
       <p class="admin-page__lede">
-        This page is separate from the normal board account flow. It accepts an admin key, stores it only in <code>sessionStorage</code>, and uses that key only for the protected admin review API.
+        This page is separate from the normal board account flow. Use the admin
+        key here when you need moderation and review access.
       </p>
     </section>
 
@@ -646,18 +782,20 @@ watch(
         <p class="eyebrow">
           Separate access path
         </p>
-        <h2>
-          Do not use the optional account login here.
-        </h2>
+        <h2>This is not the optional account sign-in.</h2>
         <ul class="admin-page__list">
-          <li>This sign-in is key-based, not email/password-based.</li>
-          <li>The key stays only in this browser session and is cleared when you sign out.</li>
-          <li>Every admin request is sent with <code>x-admin-key</code> directly to the backend admin API.</li>
+          <li>Use the admin key here, not the public account login.</li>
+          <li>The key stays only for the current browser session.</li>
+          <li>Sign out here when you are done reviewing.</li>
         </ul>
       </div>
 
       <div class="admin-panel">
-        <p v-if="authNotice" class="inline-note inline-note--success" role="status">
+        <p
+          v-if="authNotice"
+          class="inline-note inline-note--success"
+          role="status"
+        >
           {{ authNotice }}
         </p>
         <p v-if="authError" class="inline-note inline-note--error" role="alert">
@@ -667,7 +805,11 @@ watch(
           {{ dataError.message }} {{ dataError.detail }}
         </p>
 
-        <form v-if="hasHydrated && !isAuthenticated" class="admin-form" @submit.prevent="submitAdminKey">
+        <form
+          v-if="hasHydrated && !isAuthenticated"
+          class="admin-form"
+          @submit.prevent="submitAdminKey"
+        >
           <label class="field">
             <span>Admin key</span>
             <input
@@ -683,7 +825,7 @@ watch(
           </label>
 
           <button class="submit-button" :disabled="authPending" type="submit">
-            {{ authPending ? 'Checking key…' : 'Sign in with admin key' }}
+            {{ authPending ? "Checking key…" : "Sign in with admin key" }}
           </button>
         </form>
 
@@ -711,16 +853,19 @@ watch(
         <p class="eyebrow">
           Review queue
         </p>
-        <h2>
-          Review stored submissions and record an admin decision.
-        </h2>
+        <h2>Review stored submissions and record an admin decision.</h2>
         <p class="section-copy">
-          The filters below work against the stored submission queue. Rejecting a submission hides its linked board item from the public board while keeping the internal record. Invalid admin keys clear the session immediately and return you to the admin-key prompt.
+          Rejecting a submission hides its linked board item from public view
+          while keeping the internal record here for review history.
         </p>
       </div>
 
       <div class="admin-review__filters">
-        <div class="filter-strip" role="tablist" aria-label="Review status filters">
+        <div
+          class="filter-strip"
+          role="tablist"
+          aria-label="Review status filters"
+        >
           <button
             v-for="filter in statusFilters"
             :key="filter.key"
@@ -735,7 +880,11 @@ watch(
           </button>
         </div>
 
-        <div class="filter-strip" role="tablist" aria-label="Submission type filters">
+        <div
+          class="filter-strip"
+          role="tablist"
+          aria-label="Submission type filters"
+        >
           <button
             v-for="filter in kindFilters"
             :key="filter.key"
@@ -754,7 +903,11 @@ watch(
       <p v-if="refreshPending" class="inline-note" role="status">
         Refreshing admin review results…
       </p>
-      <div v-if="loadPending && !visibleSubmissions.length" class="admin-empty" role="status">
+      <div
+        v-if="loadPending && !visibleSubmissions.length"
+        class="admin-empty"
+        role="status"
+      >
         Loading admin submissions…
       </div>
       <div v-else-if="!visibleSubmissions.length" class="admin-empty">
@@ -762,10 +915,16 @@ watch(
       </div>
       <div v-else class="admin-review__list">
         <div class="admin-pagination admin-pagination--summary">
-          <span>Page {{ submissionsPagination.page }} of {{ submissionsPagination.totalPages }}</span>
-          <span>{{ submissionsPagination.totalItems }} submissions match the current queue filters.</span>
+          <span>Page {{ submissionsPagination.page }} of
+            {{ submissionsPagination.totalPages }}</span>
+          <span>{{ submissionsPagination.totalItems }} submissions match the
+            current queue filters.</span>
         </div>
-        <article v-for="submission in visibleSubmissions" :key="submission.id" class="admin-card">
+        <article
+          v-for="submission in visibleSubmissions"
+          :key="submission.id"
+          class="admin-card"
+        >
           <header class="admin-card__header">
             <div>
               <p class="admin-card__kind">
@@ -776,17 +935,23 @@ watch(
 
             <div class="admin-card__meta">
               <span>{{ formatSubmissionDate(submission.createdAt) }}</span>
-              <span class="admin-card__status" :data-status="submission.review.status">
+              <span
+                class="admin-card__status"
+                :data-status="submission.review.status"
+              >
                 {{ formatStatusLabel(submission.review.status) }}
               </span>
-              <span class="admin-card__status admin-card__status--board" :data-status="submission.board.publicState">
+              <span
+                class="admin-card__status admin-card__status--board"
+                :data-status="submission.board.publicState"
+              >
                 {{ submission.board.publicStateLabel }}
               </span>
             </div>
           </header>
 
           <p class="admin-card__summary">
-            {{ submission.summary || 'No summary available.' }}
+            {{ submission.summary || "No summary available." }}
           </p>
 
           <p class="admin-card__board-note">
@@ -797,13 +962,19 @@ watch(
           </p>
 
           <dl class="admin-card__fields">
-            <div v-for="entry in submission.fieldEntries" :key="`${submission.id}-${entry.label}`">
+            <div
+              v-for="entry in submission.fieldEntries"
+              :key="`${submission.id}-${entry.label}`"
+            >
               <dt>{{ entry.label }}</dt>
               <dd>{{ entry.value }}</dd>
             </div>
           </dl>
 
-          <div v-if="submission.meta.ip || submission.meta.userAgent" class="admin-card__meta-note">
+          <div
+            v-if="submission.meta.ip || submission.meta.userAgent"
+            class="admin-card__meta-note"
+          >
             <span v-if="submission.meta.ip">IP: {{ submission.meta.ip }}</span>
             <span v-if="submission.meta.userAgent">User agent: {{ submission.meta.userAgent }}</span>
           </div>
@@ -819,14 +990,16 @@ watch(
 
           <div class="admin-card__actions">
             <p class="admin-card__action-note">
-              Reject + hide removes the linked board item from public listings without deleting this stored submission.
+              Reject + hide removes the linked board item from public listings
+              without deleting this stored submission.
             </p>
             <button
               v-for="action in reviewActionOptions"
               :key="`${submission.id}-${action.status}`"
               class="secondary-button"
               :class="{
-                'secondary-button--dark': action.status === submission.review.status,
+                'secondary-button--dark':
+                  action.status === submission.review.status,
                 'secondary-button--danger': action.status === 'rejected',
               }"
               :disabled="reviewPending[submission.id] || refreshPending"
@@ -837,20 +1010,37 @@ watch(
             </button>
           </div>
 
-          <p v-if="submission.review.reviewedAt" class="admin-card__reviewed-at">
-            Last reviewed {{ formatSubmissionDate(submission.review.reviewedAt) }}
+          <p
+            v-if="submission.review.reviewedAt"
+            class="admin-card__reviewed-at"
+          >
+            Last reviewed
+            {{ formatSubmissionDate(submission.review.reviewedAt) }}
           </p>
-          <p v-if="reviewNotices[submission.id]" class="inline-note inline-note--success" role="status">
+          <p
+            v-if="reviewNotices[submission.id]"
+            class="inline-note inline-note--success"
+            role="status"
+          >
             {{ reviewNotices[submission.id] }}
           </p>
-          <p v-if="reviewErrors[submission.id]" class="inline-note inline-note--error" role="alert">
-            {{ reviewErrors[submission.id]?.message }} {{ reviewErrors[submission.id]?.detail }}
+          <p
+            v-if="reviewErrors[submission.id]"
+            class="inline-note inline-note--error"
+            role="alert"
+          >
+            {{ reviewErrors[submission.id]?.message }}
+            {{ reviewErrors[submission.id]?.detail }}
           </p>
         </article>
         <div class="admin-pagination">
           <button
             class="secondary-button"
-            :disabled="loadPending || refreshPending || !submissionsPagination.hasPreviousPage"
+            :disabled="
+              loadPending
+                || refreshPending
+                || !submissionsPagination.hasPreviousPage
+            "
             type="button"
             @click="changeSubmissionsPage(submissionsPagination.page - 1)"
           >
@@ -858,7 +1048,11 @@ watch(
           </button>
           <button
             class="secondary-button secondary-button--dark"
-            :disabled="loadPending || refreshPending || !submissionsPagination.hasNextPage"
+            :disabled="
+              loadPending
+                || refreshPending
+                || !submissionsPagination.hasNextPage
+            "
             type="button"
             @click="changeSubmissionsPage(submissionsPagination.page + 1)"
           >
@@ -877,7 +1071,8 @@ watch(
           Track posts, replies, moderation actions, and deletions in one place.
         </h2>
         <p class="section-copy">
-          This log keeps the internal moderation trail even when a post is hidden from the public board.
+          This log keeps the internal moderation trail even when a post is
+          hidden from the public board.
         </p>
       </div>
 
@@ -902,7 +1097,11 @@ watch(
         Refreshing activity log…
       </p>
 
-      <div v-if="loadPending && !filteredActivityEntries.length" class="admin-empty" role="status">
+      <div
+        v-if="loadPending && !filteredActivityEntries.length"
+        class="admin-empty"
+        role="status"
+      >
         Loading admin activity…
       </div>
 
@@ -912,12 +1111,20 @@ watch(
 
       <div v-else class="admin-activity">
         <div class="admin-pagination admin-pagination--summary">
-          <span>Page {{ activityPagination.page }} of {{ activityPagination.totalPages }}</span>
-          <span>{{ activityPagination.totalItems }} activity entries match the current filter.</span>
+          <span>Page {{ activityPagination.page }} of
+            {{ activityPagination.totalPages }}</span>
+          <span>{{ activityPagination.totalItems }} activity entries match the
+            current filter.</span>
         </div>
-        <article v-for="entry in filteredActivityEntries" :key="entry.id" class="admin-activity__entry">
+        <article
+          v-for="entry in filteredActivityEntries"
+          :key="entry.id"
+          class="admin-activity__entry"
+        >
           <div class="admin-activity__meta">
-            <span class="admin-activity__category">{{ formatActivityCategory(entry.category) }}</span>
+            <span class="admin-activity__category">{{
+              formatActivityCategory(entry.category)
+            }}</span>
             <span>{{ formatSubmissionDate(entry.createdAt) }}</span>
           </div>
           <div class="admin-activity__content">
@@ -929,18 +1136,27 @@ watch(
             </p>
             <p class="admin-activity__actor">
               Actor: {{ entry.actor.label }}
-              <span v-if="entry.kind"> · Kind: {{ kindLabels[entry.kind] }}</span>
-              <span v-if="entry.visibilityState"> · State: {{ entry.visibilityState }}</span>
-              <span v-if="entry.submissionId"> · Submission: <code>{{ entry.submissionId }}</code></span>
-              <span v-if="entry.itemId"> · Item: <code>{{ entry.itemId }}</code></span>
-              <span v-if="entry.interactionId"> · Reply: <code>{{ entry.interactionId }}</code></span>
+              <span v-if="entry.kind">
+                · Kind: {{ kindLabels[entry.kind] }}</span>
+              <span v-if="entry.visibilityState">
+                · State: {{ entry.visibilityState }}</span>
+              <span v-if="entry.submissionId">
+                · Submission: <code>{{ entry.submissionId }}</code></span>
+              <span v-if="entry.itemId">
+                · Item: <code>{{ entry.itemId }}</code></span>
+              <span v-if="entry.interactionId">
+                · Reply: <code>{{ entry.interactionId }}</code></span>
             </p>
           </div>
         </article>
         <div class="admin-pagination">
           <button
             class="secondary-button"
-            :disabled="loadPending || refreshPending || !activityPagination.hasPreviousPage"
+            :disabled="
+              loadPending
+                || refreshPending
+                || !activityPagination.hasPreviousPage
+            "
             type="button"
             @click="changeActivityPage(activityPagination.page - 1)"
           >
@@ -948,7 +1164,9 @@ watch(
           </button>
           <button
             class="secondary-button secondary-button--dark"
-            :disabled="loadPending || refreshPending || !activityPagination.hasNextPage"
+            :disabled="
+              loadPending || refreshPending || !activityPagination.hasNextPage
+            "
             type="button"
             @click="changeActivityPage(activityPagination.page + 1)"
           >
