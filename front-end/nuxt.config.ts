@@ -1,6 +1,8 @@
 import process from 'node:process'
 
-import { appDescription } from './src/constants/index'
+import { analyticsDomain, analyticsWebsiteId, appDescription } from './src/constants/index'
+
+const isDev = process.env.NODE_ENV === 'development'
 
 export default defineNuxtConfig({
   modules: [
@@ -29,6 +31,13 @@ export default defineNuxtConfig({
         { name: 'theme-color', media: '(prefers-color-scheme: light)', content: '#f5f0e5' },
         { name: 'theme-color', media: '(prefers-color-scheme: dark)', content: '#0d1510' },
       ],
+      script: isDev
+        ? []
+        : [{
+            defer: true,
+            src: `https://${analyticsDomain}/script.js`,
+            'data-website-id': analyticsWebsiteId,
+          }],
     },
   },
 
