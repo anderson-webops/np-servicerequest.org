@@ -1,9 +1,9 @@
 import type { Server } from 'node:http'
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { env } from 'node:process'
 import { after, before, test } from 'node:test'
 
@@ -396,7 +396,7 @@ test('public reports are stored for admins while leaving the reported post visib
   ))
 })
 
-test('public item detail pages can load a visible post and owners can toggle resolved state without deleting it', async () => {
+test('public item detail pages can load a visible post and owners can move posts through fulfilled, closed, and open states without deleting them', async () => {
   const antiBot = await getAgedAntiBotChallenge()
 
   const { body: createdSubmission, response: createResponse } = await fetchJson('/api/submissions/item-lending', {
@@ -429,18 +429,18 @@ test('public item detail pages can load a visible post and owners can toggle res
   assert.equal((detailBeforeResolve.item as { id: string, resolutionStatus: string }).id, createdBoardItem.id)
   assert.equal((detailBeforeResolve.item as { resolutionStatus: string }).resolutionStatus, 'open')
 
-  const { body: resolvedItem, response: resolveResponse } = await fetchJson(`/api/board/items/${createdBoardItem.id}/resolution`, {
+  const { body: fulfilledItem, response: fulfillResponse } = await fetchJson(`/api/board/items/${createdBoardItem.id}/resolution`, {
     body: JSON.stringify({
       challengeIssuedAt: String(antiBot.issuedAt),
       challengeToken: antiBot.token,
       deleteToken,
-      status: 'resolved',
+      status: 'fulfilled',
     }),
     method: 'POST',
   })
 
-  assert.equal(resolveResponse.status, 200)
-  assert.equal((resolvedItem.item as { resolutionStatus: string }).resolutionStatus, 'resolved')
+  assert.equal(fulfillResponse.status, 200)
+  assert.equal((fulfilledItem.item as { resolutionStatus: string }).resolutionStatus, 'fulfilled')
 
   const { body: boardAfterResolve, response: boardAfterResolveResponse } = await fetchJson('/api/board/items', {
     method: 'GET',
@@ -448,7 +448,7 @@ test('public item detail pages can load a visible post and owners can toggle res
 
   assert.equal(boardAfterResolveResponse.status, 200)
   assert.ok((boardAfterResolve.items as Array<{ id: string, resolutionStatus: string }>).some(item =>
-    item.id === createdBoardItem.id && item.resolutionStatus === 'resolved',
+    item.id === createdBoardItem.id && item.resolutionStatus === 'fulfilled',
   ))
 
   const { body: detailAfterResolve, response: detailAfterResolveResponse } = await fetchJson(`/api/board/items/${createdBoardItem.id}`, {
@@ -456,7 +456,7 @@ test('public item detail pages can load a visible post and owners can toggle res
   })
 
   assert.equal(detailAfterResolveResponse.status, 200)
-  assert.equal((detailAfterResolve.item as { resolutionStatus: string }).resolutionStatus, 'resolved')
+  assert.equal((detailAfterResolve.item as { resolutionStatus: string }).resolutionStatus, 'fulfilled')
 
   const { body: blockedReply, response: blockedReplyResponse } = await fetchJson(`/api/board/items/${createdBoardItem.id}/interactions`, {
     body: JSON.stringify({
@@ -470,7 +470,7 @@ test('public item detail pages can load a visible post and owners can toggle res
   })
 
   assert.equal(blockedReplyResponse.status, 400)
-  assert.equal(blockedReply.message, 'That board item is already marked resolved. Reopen it before posting a new public reply.')
+  assert.equal(blockedReply.message, 'That board item is already closed to new public replies. Reopen it before posting a new response.')
 
   const { body: reopenedItem, response: reopenResponse } = await fetchJson(`/api/board/items/${createdBoardItem.id}/resolution`, {
     body: JSON.stringify({
@@ -498,6 +498,79 @@ test('public item detail pages can load a visible post and owners can toggle res
 
   assert.equal(successfulReplyResponse.status, 201)
   assert.equal((successfulReply.interaction as { message: string }).message, 'I can come by tomorrow.')
+
+  const { body: closedItem, response: closeResponse } = await fetchJson(`/api/board/items/${createdBoardItem.id}/resolution`, {
+    body: JSON.stringify({
+      challengeIssuedAt: String(antiBot.issuedAt),
+      challengeToken: antiBot.token,
+      deleteToken,
+      status: 'closed',
+    }),
+    method: 'POST',
+  })
+
+  assert.equal(closeResponse.status, 200)
+  assert.equal((closedItem.item as { resolutionStatus: string }).resolutionStatus, 'closed')
+})
+
+test('nearby board sorting prefers matched locations and stores per-post reply notification preferences', async () => {
+  const antiBot = await getAgedAntiBotChallenge()
+
+  const { body: atlantaSubmission, response: atlantaResponse } = await fetchJson('/api/submissions/service-request', {
+    body: JSON.stringify({
+      challengeIssuedAt: String(antiBot.issuedAt),
+      challengeToken: antiBot.token,
+      contact_method: 'email',
+      contact_value: 'atlanta-owner@example.com',
+      details: 'Need help carrying boxes into a condo.',
+      location: 'Atlanta, GA',
+      name: 'Atlanta Owner',
+      notification_preference: 'email',
+      project_type: 'Moving help',
+      timing: 'This weekend',
+    }),
+    method: 'POST',
+  })
+
+  assert.equal(atlantaResponse.status, 201)
+  const atlantaBoardItem = atlantaSubmission.boardItem as { id: string }
+
+  const { response: gwinnettResponse } = await fetchJson('/api/submissions/service-request', {
+    body: JSON.stringify({
+      challengeIssuedAt: String(antiBot.issuedAt),
+      challengeToken: antiBot.token,
+      contact_method: 'email',
+      contact_value: 'gwinnett-owner@example.com',
+      details: 'Need help trimming brush.',
+      location: 'Lawrenceville, GA',
+      name: 'Gwinnett Owner',
+      notification_preference: 'none',
+      project_type: 'Cleanup',
+      timing: 'Next week',
+    }),
+    method: 'POST',
+  })
+
+  assert.equal(gwinnettResponse.status, 201)
+
+  const { body: nearbyBoard, response: nearbyBoardResponse } = await fetchJson('/api/board/items?sort=nearby&lat=33.749&lng=-84.388', {
+    method: 'GET',
+  })
+
+  assert.equal(nearbyBoardResponse.status, 200)
+  assert.equal((nearbyBoard.items as Array<{ id: string }>)[0]?.id, atlantaBoardItem.id)
+  assert.ok(typeof (nearbyBoard.items as Array<{ distanceMiles: number | null }>)[0]?.distanceMiles === 'number')
+
+  const storedItemPath = resolve(dataDirectory, '_board', 'items', `${atlantaBoardItem.id}.json`)
+  const storedItem = JSON.parse(await readFile(storedItemPath, 'utf8')) as {
+    geo?: { label?: string }
+    notificationEmail?: string
+    notificationPreference?: string
+  }
+
+  assert.equal(storedItem.notificationPreference, 'email')
+  assert.equal(storedItem.notificationEmail, 'atlanta-owner@example.com')
+  assert.equal(storedItem.geo?.label, 'Atlanta, GA')
 })
 
 test('structured contact fields work for new posts and replies while reveal endpoints keep returning readable contact text', async () => {

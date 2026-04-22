@@ -24,15 +24,15 @@ interface SubmissionConfig {
 const submissionConfig: Record<SubmissionKind, SubmissionConfig> = {
   'service-request': {
     requiredFields: ['name', 'project_type', 'location', 'timing', 'details'],
-    optionalFields: ['contact', 'contact_method', 'contact_note', 'contact_value', 'challengeIssuedAt', 'challengeToken', 'bot-field'],
+    optionalFields: ['contact', 'contact_method', 'contact_note', 'contact_value', 'notification_email', 'notification_preference', 'challengeIssuedAt', 'challengeToken', 'bot-field'],
   },
   'item-request': {
     requiredFields: ['name', 'item_needed', 'duration', 'pickup_plan', 'neighborhood', 'details'],
-    optionalFields: ['contact', 'contact_method', 'contact_note', 'contact_value', 'needed_by', 'challengeIssuedAt', 'challengeToken', 'bot-field'],
+    optionalFields: ['contact', 'contact_method', 'contact_note', 'contact_value', 'needed_by', 'notification_email', 'notification_preference', 'challengeIssuedAt', 'challengeToken', 'bot-field'],
   },
   'item-lending': {
     requiredFields: ['name', 'item_available', 'neighborhood', 'availability', 'condition', 'guidelines'],
-    optionalFields: ['contact', 'contact_method', 'contact_note', 'contact_value', 'challengeIssuedAt', 'challengeToken', 'bot-field'],
+    optionalFields: ['contact', 'contact_method', 'contact_note', 'contact_value', 'notification_email', 'notification_preference', 'challengeIssuedAt', 'challengeToken', 'bot-field'],
   },
 }
 
@@ -135,6 +135,22 @@ function validatePayload(kind: SubmissionKind, payload: Record<string, string>) 
         ? 'Enter a valid email address.'
         : 'Enter a valid phone number.',
     )
+  }
+
+  const notificationPreference = payload.notification_preference.trim()
+  const notificationEmail = payload.notification_email.trim()
+
+  if (notificationPreference && !['none', 'email'].includes(notificationPreference))
+    throw new SubmissionValidationError('Choose a valid notification preference.')
+
+  if (notificationPreference === 'email') {
+    const emailToValidate = notificationEmail || contact.managementEmail
+
+    if (!emailToValidate)
+      throw new SubmissionValidationError('Enter an email address for reply notifications.')
+
+    if (!emailToValidate.includes('@') || /\s/.test(emailToValidate))
+      throw new SubmissionValidationError('Enter a valid email address for reply notifications.')
   }
 
   for (const [fieldName, value] of Object.entries(payload)) {

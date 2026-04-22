@@ -24,12 +24,14 @@
 		"lint-serve": "npm run -w front-end lint-fix && npm run -w front-end serve",
 		"lint": "npm run -w front-end lint && npm run -w back-end lint",
 		"lint-fix": "npm run -w front-end lint-fix && npm run -w back-end lint-fix",
+		"test:e2e": "DISABLE_ANALYTICS=true npm run build && playwright test",
 		"typecheck": "npm run -w front-end typecheck && npm run -w back-end typecheck",
 		"clean": "rm -rf node_modules package-lock.json front-end/node_modules front-end/.nuxt front-end/.output back-end/node_modules back-end/dist",
 		"up": "taze major -I && npm run -w front-end up && npm run -w back-end up"
 	},
 	"devDependencies": {
 		"@antfu/eslint-config": "^6.1.0",
+		"@playwright/test": "^1.59.1",
 		"eslint": "^9.38.0",
 		"eslint-plugin-format": "^1.0.2",
 		"lint-staged": "^16.4.0",

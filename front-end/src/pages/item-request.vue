@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useBoardSubmission } from '~/composables/useBoardSubmission'
+import { boardNotificationPreferenceOptions } from '~/utils/board'
 import {
   boardContactMethodOptions,
   getBoardContactValueAutocomplete,
@@ -23,6 +24,7 @@ useSeoMeta({
 const { loadBootstrap, securityError, status, submit }
   = useBoardSubmission('itemRequest')
 const contactMethod = ref(normalizeBoardContactMethod('email'))
+const notificationPreference = ref<'none' | 'email'>('none')
 
 onMounted(() => {
   void loadBootstrap()
@@ -31,8 +33,10 @@ onMounted(() => {
 watch(
   () => status.success,
   (nextSuccess) => {
-    if (nextSuccess)
+    if (nextSuccess) {
       contactMethod.value = 'email'
+      notificationPreference.value = 'none'
+    }
   },
 )
 </script>
@@ -97,6 +101,30 @@ watch(
         name="contact_note"
         placeholder="Example: text first, weekdays only, or mention the item name when you reach out."
         type="text"
+      >
+    </label>
+
+    <label class="field">
+      <span>Reply notifications</span>
+      <select v-model="notificationPreference" name="notification_preference">
+        <option
+          v-for="option in boardNotificationPreferenceOptions"
+          :key="option.value"
+          :value="option.value"
+        >
+          {{ option.label }}
+        </option>
+      </select>
+    </label>
+
+    <label v-if="notificationPreference === 'email'" class="field">
+      <span>{{ contactMethod === 'email' ? 'Notification email (optional)' : 'Notification email' }}</span>
+      <input
+        autocomplete="email"
+        name="notification_email"
+        :placeholder="contactMethod === 'email' ? 'Leave blank to reuse your contact email' : 'jane@email.com'"
+        :required="contactMethod === 'phone'"
+        type="email"
       >
     </label>
 

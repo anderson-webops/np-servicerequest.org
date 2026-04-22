@@ -42,6 +42,7 @@ import {
   sendBoardInteractionNotificationEmail,
   sendBoardItemManagementLinkEmail,
   sendBoardItemNotificationEmail,
+  sendBoardOwnerReplyNotificationEmail,
 } from './notifications.js'
 import {
   BotProtectionError,
@@ -302,6 +303,8 @@ export function createApp() {
     response.json({
       ...await listBoardItems({
         kind: isSubmissionKind(kindFilter) ? kindFilter : 'all',
+        lat: parseMaybeFloat(request.query.lat),
+        lng: parseMaybeFloat(request.query.lng),
         page: parsePositiveInt(request.query.page, 1, 999),
         pageSize: parsePositiveInt(request.query.pageSize, 12, 50),
         query: getSingleQueryValue(request.query.query),
@@ -468,7 +471,7 @@ export function createApp() {
       validateAntiBotPayload(request.body)
 
       const viewer = await getViewerFromCookie(request.get('cookie'))
-      const interaction = await createBoardInteraction({
+      const interactionResult = await createBoardInteraction({
         contact: typeof request.body.contact === 'string' ? request.body.contact : '',
         contactMethod: typeof request.body.contact_method === 'string' ? request.body.contact_method : '',
         contactNote: typeof request.body.contact_note === 'string' ? request.body.contact_note : '',
@@ -478,22 +481,38 @@ export function createApp() {
         name: typeof request.body.name === 'string' ? request.body.name : '',
         viewer,
       })
+      const interaction = interactionResult.interaction
+      const normalizedReplyContact = normalizeStructuredContact({
+        legacyContact: typeof request.body.contact === 'string' ? request.body.contact : viewer?.email || '',
+        method: typeof request.body.contact_method === 'string' ? request.body.contact_method : viewer?.email ? 'email' : '',
+        note: typeof request.body.contact_note === 'string' ? request.body.contact_note : '',
+        value: typeof request.body.contact_value === 'string' ? request.body.contact_value : '',
+      }).display
 
       void sendBoardInteractionNotificationEmail({
         authorName: interaction.author.displayName,
-        contact: normalizeStructuredContact({
-          legacyContact: typeof request.body.contact === 'string' ? request.body.contact : viewer?.email || '',
-          method: typeof request.body.contact_method === 'string' ? request.body.contact_method : viewer?.email ? 'email' : '',
-          note: typeof request.body.contact_note === 'string' ? request.body.contact_note : '',
-          value: typeof request.body.contact_value === 'string' ? request.body.contact_value : '',
-        }).display,
+        contact: normalizedReplyContact,
         createdAt: interaction.createdAt,
         itemId: request.params.itemId,
-        itemTitle: typeof request.body.itemTitle === 'string' ? request.body.itemTitle : 'Board item',
+        itemTitle: interactionResult.itemTitle,
         message: interaction.message,
       }).catch((error) => {
         console.error('Failed to send board interaction notification:', error)
       })
+
+      if (interactionResult.itemNotificationPreference === 'email' && interactionResult.itemNotificationEmail) {
+        void sendBoardOwnerReplyNotificationEmail({
+          authorName: interaction.author.displayName,
+          contact: normalizedReplyContact,
+          createdAt: interaction.createdAt,
+          itemId: request.params.itemId,
+          itemTitle: interactionResult.itemTitle,
+          message: interaction.message,
+          recipientEmail: interactionResult.itemNotificationEmail,
+        }).catch((error) => {
+          console.error('Failed to send board owner reply notification:', error)
+        })
+      }
 
       response.status(201).json({
         antiBot: createAntiBotChallenge(),

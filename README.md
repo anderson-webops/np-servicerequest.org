@@ -25,6 +25,7 @@ Useful root commands:
 - `npm run build`: generate the front-end and compile the back-end
 - `npm run typecheck`: run front-end and back-end typechecks
 - `npm run lint`: lint both workspaces
+- `npm run test:e2e`: build the site and run the Playwright browser suite
 
 ## Front-End
 
@@ -40,15 +41,16 @@ The landing page now exposes:
 - public board replies that work with or without an account
 - optional account registration/login for repeat participants
 - a separate `/admin` review page that uses an admin key instead of a board account login
-- a `/service-directory` page with seeded nationwide and regional service websites plus an optional live provider-backed search
+- a `/service-directory` page for curated nationwide and regional service links
+- a separate `/service-search` page for location-aware local matching plus optional live provider-backed search
 - on-demand contact reveal actions instead of embedding contact details directly in the page
 
 The board and intake forms call the separate back-end API instead of relying on inline Nuxt routes or static form hosting.
 The previous PWA/service-worker runtime is intentionally disabled right now so clients do not keep serving stale cached form logic across deploys.
 The live board and admin review filters now stay in the URL query string so refresh, back/forward navigation, and shared links preserve the current view. The optional account page also supports `?tab=login`.
-Each public board post also has a dedicated static-safe detail page at `/post?id=<boardItemId>`, so individual requests can be shared even under static hosting.
+Each public board post now uses a canonical detail path at `/posts/<boardItemId>`, while the older `/post?id=<boardItemId>` route remains as a compatibility path. Static hosts that serve the generated front-end directly should keep a SPA-style fallback to `200.html` for direct loads of unknown `/posts/...` paths.
 New posts and replies now collect structured contact details instead of one free-text field, so contributors can explicitly choose email or phone and optionally add a short contact note.
-The homepage board now supports keyword search plus server-backed sorting, the dedicated submission pages save drafts in local browser storage, and the public post page includes report actions for posts and replies.
+The homepage board now supports keyword search plus server-backed sorting, including nearby sorting from a browser location origin. The dedicated submission pages save drafts in local browser storage and let posters choose per-post reply notification preferences. The public post page includes report actions for posts and replies.
 
 Set `NUXT_PUBLIC_API_BASE_URL` when the front-end should target a non-default API host. This value should be the full API base, for example `https://np-servicerequest.org/api`.
 
@@ -82,7 +84,7 @@ The API lives in `back-end` and exposes:
 
 Listing endpoints now support server-side filtering and pagination:
 
-- `GET /api/board/items?kind=all|service-request|item-request|item-lending&query=ladder&sort=recent-activity|newest|oldest&page=1&pageSize=12`
+- `GET /api/board/items?kind=all|service-request|item-request|item-lending&query=ladder&sort=recent-activity|newest|oldest|nearby&lat=33.749&lng=-84.388&page=1&pageSize=12`
 - `GET /api/admin/submissions?review=all|pending|approved|needs-follow-up|rejected&kind=all|service-request|item-request|item-lending&submissionsPage=1&submissionsPageSize=20&activityCategory=all|posts|replies|moderation|deletions|reports&activityPage=1&activityPageSize=40`
 - `GET /api/service-directory/search?provider=idealist&query=food%20pantry&lat=33.749&lng=-84.388&radiusMiles=40&page=1&pageSize=12`
 
@@ -97,12 +99,14 @@ Submission and reply payloads accept either the legacy `contact` field or the ne
 - `contact_method=email|phone`
 - `contact_value=<email-or-phone>`
 - `contact_note=<optional extra instruction>`
+- `notification_preference=none|email`
+- `notification_email=<optional reply-notification email>`
 
 The server still accepts legacy `contact` input for backward compatibility, but new UI flows use the structured fields by default.
 
 ### Live Service Directory Provider
 
-The `/service-directory` page now supports a real provider-backed search path through Idealist when the server is configured with an API key.
+The `/service-search` page supports a real provider-backed search path through Idealist when the server is configured with an API key.
 The back-end keeps a cached local index of volunteer listings, then filters and paginates those results for the front-end.
 
 - `IDEALIST_API_KEY` enables live Idealist syncing
@@ -117,12 +121,15 @@ This implementation uses the official Idealist listings API feed and maintains a
 The back-end includes an SMTP notification pipeline for new board items and replies, but it is intentionally off by default.
 Anonymous posters who use an email address can also receive a management link that restores delete access from another browser.
 Those emails now point to the dedicated post detail page, where owners can recover delete access and manage the post in place.
+Posts can also opt into owner reply emails on a per-post basis without turning on the admin mailbox notifications.
 
 - `ENABLE_BOARD_EMAIL_NOTIFICATIONS=false` keeps notifications disabled
 - `ENABLE_BOARD_MANAGEMENT_EMAILS=true` keeps owner management-link emails enabled when SMTP is configured
+- `ENABLE_BOARD_REPLY_NOTIFICATION_EMAILS=true` keeps per-post owner reply emails enabled when SMTP is configured
 - `BOARD_NOTIFICATION_EMAIL_TO` defaults to `servicerequest@jacobdanderson.net`
 - `BOARD_NOTIFICATION_EMAIL_FROM` overrides the sender address
 - `BOARD_PUBLIC_WEB_URL` sets the site URL used in emailed management links and defaults to `https://np-servicerequest.org`
+- `BOARD_EMAIL_CAPTURE_DIR` writes outgoing emails to JSON files instead of SMTP, which is useful for local development and browser E2E tests
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, and `SMTP_PASS` configure delivery when notifications are enabled
 
 ### Admin Moderation
@@ -133,8 +140,8 @@ Admins can delete any board post and any board reply directly from the live boar
 ### Board Resolution States
 
 Public board visibility and board completion are now separate states.
-Visible posts can stay on the public board while being marked `open` or `resolved`.
-Resolved posts remain shareable and readable, but new public replies are blocked until the owner or an admin reopens them.
+Visible posts can stay on the public board while being marked `open`, `fulfilled`, or `closed`.
+Fulfilled and closed posts remain shareable and readable, but new public replies are blocked until the owner or an admin reopens them.
 
 ### Admin Review API
 

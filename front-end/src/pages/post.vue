@@ -18,7 +18,7 @@ import type { BoardFormErrorState, BoardFormStatus, BoardReplyDraft } from '~/ut
 
 import { isAntiBotChallenge, isAntiBotChallengeExpired, markAntiBotChallengeObserved, waitForAntiBotChallengeMinimumAge } from '~/utils/antiBot'
 import { boardReportReasonOptions, forgetBoardDeleteToken, getBoardEndpoint, getStoredBoardDeleteToken, rememberBoardDeleteToken } from '~/utils/board'
-import { formatBoardDate, getBoardApiErrorState, getContactActionLabel, getInteractionDeleteKey, getReplyActionLabel, getRevealKey } from '~/utils/boardUi'
+import { formatBoardDate, getBoardApiErrorState, getBoardDetailPath, getContactActionLabel, getInteractionDeleteKey, getReplyActionLabel, getRevealKey } from '~/utils/boardUi'
 import {
   boardContactMethodOptions,
   getBoardContactValueAutocomplete,
@@ -29,6 +29,7 @@ import {
 } from '~/utils/contact'
 
 definePageMeta({
+  alias: ['/posts/:id'],
   layout: 'home',
 })
 
@@ -94,7 +95,18 @@ const deletePending = ref(false)
 const resolveError = ref<BoardFormErrorState | null>(null)
 const resolvePending = ref(false)
 
-const routeItemId = computed(() => getQueryValue(route.query.id) || getQueryValue(route.query.manageItem))
+const routeParamItemId = computed(() => {
+  const value = (route.params as Record<string, unknown>).id
+
+  if (Array.isArray(value))
+    return typeof value[0] === 'string' ? value[0] : ''
+
+  return typeof value === 'string' ? value : ''
+})
+
+const routeItemId = computed(() =>
+  routeParamItemId.value || getQueryValue(route.query.id) || getQueryValue(route.query.manageItem),
+)
 const routeManagementToken = computed(() => getQueryValue(route.query.manageToken))
 const pageHeading = computed(() => item.value?.title || 'Board post')
 const pageDescription = computed(() => item.value?.summary || 'View one request or lending offer, reveal contact when needed, and respond on the public board.')
@@ -179,7 +191,7 @@ function replaceItem(nextItem: BoardItem) {
   item.value = nextItem
   refreshStoredDeleteToken()
 
-  if (nextItem.resolutionStatus === 'resolved')
+  if (nextItem.resolutionStatus !== 'open')
     openReply.value = false
 }
 
@@ -315,16 +327,30 @@ function getDeleteInteractionActionLabel(interactionId: string) {
   return 'Delete reply'
 }
 
-function getResolutionActionLabel(currentItem: BoardItem) {
+function getResolutionActionLabel(nextStatus: BoardItem['resolutionStatus']) {
   if (resolvePending.value)
     return 'Saving...'
 
-  return currentItem.resolutionStatus === 'resolved' ? 'Mark open' : 'Mark resolved'
+  if (nextStatus === 'fulfilled')
+    return 'Mark fulfilled'
+
+  if (nextStatus === 'closed')
+    return 'Close post'
+
+  return 'Reopen post'
 }
 
 function getResolvedNote(currentItem: BoardItem) {
-  const resolvedAt = currentItem.resolutionChangedAt || currentItem.lastActivityAt
-  return `This post was marked resolved ${formatBoardDate(resolvedAt)}. It stays visible for reference, and new public replies are closed until it is reopened.`
+  const changedAt = currentItem.resolutionChangedAt || currentItem.lastActivityAt
+
+  if (currentItem.resolutionStatus === 'fulfilled')
+    return `This post was marked fulfilled ${formatBoardDate(changedAt)}. It stays visible for reference, and new public replies are closed until it is reopened.`
+
+  return `This post was closed ${formatBoardDate(changedAt)}. It stays visible for reference, and new public replies are paused until it is reopened.`
+}
+
+function getResolutionBadgeLabel(currentItem: BoardItem) {
+  return currentItem.resolutionStatus === 'fulfilled' ? 'fulfilled' : 'closed'
 }
 
 function toggleItemReportForm() {
@@ -445,10 +471,7 @@ async function claimBoardManagementLink(itemId: string, managementToken: string)
     managementPending.value = false
 
     await router.replace({
-      path: route.path,
-      query: {
-        id: routeItemId.value || undefined,
-      },
+      path: routeItemId.value ? getBoardDetailPath(routeItemId.value) : route.path,
     })
   }
 }
@@ -609,8 +632,11 @@ async function submitInteractionReport(interactionId: string) {
   }
 }
 
-async function toggleBoardResolution() {
+async function updateBoardResolution(nextStatus: BoardItem['resolutionStatus']) {
   if (!item.value)
+    return
+
+  if (item.value.resolutionStatus === nextStatus)
     return
 
   const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `items/${item.value.id}/resolution`)
@@ -621,7 +647,7 @@ async function toggleBoardResolution() {
     const response = await protectedPost<BoardItemResolutionResponse>(endpoint, {
       'bot-field': '',
       'deleteToken': storedDeleteToken.value,
-      'status': item.value.resolutionStatus === 'resolved' ? 'open' : 'resolved',
+      'status': nextStatus,
     })
 
     applyServerContext(response)
@@ -843,7 +869,7 @@ watch(routeManagementToken, (nextToken, previousToken) => {
         <div class="board-card__author">
           <strong>{{ item.author.displayName }}</strong>
           <span v-if="item.author.hasAccount" class="board-card__badge">account-backed</span>
-          <span v-if="item.resolutionStatus === 'resolved'" class="board-card__badge board-card__badge--resolved">resolved</span>
+          <span v-if="item.resolutionStatus !== 'open'" class="board-card__badge board-card__badge--resolved">{{ getResolutionBadgeLabel(item) }}</span>
         </div>
 
         <p class="board-card__summary-label">
@@ -894,13 +920,31 @@ watch(routeManagementToken, (nextToken, previousToken) => {
             </p>
             <div class="board-card__actions">
               <button
-                v-if="canResolveItem(item)"
+                v-if="canResolveItem(item) && item.resolutionStatus !== 'fulfilled'"
                 class="secondary-button"
                 :disabled="resolvePending"
                 type="button"
-                @click="toggleBoardResolution"
+                @click="updateBoardResolution('fulfilled')"
               >
-                {{ getResolutionActionLabel(item) }}
+                {{ getResolutionActionLabel('fulfilled') }}
+              </button>
+              <button
+                v-if="canResolveItem(item) && item.resolutionStatus !== 'closed'"
+                class="secondary-button"
+                :disabled="resolvePending"
+                type="button"
+                @click="updateBoardResolution('closed')"
+              >
+                {{ getResolutionActionLabel('closed') }}
+              </button>
+              <button
+                v-if="canResolveItem(item) && item.resolutionStatus !== 'open'"
+                class="secondary-button"
+                :disabled="resolvePending"
+                type="button"
+                @click="updateBoardResolution('open')"
+              >
+                {{ getResolutionActionLabel('open') }}
               </button>
               <button
                 v-if="canDeleteItem(item)"
@@ -968,7 +1012,7 @@ watch(routeManagementToken, (nextToken, previousToken) => {
         <p class="board-card__contact-note">
           Contact details are hidden until you deliberately reveal them to reduce scraping.
         </p>
-        <p v-if="item.resolutionStatus === 'resolved'" class="board-card__resolved-note">
+        <p v-if="item.resolutionStatus !== 'open'" class="board-card__resolved-note">
           {{ getResolvedNote(item) }}
         </p>
 
@@ -1102,8 +1146,8 @@ watch(routeManagementToken, (nextToken, previousToken) => {
           </p>
         </section>
 
-        <p v-if="item.resolutionStatus === 'resolved'" class="board-card__thread-empty">
-          This post is resolved, so new public replies are closed unless the owner or an admin reopens it.
+        <p v-if="item.resolutionStatus !== 'open'" class="board-card__thread-empty">
+          This post is {{ item.resolutionStatus === 'fulfilled' ? 'fulfilled' : 'closed' }}, so new public replies are paused unless the owner or an admin reopens it.
         </p>
       </article>
 

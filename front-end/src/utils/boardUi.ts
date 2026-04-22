@@ -55,7 +55,7 @@ export function getInteractionDeleteKey(itemId: string, interactionId: string) {
 }
 
 export function getBoardDetailPath(itemId: string) {
-  return `/post?id=${encodeURIComponent(itemId)}`
+  return `/posts/${encodeURIComponent(itemId)}`
 }
 
 export function getBoardApiErrorState(

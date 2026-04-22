@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import { env } from 'node:process'
 
 let hasWarnedAboutEmailConfig = false
@@ -15,6 +17,7 @@ function getEmailSettings() {
     publicWebUrl: env.BOARD_PUBLIC_WEB_URL || 'https://np-servicerequest.org',
     port: Number(env.SMTP_PORT || 587),
     notificationsEnabled: parseBooleanFlag(env.ENABLE_BOARD_EMAIL_NOTIFICATIONS),
+    replyNotificationsEnabled: env.ENABLE_BOARD_REPLY_NOTIFICATION_EMAILS == null ? true : parseBooleanFlag(env.ENABLE_BOARD_REPLY_NOTIFICATION_EMAILS),
     secure: parseBooleanFlag(env.SMTP_SECURE),
     to: env.BOARD_NOTIFICATION_EMAIL_TO || 'servicerequest@jacobdanderson.net',
     user: env.SMTP_USER,
@@ -23,13 +26,27 @@ function getEmailSettings() {
 
 function buildPublicBoardItemUrl(itemId: string) {
   const settings = getEmailSettings()
-  const itemUrl = new URL('/post', settings.publicWebUrl)
-  itemUrl.searchParams.set('id', itemId)
+  const itemUrl = new URL(`/posts/${encodeURIComponent(itemId)}`, settings.publicWebUrl)
   return itemUrl
 }
 
 async function deliverMessage(input: { subject: string, text: string, to: string }) {
   const settings = getEmailSettings()
+  const captureDirectory = env.BOARD_EMAIL_CAPTURE_DIR?.trim()
+
+  if (captureDirectory) {
+    const filePath = resolve(
+      captureDirectory,
+      `${new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-')}-${Math.random().toString(16).slice(2)}.json`,
+    )
+
+    await mkdir(captureDirectory, { recursive: true })
+    await writeFile(filePath, `${JSON.stringify({
+      ...input,
+      createdAt: new Date().toISOString(),
+    }, null, 2)}\n`, 'utf8')
+    return
+  }
 
   if (!settings.host || !settings.user || !settings.pass) {
     if (!hasWarnedAboutEmailConfig) {
@@ -134,6 +151,41 @@ export async function sendBoardInteractionNotificationEmail(input: {
   })
 }
 
+export async function sendBoardOwnerReplyNotificationEmail(input: {
+  authorName: string
+  contact: string
+  createdAt: string
+  itemId: string
+  itemTitle: string
+  message: string
+  recipientEmail: string
+}) {
+  const settings = getEmailSettings()
+
+  if (!settings.replyNotificationsEnabled || !input.recipientEmail)
+    return
+
+  const body = [
+    'Someone replied to your board post.',
+    '',
+    `Item: ${input.itemTitle}`,
+    `Board ID: ${input.itemId}`,
+    `Public URL: ${buildPublicBoardItemUrl(input.itemId).toString()}`,
+    `Reply author: ${input.authorName}`,
+    `Reply contact: ${input.contact}`,
+    `Created: ${input.createdAt}`,
+    '',
+    'Message:',
+    input.message,
+  ].join('\n')
+
+  await deliverMessage({
+    subject: `[Board Reply For You] ${input.itemTitle}`,
+    text: body,
+    to: input.recipientEmail,
+  })
+}
+
 export async function sendBoardItemManagementLinkEmail(input: {
   itemId: string
   managementToken: string
@@ -145,8 +197,7 @@ export async function sendBoardItemManagementLinkEmail(input: {
   if (!settings.managementEnabled)
     return
 
-  const manageUrl = new URL('/post', settings.publicWebUrl)
-  manageUrl.searchParams.set('id', input.itemId)
+  const manageUrl = new URL(`/posts/${encodeURIComponent(input.itemId)}`, settings.publicWebUrl)
   manageUrl.searchParams.set('manageItem', input.itemId)
   manageUrl.searchParams.set('manageToken', input.managementToken)
 

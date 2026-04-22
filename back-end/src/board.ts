@@ -1,13 +1,15 @@
 import type { ViewerAccount } from './accounts.js'
 import type { BoardContactMethod } from './contact.js'
+import type { GeoPoint } from './places.js'
 
 import type { SubmissionKind } from './submissions.js'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 
 import { resolve } from 'node:path'
 import { recordBoardActivity } from './activity.js'
-import { normalizeStructuredContact } from './contact.js'
+import { isEmailAddress, normalizeStructuredContact } from './contact.js'
 import { listJsonDirectory, readJsonFile, removePathIfExists, resolveDataPath, writeJsonFile } from './data.js'
+import { getDistanceMiles, inferKnownPlaceFromText } from './places.js'
 import { SubmissionValidationError } from './submissions.js'
 
 export const boardItemStatuses = [
@@ -21,7 +23,8 @@ export type BoardItemStatus = (typeof boardItemStatuses)[number]
 
 export const boardItemResolutionStatuses = [
   'open',
-  'resolved',
+  'fulfilled',
+  'closed',
 ] as const
 
 export type BoardItemResolutionStatus = (typeof boardItemResolutionStatuses)[number]
@@ -30,6 +33,7 @@ export const boardItemSortOrders = [
   'recent-activity',
   'newest',
   'oldest',
+  'nearby',
 ] as const
 
 export type BoardItemSortOrder = (typeof boardItemSortOrders)[number]
@@ -44,6 +48,13 @@ export const boardReportReasons = [
 ] as const
 
 export type BoardReportReason = (typeof boardReportReasons)[number]
+
+export const boardNotificationPreferences = [
+  'none',
+  'email',
+] as const
+
+export type BoardNotificationPreference = (typeof boardNotificationPreferences)[number]
 
 export const boardInteractionStatuses = [
   'visible',
@@ -71,6 +82,13 @@ interface SubmissionSource {
   kind: SubmissionKind
 }
 
+interface StoredBoardGeo {
+  coordinates: GeoPoint
+  label: string
+  matchedPlaceId: string
+  sourceText: string
+}
+
 interface StoredBoardItem {
   attributes: BoardAttribute[]
   author: BoardAuthor
@@ -80,14 +98,17 @@ interface StoredBoardItem {
   contactValue?: string
   createdAt: string
   deleteTokenHash?: string
+  geo?: StoredBoardGeo
   id: string
   interactionCount: number
   kind: SubmissionKind
   kindLabel: string
   lastActivityAt: string
   managementTokenHash?: string
+  notificationEmail?: string
+  notificationPreference: BoardNotificationPreference
   resolutionChangedAt?: string
-  resolutionStatus: BoardItemResolutionStatus
+  resolutionStatus: BoardItemResolutionStatus | string
   sourceSubmission?: SubmissionSource
   status: BoardItemStatus
   statusChangedAt?: string
@@ -124,6 +145,7 @@ export interface PublicBoardItem {
   attributes: BoardAttribute[]
   author: BoardAuthor
   createdAt: string
+  distanceMiles: number | null
   hasContact: boolean
   id: string
   interactionCount: number
@@ -314,6 +336,67 @@ function buildItemSummary(kind: SubmissionKind, fields: Record<string, string>) 
   }
 }
 
+function getBoardLocationText(kind: SubmissionKind, fields: Record<string, string>) {
+  switch (kind) {
+    case 'service-request':
+      return cleanValue(fields.location)
+    case 'item-request':
+    case 'item-lending':
+      return cleanValue(fields.neighborhood)
+    default:
+      return ''
+  }
+}
+
+function buildBoardGeo(kind: SubmissionKind, fields: Record<string, string>) {
+  const locationText = getBoardLocationText(kind, fields)
+
+  if (!locationText)
+    return undefined
+
+  const inferredPlace = inferKnownPlaceFromText(locationText)
+
+  if (!inferredPlace)
+    return undefined
+
+  return {
+    coordinates: inferredPlace.coordinates,
+    label: inferredPlace.label,
+    matchedPlaceId: inferredPlace.id,
+    sourceText: inferredPlace.sourceText,
+  } satisfies StoredBoardGeo
+}
+
+function normalizeNotificationPreference(value: string) {
+  return boardNotificationPreferences.includes(value as BoardNotificationPreference)
+    ? value as BoardNotificationPreference
+    : 'none'
+}
+
+function buildBoardNotificationSettings(input: {
+  contact: ReturnType<typeof normalizeStructuredContact>
+  fields: Record<string, string>
+}) {
+  const preference = normalizeNotificationPreference(cleanValue(input.fields.notification_preference))
+
+  if (preference === 'none') {
+    return {
+      notificationEmail: '',
+      notificationPreference: 'none' as const,
+    }
+  }
+
+  const notificationEmail = cleanValue(input.fields.notification_email) || input.contact.managementEmail
+
+  if (!notificationEmail || !isEmailAddress(notificationEmail))
+    throw new SubmissionValidationError('Enter a valid email address for reply notifications.')
+
+  return {
+    notificationEmail,
+    notificationPreference: 'email' as const,
+  }
+}
+
 function isBoardItemVisibleToPublic(item: StoredBoardItem) {
   return item.status === 'visible'
 }
@@ -364,13 +447,46 @@ function matchesBoardSearchQuery(item: StoredBoardItem, query: string) {
     .every(term => searchText.includes(term))
 }
 
-function sortBoardItems(items: StoredBoardItem[], sort: BoardItemSortOrder) {
+function getBoardItemDistanceMiles(item: StoredBoardItem, origin?: GeoPoint) {
+  if (!origin || !item.geo)
+    return null
+
+  return getDistanceMiles(origin, item.geo.coordinates)
+}
+
+function normalizeBoardResolutionStatus(value: string) {
+  if (boardItemResolutionStatuses.includes(value as BoardItemResolutionStatus))
+    return value as BoardItemResolutionStatus
+
+  return value === 'resolved' ? 'fulfilled' : 'open'
+}
+
+function sortBoardItems(items: StoredBoardItem[], options: {
+  origin?: GeoPoint
+  sort: BoardItemSortOrder
+}) {
   return [...items].sort((left, right) => {
-    if (sort === 'newest')
+    if (options.sort === 'newest')
       return Date.parse(right.createdAt) - Date.parse(left.createdAt)
 
-    if (sort === 'oldest')
+    if (options.sort === 'oldest')
       return Date.parse(left.createdAt) - Date.parse(right.createdAt)
+
+    if (options.sort === 'nearby' && options.origin) {
+      const leftDistance = getBoardItemDistanceMiles(left, options.origin)
+      const rightDistance = getBoardItemDistanceMiles(right, options.origin)
+
+      if (leftDistance != null && rightDistance != null) {
+        if (leftDistance !== rightDistance)
+          return leftDistance - rightDistance
+      }
+      else if (leftDistance != null) {
+        return -1
+      }
+      else if (rightDistance != null) {
+        return 1
+      }
+    }
 
     return Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt)
   })
@@ -425,7 +541,7 @@ function assertPublicBoardItemAvailable(item: StoredBoardItem) {
 
 function assertPublicBoardItemOpenForReplies(item: StoredBoardItem) {
   if (!isBoardItemOpen(item))
-    throw new BoardValidationError('That board item is already marked resolved. Reopen it before posting a new public reply.')
+    throw new BoardValidationError('That board item is already closed to new public replies. Reopen it before posting a new response.')
 }
 
 function assertPublicBoardInteractionAvailable(interaction: StoredBoardInteraction) {
@@ -485,11 +601,14 @@ function toPublicInteraction(interaction: StoredBoardInteraction): PublicBoardIn
   }
 }
 
-function toPublicItem(item: StoredBoardItem, interactions: StoredBoardInteraction[]): PublicBoardItem {
+function toPublicItem(item: StoredBoardItem, interactions: StoredBoardInteraction[], options?: {
+  origin?: GeoPoint
+}): PublicBoardItem {
   return {
     attributes: item.attributes,
     author: item.author,
     createdAt: item.createdAt,
+    distanceMiles: getBoardItemDistanceMiles(item, options?.origin),
     hasContact: Boolean(item.contact),
     id: item.id,
     interactionCount: interactions.length,
@@ -498,7 +617,7 @@ function toPublicItem(item: StoredBoardItem, interactions: StoredBoardInteractio
     kindLabel: item.kindLabel,
     lastActivityAt: item.lastActivityAt,
     resolutionChangedAt: item.resolutionChangedAt,
-    resolutionStatus: item.resolutionStatus,
+    resolutionStatus: normalizeBoardResolutionStatus(item.resolutionStatus),
     status: 'visible',
     summary: item.summary,
     summaryLabel: item.summaryLabel,
@@ -536,9 +655,9 @@ function getBoardItemManagementAccess(input: {
 function normalizeStoredBoardItem(item: StoredBoardItem) {
   return {
     ...item,
-    resolutionStatus: boardItemResolutionStatuses.includes(item.resolutionStatus)
-      ? item.resolutionStatus
-      : 'open',
+    notificationEmail: cleanValue(item.notificationEmail) || undefined,
+    notificationPreference: normalizeNotificationPreference(cleanValue(item.notificationPreference)),
+    resolutionStatus: normalizeBoardResolutionStatus(item.resolutionStatus),
   } satisfies StoredBoardItem
 }
 
@@ -665,6 +784,8 @@ export async function getBoardStateForSubmission(input: {
 
 export async function listBoardItems(options?: {
   kind?: SubmissionKind | 'all'
+  lat?: number
+  lng?: number
   page?: number
   pageSize?: number
   query?: string
@@ -678,6 +799,12 @@ export async function listBoardItems(options?: {
   const sort = options?.sort && boardItemSortOrders.includes(options.sort)
     ? options.sort
     : 'recent-activity'
+  const origin = Number.isFinite(options?.lat) && Number.isFinite(options?.lng)
+    ? {
+        lat: Number(options?.lat),
+        lng: Number(options?.lng),
+      }
+    : undefined
   const allVisibleItems = (await listStoredBoardItems())
     .filter(isBoardItemVisibleToPublic)
   const searchedItems = allVisibleItems.filter(item => matchesBoardSearchQuery(item, searchQuery))
@@ -691,7 +818,10 @@ export async function listBoardItems(options?: {
   const filteredItems = kindFilter === 'all'
     ? searchedItems
     : searchedItems.filter(item => item.kind === kindFilter)
-  const sortedItems = sortBoardItems(filteredItems, sort)
+  const sortedItems = sortBoardItems(filteredItems, {
+    origin,
+    sort,
+  })
 
   const totalItems = sortedItems.length
   const totalPages = totalItems > 0 ? Math.ceil(totalItems / pageSize) : 1
@@ -702,7 +832,7 @@ export async function listBoardItems(options?: {
   const publicItems = await Promise.all(
     pagedItems.map(async (item) => {
       const interactions = (await listStoredInteractions(item.id)).filter(isBoardInteractionVisibleToPublic)
-      return toPublicItem(item, interactions)
+      return toPublicItem(item, interactions, { origin })
     }),
   )
 
@@ -721,7 +851,14 @@ export async function listBoardItems(options?: {
 }
 
 export function describeBoardItemResolutionStatus(status: BoardItemResolutionStatus) {
-  return status === 'resolved' ? 'Resolved' : 'Open'
+  switch (status) {
+    case 'fulfilled':
+      return 'Fulfilled'
+    case 'closed':
+      return 'Closed'
+    default:
+      return 'Open'
+  }
 }
 
 export async function getPublicBoardItem(itemId: string) {
@@ -765,6 +902,10 @@ export async function createBoardItemFromSubmission(input: {
   validateHumanText(contact.value, 'A contact method', 320)
   if (contact.note)
     validateHumanText(contact.note, 'A contact note', 320)
+  const notificationSettings = buildBoardNotificationSettings({
+    contact,
+    fields: input.fields,
+  })
   const deleteToken = createBoardDeleteToken()
   const managementToken = !input.viewer && contact.managementEmail ? createBoardManagementToken() : ''
 
@@ -782,11 +923,14 @@ export async function createBoardItemFromSubmission(input: {
     contactValue: contact.value || undefined,
     createdAt,
     deleteTokenHash: hashDeleteToken(deleteToken),
+    geo: buildBoardGeo(input.kind, input.fields),
     interactionCount: 0,
     kind: input.kind,
     kindLabel: labels.kindLabel,
     lastActivityAt: createdAt,
     managementTokenHash: managementToken ? hashDeleteToken(managementToken) : undefined,
+    notificationEmail: notificationSettings.notificationEmail || undefined,
+    notificationPreference: notificationSettings.notificationPreference,
     resolutionStatus: 'open',
     sourceSubmission: {
       id: input.submissionId,
@@ -901,7 +1045,12 @@ export async function createBoardInteraction(input: {
     visibilityState: interaction.status,
   })
 
-  return toPublicInteraction(interaction)
+  return {
+    interaction: toPublicInteraction(interaction),
+    itemNotificationEmail: item.notificationEmail || '',
+    itemNotificationPreference: item.notificationPreference,
+    itemTitle: item.title,
+  }
 }
 
 export async function setBoardItemResolution(input: {
@@ -938,14 +1087,22 @@ export async function setBoardItemResolution(input: {
   }
 
   await writeStoredBoardItem(nextItem)
+  const action = nextResolutionStatus === 'fulfilled'
+    ? 'board_item_fulfilled'
+    : nextResolutionStatus === 'closed'
+      ? 'board_item_closed'
+      : 'board_item_reopened'
+  const detail = nextResolutionStatus === 'fulfilled'
+    ? 'Marked fulfilled while keeping the post visible for reference.'
+    : nextResolutionStatus === 'closed'
+      ? 'Closed the post to new public replies while keeping it visible.'
+      : 'Reopened the post for new public replies.'
   await recordBoardActivity({
-    action: nextResolutionStatus === 'resolved' ? 'board_item_resolved' : 'board_item_reopened',
+    action,
     actor: access.actor,
     category: 'moderation',
     createdAt: changedAt,
-    detail: nextResolutionStatus === 'resolved'
-      ? 'Marked resolved while keeping the post visible on the public board.'
-      : 'Reopened the post for new public replies.',
+    detail,
     itemId: item.id,
     kind: item.kind,
     submissionId: item.sourceSubmission?.id,

@@ -34,14 +34,21 @@ export interface BoardInteraction {
   message: string
 }
 
-export type BoardResolutionStatus = 'open' | 'resolved'
-export type BoardSortOrder = 'recent-activity' | 'newest' | 'oldest'
+export type BoardResolutionStatus = 'open' | 'fulfilled' | 'closed'
+export type BoardSortOrder = 'recent-activity' | 'newest' | 'oldest' | 'nearby'
 export type BoardReportReason = 'spam' | 'scam' | 'unsafe' | 'harassment' | 'wrong-category' | 'other'
+export type BoardNotificationPreference = 'none' | 'email'
 
 export const boardSortOptions: Array<{ label: string, value: BoardSortOrder }> = [
   { label: 'Recently active', value: 'recent-activity' },
   { label: 'Newest first', value: 'newest' },
   { label: 'Oldest first', value: 'oldest' },
+  { label: 'Nearby first', value: 'nearby' },
+]
+
+export const boardNotificationPreferenceOptions: Array<{ label: string, value: BoardNotificationPreference }> = [
+  { label: 'Do not send reply emails', value: 'none' },
+  { label: 'Email me when someone replies', value: 'email' },
 ]
 
 export const boardReportReasonOptions: Array<{ label: string, value: BoardReportReason }> = [
@@ -57,6 +64,7 @@ export interface BoardItem {
   attributes: BoardAttribute[]
   author: BoardAuthor
   createdAt: string
+  distanceMiles: number | null
   hasContact: boolean
   id: string
   interactionCount: number

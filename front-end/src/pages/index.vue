@@ -55,6 +55,9 @@ const boardFilter = ref<BoardFilter>('all')
 const boardSearch = ref('')
 const boardSearchDraft = ref('')
 const boardSort = ref<BoardSortOrder>('recent-activity')
+const boardOrigin = ref<{ lat: number, lng: number } | null>(null)
+const boardGeoPending = ref(false)
+const boardGeoError = ref('')
 const boardCounts = ref<BoardItemCounts>({
   all: 0,
   [submissionKinds.service]: 0,
@@ -107,6 +110,7 @@ const activeBoardSortLabel = computed(() =>
   boardSortOptions.find(option => option.value === boardSort.value)?.label
   || 'Recently active',
 )
+const isNearbySortActive = computed(() => boardSort.value === 'nearby')
 
 function applyServerContext(payload: unknown) {
   if (!payload || typeof payload !== 'object')
@@ -138,6 +142,15 @@ function parsePositivePage(value: string) {
 
   if (!Number.isFinite(parsedValue) || parsedValue < 1)
     return 1
+
+  return parsedValue
+}
+
+function parseMaybeCoordinate(value: string) {
+  const parsedValue = Number.parseFloat(value)
+
+  if (!Number.isFinite(parsedValue))
+    return null
 
   return parsedValue
 }
@@ -214,6 +227,11 @@ async function loadBoardItems() {
 
   if (boardSearch.value)
     endpoint.searchParams.set('query', boardSearch.value)
+
+  if (boardOrigin.value) {
+    endpoint.searchParams.set('lat', String(boardOrigin.value.lat))
+    endpoint.searchParams.set('lng', String(boardOrigin.value.lng))
+  }
 
   boardPending.value = true
   boardError.value = null
@@ -365,9 +383,17 @@ async function revealItemContact(item: BoardItem) {
   }
 }
 
+function getResolutionBadgeLabel(item: BoardItem) {
+  return item.resolutionStatus === 'fulfilled' ? 'fulfilled' : 'closed'
+}
+
 function getResolvedNote(item: BoardItem) {
-  const resolvedAt = item.resolutionChangedAt || item.lastActivityAt
-  return `This post was marked resolved ${formatBoardDate(resolvedAt)}. It stays visible for reference on its full post page.`
+  const changedAt = item.resolutionChangedAt || item.lastActivityAt
+
+  if (item.resolutionStatus === 'fulfilled')
+    return `This post was marked fulfilled ${formatBoardDate(changedAt)}. It stays visible for reference on its full post page.`
+
+  return `This post was closed ${formatBoardDate(changedAt)}. It stays visible for reference, but new public replies are paused until it is reopened.`
 }
 
 function syncBoardStateFromRoute() {
@@ -376,6 +402,11 @@ function syncBoardStateFromRoute() {
   const nextBoardSearch = normalizeBoardSearch(getQueryValue(route.query.q))
   const nextBoardSort = parseBoardSort(getQueryValue(route.query.sort))
   const nextPage = parsePositivePage(getQueryValue(route.query.page))
+  const nextLat = parseMaybeCoordinate(getQueryValue(route.query.lat))
+  const nextLng = parseMaybeCoordinate(getQueryValue(route.query.lng))
+  const nextOrigin = nextLat != null && nextLng != null
+    ? { lat: nextLat, lng: nextLng }
+    : null
 
   if (boardFilter.value !== nextBoardFilter) {
     boardFilter.value = nextBoardFilter
@@ -393,6 +424,16 @@ function syncBoardStateFromRoute() {
     changed = true
   }
 
+  const currentOrigin = boardOrigin.value
+
+  if (
+    currentOrigin?.lat !== nextOrigin?.lat
+    || currentOrigin?.lng !== nextOrigin?.lng
+  ) {
+    boardOrigin.value = nextOrigin
+    changed = true
+  }
+
   if (boardPagination.value.page !== nextPage) {
     boardPagination.value = {
       ...boardPagination.value,
@@ -406,6 +447,8 @@ function syncBoardStateFromRoute() {
 
 async function pushBoardRouteState(nextState?: {
   filter?: BoardFilter
+  lat?: number | null
+  lng?: number | null
   page?: number
   query?: string
   sort?: BoardSortOrder
@@ -414,6 +457,8 @@ async function pushBoardRouteState(nextState?: {
   const nextPage = Math.max(nextState?.page ?? boardPagination.value.page, 1)
   const nextQuery = normalizeBoardSearch(nextState?.query ?? boardSearch.value)
   const nextSort = nextState?.sort ?? boardSort.value
+  const nextLat = nextState?.lat ?? boardOrigin.value?.lat ?? null
+  const nextLng = nextState?.lng ?? boardOrigin.value?.lng ?? null
 
   await router.push({
     hash: route.hash,
@@ -421,6 +466,8 @@ async function pushBoardRouteState(nextState?: {
     query: {
       ...route.query,
       filter: nextFilter === 'all' ? undefined : nextFilter,
+      lat: nextLat != null ? String(nextLat) : undefined,
+      lng: nextLng != null ? String(nextLng) : undefined,
       page: nextPage > 1 ? String(nextPage) : undefined,
       q: nextQuery || undefined,
       sort: nextSort === 'recent-activity' ? undefined : nextSort,
@@ -475,7 +522,62 @@ function clearBoardSearch() {
   })
 }
 
+async function enableBoardNearbySort() {
+  if (!import.meta.client || !navigator.geolocation) {
+    boardGeoError.value = 'Browser geolocation is not available here.'
+    return
+  }
+
+  boardGeoPending.value = true
+  boardGeoError.value = ''
+
+  try {
+    const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: false,
+        maximumAge: 5 * 60 * 1000,
+        timeout: 10 * 1000,
+      })
+    })
+
+    boardOrigin.value = {
+      lat: position.coords.latitude,
+      lng: position.coords.longitude,
+    }
+
+    await pushBoardRouteState({
+      lat: boardOrigin.value.lat,
+      lng: boardOrigin.value.lng,
+      page: 1,
+      sort: 'nearby',
+    })
+  }
+  catch {
+    boardGeoError.value = 'Could not read your current location. Nearby sorting needs browser location access.'
+  }
+  finally {
+    boardGeoPending.value = false
+  }
+}
+
+function clearBoardOrigin() {
+  boardOrigin.value = null
+  boardGeoError.value = ''
+
+  void pushBoardRouteState({
+    lat: null,
+    lng: null,
+    page: 1,
+    sort: boardSort.value === 'nearby' ? 'recent-activity' : boardSort.value,
+  })
+}
+
 function setBoardSort(nextSort: BoardSortOrder) {
+  if (nextSort === 'nearby' && !boardOrigin.value) {
+    void enableBoardNearbySort()
+    return
+  }
+
   const currentRouteSort = parseBoardSort(getQueryValue(route.query.sort))
 
   boardSort.value = nextSort
@@ -507,6 +609,8 @@ watch(
     getQueryValue(route.query.page),
     getQueryValue(route.query.q),
     getQueryValue(route.query.sort),
+    getQueryValue(route.query.lat),
+    getQueryValue(route.query.lng),
   ],
   () => {
     if (!hasHydrated.value)
@@ -638,6 +742,28 @@ watch(
               </option>
             </select>
           </label>
+
+          <div class="board-origin">
+            <span>Origin</span>
+            <div class="board-origin__actions">
+              <button
+                class="secondary-button"
+                :disabled="boardGeoPending"
+                type="button"
+                @click="enableBoardNearbySort"
+              >
+                {{ boardGeoPending ? "Locating..." : boardOrigin ? "Refresh location" : "Use my location" }}
+              </button>
+              <button
+                v-if="boardOrigin"
+                class="secondary-button"
+                type="button"
+                @click="clearBoardOrigin"
+              >
+                Clear location
+              </button>
+            </div>
+          </div>
         </div>
 
         <div
@@ -663,6 +789,13 @@ watch(
 
       <div class="live-board__layout">
         <div class="board-feed">
+          <p
+            v-if="boardGeoError"
+            class="inline-note inline-note--error"
+            role="alert"
+          >
+            {{ boardGeoError }}
+          </p>
           <p
             v-if="securityError"
             class="inline-note inline-note--error"
@@ -694,6 +827,9 @@ watch(
               Search: "{{ boardSearch }}"
             </p>
             <p>Sorted by {{ activeBoardSortLabel.toLowerCase() }}.</p>
+            <p v-if="isNearbySortActive && boardOrigin">
+              Using your current browser location for nearby sorting.
+            </p>
             <p>Open a post for replies and the full thread.</p>
             <p v-if="managementPending">
               Claiming management access...
@@ -760,6 +896,7 @@ watch(
                 <div class="board-card__meta">
                   <span>{{ formatBoardDate(item.createdAt) }}</span>
                   <span>{{ item.interactionCount }} replies</span>
+                  <span v-if="item.distanceMiles != null">{{ item.distanceMiles.toFixed(1) }} mi away</span>
                 </div>
               </header>
 
@@ -767,9 +904,9 @@ watch(
                 <strong>{{ item.author.displayName }}</strong>
                 <span v-if="item.author.hasAccount" class="board-card__badge">account-backed</span>
                 <span
-                  v-if="item.resolutionStatus === 'resolved'"
+                  v-if="item.resolutionStatus !== 'open'"
                   class="board-card__badge board-card__badge--resolved"
-                >resolved</span>
+                >{{ getResolutionBadgeLabel(item) }}</span>
               </div>
 
               <p class="board-card__summary-label">
@@ -807,7 +944,7 @@ watch(
                 </button>
               </div>
               <p
-                v-if="item.resolutionStatus === 'resolved'"
+                v-if="item.resolutionStatus !== 'open'"
                 class="board-card__resolved-note"
               >
                 {{ getResolvedNote(item) }}
@@ -1096,7 +1233,7 @@ watch(
 
 .board-tools {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 0.9rem;
   align-items: end;
   padding: var(--page-surface-padding);
@@ -1112,7 +1249,8 @@ watch(
 }
 
 .board-search__field,
-.board-sort {
+.board-sort,
+.board-origin {
   display: grid;
   gap: 0.45rem;
 }
@@ -1125,12 +1263,19 @@ watch(
   min-width: 11rem;
 }
 
-.board-sort span {
+.board-sort span,
+.board-origin span {
   font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--site-muted);
+}
+
+.board-origin__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
 }
 
 .board-search__field input,
@@ -1526,6 +1671,7 @@ watch(
 
   .hero__actions,
   .board-search,
+  .board-origin__actions,
   .board-card__actions {
     flex-direction: column;
     align-items: stretch;

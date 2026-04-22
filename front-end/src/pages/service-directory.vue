@@ -1,16 +1,7 @@
 <script setup lang="ts">
-import type {
-  ServiceDirectoryProviderResult,
-  ServiceDirectoryProviderStatus,
-  ServiceDirectorySearchResponse,
-  ServiceGeoPoint,
-} from '~/utils/serviceDirectory'
-
 import {
-  findKnownPlace,
-  getServiceDirectoryEndpoint,
+  areaSpecificServiceSites,
   nationwideServiceSites,
-  searchAreaSpecificSites,
   serviceDirectoryAudienceLabels,
 } from '~/utils/serviceDirectory'
 
@@ -19,201 +10,10 @@ definePageMeta({
 })
 
 useSeoMeta({
-  title: 'Service Directory',
+  title: 'Service directory',
   description:
-    'Browse nationwide volunteer platforms, search local service websites, and look for live opportunities when available.',
+    'Browse curated nationwide and area-specific service websites, then continue to live search when it is useful.',
 })
-
-const runtimeConfig = useRuntimeConfig()
-const locationQuery = ref('')
-const radiusMiles = ref(40)
-const browserOrigin = ref<ServiceGeoPoint | null>(null)
-const geoPending = ref(false)
-const geoError = ref('')
-const hasHydrated = ref(false)
-const providerPending = ref(false)
-const providerError = ref('')
-const providerResults = ref<ServiceDirectoryProviderResult[]>([])
-const providerPagination = ref({
-  hasNextPage: false,
-  hasPreviousPage: false,
-  page: 1,
-  pageSize: 12,
-  totalItems: 0,
-  totalPages: 1,
-})
-const providerStatus = ref<ServiceDirectoryProviderStatus>({
-  configured: false,
-  id: 'idealist',
-  lastAttemptedAt: null,
-  lastError: null,
-  lastSyncedAt: null,
-  listingCount: 0,
-  message: 'The live provider has not been queried yet.',
-  sourceUrl: 'https://www.idealist.org/en/open-network-api',
-  syncState: 'unconfigured',
-})
-
-const placeMatch = computed(() => findKnownPlace(locationQuery.value))
-const activeOrigin = computed(
-  () => browserOrigin.value ?? placeMatch.value?.coordinates ?? null,
-)
-const areaResults = computed(() =>
-  searchAreaSpecificSites({
-    origin: activeOrigin.value,
-    query: locationQuery.value,
-    radiusMiles: radiusMiles.value,
-  }),
-)
-
-const searchModeLabel = computed(() => {
-  if (browserOrigin.value)
-    return 'Using your current location for local matching.'
-
-  if (placeMatch.value)
-    return `Using ${placeMatch.value.label} for local matching.`
-
-  if (locationQuery.value.trim())
-    return 'Using text matching only. Your current location will produce better nearby results.'
-
-  return 'Start with the local examples below, or enter a place to narrow them.'
-})
-
-const providerSummaryLabel = computed(() => {
-  if (providerPending.value)
-    return 'Loading live Idealist listings…'
-
-  if (providerError.value)
-    return 'Live search is unavailable right now. The directory links on this page still work.'
-
-  if (!providerStatus.value.configured)
-    return 'Live search is not enabled on this server yet. Use the directory links on this page for now.'
-
-  return `${providerResults.value.length} live Idealist result${providerResults.value.length === 1 ? '' : 's'} shown from ${providerPagination.value.totalItems} current matches.`
-})
-
-onMounted(() => {
-  hasHydrated.value = true
-  void runProviderSearch()
-})
-
-async function useCurrentLocation() {
-  if (!import.meta.client || !navigator.geolocation) {
-    geoError.value = 'Browser geolocation is not available here.'
-    return
-  }
-
-  geoPending.value = true
-  geoError.value = ''
-
-  try {
-    const position = await new Promise<GeolocationPosition>(
-      (resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: false,
-          maximumAge: 5 * 60 * 1000,
-          timeout: 10 * 1000,
-        })
-      },
-    )
-
-    browserOrigin.value = {
-      lat: position.coords.latitude,
-      lng: position.coords.longitude,
-    }
-
-    await runProviderSearch()
-  }
-  catch {
-    geoError.value
-      = 'Could not read your current location. You can still search by city or region text.'
-  }
-  finally {
-    geoPending.value = false
-  }
-}
-
-function clearDirectorySearch() {
-  browserOrigin.value = null
-  geoError.value = ''
-  locationQuery.value = ''
-  radiusMiles.value = 40
-  providerError.value = ''
-  providerPagination.value.page = 1
-  void runProviderSearch()
-}
-
-async function runProviderSearch(options?: {
-  page?: number
-  refresh?: boolean
-}) {
-  providerPending.value = true
-  providerError.value = ''
-
-  try {
-    const endpoint = new URL(
-      getServiceDirectoryEndpoint(runtimeConfig.public.apiBaseUrl),
-    )
-
-    endpoint.searchParams.set('provider', 'idealist')
-    endpoint.searchParams.set('query', locationQuery.value.trim())
-    endpoint.searchParams.set('radiusMiles', String(radiusMiles.value))
-    endpoint.searchParams.set(
-      'page',
-      String(options?.page || providerPagination.value.page || 1),
-    )
-    endpoint.searchParams.set(
-      'pageSize',
-      String(providerPagination.value.pageSize),
-    )
-
-    if (activeOrigin.value) {
-      endpoint.searchParams.set('lat', String(activeOrigin.value.lat))
-      endpoint.searchParams.set('lng', String(activeOrigin.value.lng))
-    }
-
-    if (options?.refresh)
-      endpoint.searchParams.set('refresh', 'true')
-
-    const response = await $fetch<ServiceDirectorySearchResponse>(
-      endpoint.toString(),
-    )
-    providerResults.value = response.results
-    providerPagination.value = response.pagination
-    providerStatus.value = response.provider
-  }
-  catch (error) {
-    providerError.value = 'Unable to load live Idealist listings right now.'
-
-    if (error && typeof error === 'object' && 'data' in error) {
-      const data = (error as { data?: unknown }).data
-
-      if (
-        data
-        && typeof data === 'object'
-        && 'message' in data
-        && typeof data.message === 'string'
-      ) {
-        providerError.value = data.message
-      }
-    }
-  }
-  finally {
-    providerPending.value = false
-  }
-}
-
-function changeProviderPage(nextPage: number) {
-  const boundedPage = Math.min(
-    Math.max(nextPage, 1),
-    providerPagination.value.totalPages,
-  )
-
-  if (boundedPage === providerPagination.value.page)
-    return
-
-  void runProviderSearch({ page: boundedPage })
-}
 </script>
 
 <template>
@@ -230,11 +30,17 @@ function changeProviderPage(nextPage: number) {
       <p class="eyebrow">
         Service directory
       </p>
-      <h1>Find service opportunities beyond this board.</h1>
+      <h1>Browse service websites beyond this board.</h1>
       <p class="service-directory-page__lede">
-        Start with the large volunteer networks, then narrow toward local
-        organizations and live opportunity results when they are available.
+        Start with the broad volunteer networks, then move into regional
+        organizations and local service hubs.
       </p>
+
+      <div class="service-directory-page__actions">
+        <NuxtLink prefetch-on="interaction" to="/service-search">
+          Open live service search
+        </NuxtLink>
+      </div>
     </section>
 
     <section class="directory-section">
@@ -242,24 +48,22 @@ function changeProviderPage(nextPage: number) {
         <p class="eyebrow">
           Nationwide platforms
         </p>
-        <h2>Start with the large volunteer networks first.</h2>
+        <h2>Use the large networks when you need a broad search.</h2>
         <p class="section-copy">
-          These are the broadest directories for service and volunteer
-          opportunities. Use them first when you want a wider search than one
-          city or organization can provide.
+          These platforms are best when you want many opportunities across
+          cities, causes, or organizations.
         </p>
       </div>
 
-      <div class="nationwide-grid">
+      <div class="directory-grid">
         <article
           v-for="site in nationwideServiceSites"
           :key="site.id"
           class="directory-card"
         >
-          <div class="directory-card__meta">
-            <span>{{ serviceDirectoryAudienceLabels[site.audience] }}</span>
-          </div>
-
+          <p class="directory-card__eyebrow">
+            {{ serviceDirectoryAudienceLabels[site.audience] }}
+          </p>
           <h3>{{ site.name }}</h3>
           <p class="directory-card__coverage">
             {{ site.coverageLabel }}
@@ -267,13 +71,11 @@ function changeProviderPage(nextPage: number) {
           <p class="directory-card__summary">
             {{ site.summary }}
           </p>
-
           <ul class="directory-card__tags">
             <li v-for="tag in site.tags" :key="tag">
               {{ tag }}
             </li>
           </ul>
-
           <div class="directory-card__actions">
             <a :href="site.opportunityUrl" rel="noreferrer" target="_blank">
               Open opportunities
@@ -286,300 +88,71 @@ function changeProviderPage(nextPage: number) {
       </div>
     </section>
 
-    <section class="directory-section directory-section--finder">
+    <section class="directory-section">
       <div class="section-heading">
         <p class="eyebrow">
-          Area-specific search
+          Area-specific organizations
         </p>
-        <h2>
-          Search local and metro-specific service websites by place and radius.
-        </h2>
+        <h2>Use regional hubs when you want place-specific service work.</h2>
         <p class="section-copy">
-          Use your current location or type a place to narrow the local links
-          below.
+          These are local or metro-specific sites that are useful when you want
+          neighborhood, county, or city-level service opportunities.
         </p>
       </div>
 
-      <div class="finder-layout">
-        <aside class="finder-panel">
-          <label class="field field--wide">
-            <span>Current location or metro</span>
-            <input
-              v-model="locationQuery"
-              autocomplete="off"
-              name="directory_location"
-              placeholder="Try Atlanta, GA or Lawrenceville"
-              spellcheck="false"
-              type="text"
-            >
-          </label>
-
-          <label class="field field--wide">
-            <span>Search radius</span>
-            <div class="finder-panel__range">
-              <input
-                v-model="radiusMiles"
-                max="100"
-                min="10"
-                name="directory_radius"
-                step="5"
-                type="range"
-              >
-              <strong>{{ radiusMiles }} miles</strong>
-            </div>
-          </label>
-
-          <div class="finder-panel__actions">
-            <button
-              v-if="hasHydrated"
-              class="submit-button"
-              :disabled="geoPending"
-              type="button"
-              @click="useCurrentLocation"
-            >
-              {{ geoPending ? "Reading location…" : "Use my current location" }}
-            </button>
-
-            <button
-              class="secondary-button"
-              type="button"
-              @click="clearDirectorySearch"
-            >
-              Clear search
-            </button>
-
-            <button
-              class="secondary-button secondary-button--dark"
-              :disabled="providerPending"
-              type="button"
-              @click="runProviderSearch({ page: 1 })"
-            >
-              {{
-                providerPending
-                  ? "Searching live listings…"
-                  : "Search live Idealist results"
-              }}
-            </button>
-
-            <button
-              class="secondary-button"
-              :disabled="providerPending"
-              type="button"
-              @click="runProviderSearch({ page: 1, refresh: true })"
-            >
-              Refresh live results
-            </button>
-          </div>
-
-          <p class="finder-panel__note">
-            {{ searchModeLabel }}
+      <div class="directory-grid">
+        <article
+          v-for="site in areaSpecificServiceSites"
+          :key="site.id"
+          class="directory-card"
+        >
+          <p class="directory-card__eyebrow">
+            {{ serviceDirectoryAudienceLabels[site.audience] }}
           </p>
-          <p
-            v-if="geoError"
-            class="inline-note inline-note--error"
-            role="alert"
-          >
-            {{ geoError }}
+          <h3>{{ site.name }}</h3>
+          <p class="directory-card__coverage">
+            {{ site.coverageLabel }}
           </p>
-          <p v-if="placeMatch" class="inline-note" role="status">
-            Supported place match: {{ placeMatch.label }}
+          <p class="directory-card__summary">
+            {{ site.summary }}
           </p>
-        </aside>
-
-        <div class="finder-results">
-          <div class="finder-results__summary">
-            <span>{{ areaResults.length }} local directory result<span
-              v-if="areaResults.length !== 1"
-            >s</span></span>
-            <span>Use your current location for tighter local matching.</span>
+          <ul class="directory-card__tags">
+            <li v-for="tag in site.tags" :key="tag">
+              {{ tag }}
+            </li>
+          </ul>
+          <div class="directory-card__actions">
+            <a :href="site.opportunityUrl" rel="noreferrer" target="_blank">
+              Open opportunities
+            </a>
+            <a :href="site.sourceUrl" rel="noreferrer" target="_blank">
+              Official source
+            </a>
           </div>
-
-          <div v-if="!areaResults.length" class="finder-empty">
-            <h3>No local directory links match that search yet.</h3>
-            <p>Try a broader place name or widen the radius.</p>
-          </div>
-
-          <div v-else class="finder-results__grid">
-            <article
-              v-for="site in areaResults"
-              :key="site.id"
-              class="finder-card"
-            >
-              <div class="directory-card__meta">
-                <span>{{ serviceDirectoryAudienceLabels[site.audience] }}</span>
-              </div>
-
-              <h3>{{ site.name }}</h3>
-              <p class="directory-card__coverage">
-                {{ site.coverageLabel }}
-              </p>
-              <p class="directory-card__summary">
-                {{ site.summary }}
-              </p>
-              <p class="finder-card__match">
-                {{ site.matchReason }}
-              </p>
-              <p
-                v-if="site.distanceMiles != null"
-                class="finder-card__distance"
-              >
-                Approx. {{ site.distanceMiles.toFixed(1) }} miles away.
-              </p>
-
-              <ul class="directory-card__tags">
-                <li v-for="area in site.serviceAreas" :key="area">
-                  {{ area }}
-                </li>
-              </ul>
-
-              <div class="directory-card__actions">
-                <a :href="site.opportunityUrl" rel="noreferrer" target="_blank">
-                  Open site
-                </a>
-                <a :href="site.sourceUrl" rel="noreferrer" target="_blank">
-                  Official source
-                </a>
-              </div>
-            </article>
-          </div>
-        </div>
+        </article>
       </div>
     </section>
 
-    <section class="directory-section directory-section--provider">
-      <div class="section-heading">
+    <section class="directory-cta">
+      <div>
         <p class="eyebrow">
           Live search
         </p>
-        <h2>Search live opportunities when they are available.</h2>
+        <h2>Need something more dynamic?</h2>
         <p class="section-copy">
-          The same controls above can also search current Idealist opportunities
-          when live search is enabled on this server.
+          Use the live search page when you want to search local links by
+          distance and pull live provider results when the backend is configured
+          for it.
         </p>
       </div>
 
-      <div class="provider-results">
-        <div class="finder-results__summary">
-          <span>{{ providerSummaryLabel }}</span>
-          <span v-if="providerPagination.totalItems">Page {{ providerPagination.page }} of
-            {{ providerPagination.totalPages }}</span>
-        </div>
-
-        <p
-          v-if="providerError"
-          class="inline-note inline-note--error"
-          role="alert"
-        >
-          {{ providerError }}
-        </p>
-        <p
-          v-else-if="!providerStatus.configured"
-          class="inline-note"
-          role="status"
-        >
-          Live Idealist search is not enabled on this server yet.
-        </p>
-        <p
-          v-else-if="providerStatus.lastError"
-          class="inline-note inline-note--error"
-          role="alert"
-        >
-          {{ providerStatus.lastError }}
-        </p>
-
-        <div
-          v-if="providerPending && !providerResults.length"
-          class="finder-empty"
-          role="status"
-        >
-          <h3>Loading live listings…</h3>
-          <p>Checking current Idealist opportunities now.</p>
-        </div>
-
-        <div v-else-if="!providerResults.length" class="finder-empty">
-          <h3>No live Idealist listings matched this search yet.</h3>
-          <p>Try a broader keyword or a wider radius.</p>
-        </div>
-
-        <div v-else class="finder-results__grid">
-          <article
-            v-for="result in providerResults"
-            :key="result.id"
-            class="finder-card"
-          >
-            <div class="directory-card__meta">
-              <span>Live {{ result.provider }}</span>
-              <span
-                class="directory-badge"
-                :data-status="
-                  result.locationType === 'REMOTE' ? 'partner' : 'available'
-                "
-              >
-                {{ result.locationType }}
-              </span>
-            </div>
-
-            <h3>{{ result.title }}</h3>
-            <p class="directory-card__coverage">
-              {{ result.organizationName }}
-            </p>
-            <p class="directory-card__summary">
-              {{ result.summary }}
-            </p>
-            <p class="finder-card__match">
-              {{ result.matchReason }}
-            </p>
-            <p class="finder-card__distance">
-              {{ result.locationLabel }}
-              <span v-if="result.distanceMiles != null">
-                · {{ result.distanceMiles.toFixed(1) }} miles away</span>
-            </p>
-
-            <ul class="directory-card__tags">
-              <li
-                v-for="tag in [
-                  ...result.areasOfFocus,
-                  ...result.functionTags,
-                ].slice(0, 5)"
-                :key="tag"
-              >
-                {{ tag }}
-              </li>
-              <li v-if="result.isRecurring">
-                recurring
-              </li>
-            </ul>
-
-            <div class="directory-card__actions">
-              <a :href="result.opportunityUrl" rel="noreferrer" target="_blank">
-                Open listing
-              </a>
-              <a :href="result.applyUrl" rel="noreferrer" target="_blank">
-                Apply / learn more
-              </a>
-            </div>
-          </article>
-        </div>
-
-        <div v-if="providerPagination.totalPages > 1" class="admin-pagination">
-          <button
-            class="secondary-button"
-            :disabled="providerPending || !providerPagination.hasPreviousPage"
-            type="button"
-            @click="changeProviderPage(providerPagination.page - 1)"
-          >
-            Newer results
-          </button>
-          <button
-            class="secondary-button secondary-button--dark"
-            :disabled="providerPending || !providerPagination.hasNextPage"
-            type="button"
-            @click="changeProviderPage(providerPagination.page + 1)"
-          >
-            More results
-          </button>
-        </div>
-      </div>
+      <NuxtLink
+        class="directory-cta__link"
+        prefetch-on="interaction"
+        to="/service-search"
+      >
+        Go to live service search
+      </NuxtLink>
     </section>
   </div>
 </template>
@@ -588,7 +161,6 @@ function changeProviderPage(nextPage: number) {
 .service-directory-page {
   display: grid;
   gap: var(--page-section-gap);
-  padding-top: 0;
   padding-right: var(--page-inline-end);
   padding-bottom: 2.75rem;
   padding-left: var(--page-inline-start);
@@ -597,16 +169,7 @@ function changeProviderPage(nextPage: number) {
 .service-directory-page__hero {
   display: grid;
   gap: var(--page-hero-gap);
-}
-
-.directory-section {
-  display: grid;
-  gap: 1rem;
-}
-
-.service-directory-page__hero {
   max-width: var(--page-hero-max);
-  min-width: 0;
   padding-block: var(--page-hero-space);
 }
 
@@ -618,12 +181,17 @@ function changeProviderPage(nextPage: number) {
 }
 
 .service-directory-page__back:hover,
-.service-directory-page__back:focus-visible {
+.service-directory-page__back:focus-visible,
+.service-directory-page__actions a:hover,
+.service-directory-page__actions a:focus-visible,
+.directory-cta__link:hover,
+.directory-cta__link:focus-visible {
   text-decoration: underline;
   text-underline-offset: 0.2em;
 }
 
-.eyebrow {
+.eyebrow,
+.directory-card__eyebrow {
   margin: 0;
   font-size: 0.82rem;
   font-weight: 700;
@@ -633,10 +201,9 @@ function changeProviderPage(nextPage: number) {
 }
 
 .service-directory-page h1,
-.directory-section h2,
-.directory-card h3,
-.finder-empty h3,
-.finder-card h3 {
+.section-heading h2,
+.directory-cta h2,
+.directory-card h3 {
   margin: 0;
   font-family: 'DM Serif Display', serif;
   font-weight: 400;
@@ -654,293 +221,126 @@ function changeProviderPage(nextPage: number) {
 .service-directory-page__lede,
 .section-copy,
 .directory-card__summary,
-.finder-card__match,
-.finder-empty p,
-.finder-panel__note {
+.directory-card__coverage {
   margin: 0;
   color: var(--site-text);
   line-height: 1.7;
 }
 
-.service-directory-page__lede {
-  max-width: var(--page-hero-copy-max);
-  font-size: 1.04rem;
+.service-directory-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
 }
 
-.finder-panel,
-.finder-empty,
-.directory-card,
-.finder-card {
-  border: 1px solid var(--site-border);
-  border-radius: var(--page-surface-radius);
-  background: color-mix(in srgb, var(--site-surface-soft) 82%, transparent);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.08);
+.service-directory-page__actions a,
+.directory-cta__link,
+.directory-card__actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.95rem;
+  padding: 0.88rem 1.2rem;
+  border-radius: 1rem;
+  text-decoration: none;
+  font-size: 0.96rem;
+  font-weight: 700;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease,
+    border-color 180ms ease;
 }
 
-.directory-card__coverage,
-.finder-results__summary,
-.finder-card__distance {
-  color: var(--site-subtle);
+.service-directory-page__actions a,
+.directory-cta__link {
+  background: var(--site-button-bg);
+  color: var(--site-button-text);
+  box-shadow: 0 16px 30px var(--site-focus-ring);
+}
+
+.directory-section {
+  display: grid;
+  gap: 1.2rem;
 }
 
 .section-heading {
-  max-width: var(--page-hero-copy-max);
+  max-width: 42rem;
+  display: grid;
+  gap: 0.9rem;
 }
 
-.nationwide-grid,
-.finder-results__grid {
+.directory-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
 }
 
 .directory-card,
-.finder-card {
+.directory-cta {
   display: grid;
-  gap: 0.95rem;
+  gap: 1rem;
   padding: var(--page-surface-padding);
-}
-
-.directory-card__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--site-muted);
-}
-
-.directory-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.32rem 0.75rem;
-  border-radius: 0.82rem;
-  background: var(--site-accent-soft);
-  color: var(--site-link);
-}
-
-.directory-badge[data-status='available'] {
-  background: color-mix(in srgb, var(--site-link) 16%, transparent);
-}
-
-.directory-badge[data-status='partner'] {
-  background: color-mix(in srgb, var(--site-heading) 12%, transparent);
-}
-
-.directory-badge[data-status='manual'] {
-  background: color-mix(in srgb, var(--site-warning, #b85c22) 16%, transparent);
-  color: color-mix(in srgb, var(--site-warning, #b85c22) 72%, var(--site-heading) 28%);
-}
-
-.directory-card h3,
-.finder-card h3,
-.finder-empty h3 {
-  font-size: 1.8rem;
-  line-height: 0.98;
+  border-radius: var(--page-surface-radius);
+  border: 1px solid var(--site-border);
+  background: color-mix(in srgb, var(--site-surface-soft) 86%, transparent);
+  box-shadow: var(--site-shadow-soft);
 }
 
 .directory-card__tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.6rem;
-  padding: 0;
+  gap: 0.55rem;
   margin: 0;
+  padding: 0;
   list-style: none;
 }
 
 .directory-card__tags li {
-  padding: 0.4rem 0.75rem;
-  border-radius: 0.82rem;
-  background: transparent;
-  border: 1px solid var(--site-border);
-  color: var(--site-text-strong);
-  font-size: 0.88rem;
-}
-
-.directory-card__actions,
-.finder-panel__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: center;
-}
-
-.directory-card__actions a,
-.submit-button,
-.secondary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 2.8rem;
-  padding: 0.7rem 1rem;
-  border: 1px solid var(--site-border);
-  border-radius: 1rem;
-  text-decoration: none;
-  font-weight: 700;
-  transition:
-    transform 160ms ease,
-    background-color 160ms ease,
-    color 160ms ease,
-    border-color 160ms ease;
-}
-
-.directory-card__actions a,
-.secondary-button {
-  background: transparent;
-  color: var(--site-heading);
-}
-
-.submit-button {
-  border-color: color-mix(in srgb, var(--site-link) 35%, var(--site-border) 65%);
-  background: var(--site-button-bg);
-  color: var(--site-button-text);
-}
-
-.secondary-button--dark {
-  background: var(--site-button-bg);
-  color: var(--site-button-text);
-}
-
-.directory-card__actions a:hover,
-.directory-card__actions a:focus-visible,
-.submit-button:hover,
-.submit-button:focus-visible,
-.secondary-button:hover,
-.secondary-button:focus-visible {
-  transform: translateY(-1px);
-}
-
-.secondary-button:hover,
-.secondary-button:focus-visible,
-.directory-card__actions a:hover,
-.directory-card__actions a:focus-visible {
-  background: var(--site-accent-soft);
-}
-
-.secondary-button--dark:hover,
-.secondary-button--dark:focus-visible {
-  background: var(--site-button-bg-hover);
-}
-
-.finder-layout {
-  display: grid;
-  grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr);
-  gap: 1rem;
-  align-items: start;
-}
-
-.finder-panel {
-  display: grid;
-  gap: 1rem;
-  padding: var(--page-surface-padding);
-  position: sticky;
-  top: calc(5rem + var(--page-block-start));
-}
-
-.field {
-  display: grid;
-  gap: 0.45rem;
-}
-
-.field span {
-  font-size: 0.86rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--site-muted);
-}
-
-.field input {
-  width: 100%;
-  border: 1px solid var(--site-border);
-  border-radius: 1rem;
-  background: var(--site-surface);
-  color: var(--site-text-strong);
-}
-
-.field input {
-  min-height: 3rem;
-  padding: 0.85rem 1rem;
-}
-
-.finder-panel__range {
-  display: grid;
-  gap: 0.6rem;
-}
-
-.finder-panel__range input {
-  padding: 0;
-}
-
-.finder-results {
-  display: grid;
-  gap: 1rem;
-}
-
-.provider-results {
-  display: grid;
-  gap: 1rem;
-}
-
-.finder-results__summary {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.75rem;
-  font-size: 0.92rem;
-}
-
-.finder-empty {
-  display: grid;
-  gap: 0.75rem;
-  padding: var(--page-surface-padding);
-}
-
-.finder-card__match {
-  font-size: 0.96rem;
-}
-
-.admin-pagination {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  justify-content: flex-end;
-}
-
-.inline-note {
-  margin: 0;
-  font-size: 0.94rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: var(--site-surface-soft-strong);
   color: var(--site-subtle);
+  font-size: 0.82rem;
 }
 
-.inline-note--error {
-  color: color-mix(in srgb, #cf4d34 72%, var(--site-heading) 28%);
+.directory-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
 }
 
-@media (max-width: 920px) {
-  .finder-layout {
+.directory-card__actions a {
+  border: 1px solid var(--site-border-strong);
+  background: var(--site-input-bg);
+  color: var(--site-text-strong);
+  box-shadow: none;
+}
+
+.directory-cta {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+@media (max-width: 860px) {
+  .directory-grid,
+  .directory-cta {
     grid-template-columns: 1fr;
-  }
-
-  .finder-panel {
-    position: static;
   }
 }
 
 @media (max-width: 760px) {
-  .service-directory-page h1 {
-    max-width: 100%;
+  .service-directory-page__actions,
+  .directory-card__actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 
-  .directory-card__meta,
-  .finder-results__summary {
-    align-items: flex-start;
-    flex-direction: column;
+  .directory-cta__link,
+  .service-directory-page__actions a,
+  .directory-card__actions a {
+    width: 100%;
   }
 }
 </style>

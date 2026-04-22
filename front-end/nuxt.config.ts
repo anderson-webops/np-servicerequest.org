@@ -3,6 +3,7 @@ import process from 'node:process'
 import { analyticsDomain, analyticsWebsiteId, appDescription } from './src/constants/index'
 
 const isDev = process.env.NODE_ENV === 'development'
+const analyticsDisabled = process.env.DISABLE_ANALYTICS === 'true'
 
 export default defineNuxtConfig({
   modules: [
@@ -32,10 +33,11 @@ export default defineNuxtConfig({
         { name: 'theme-color', media: '(prefers-color-scheme: dark)', content: '#0d1510' },
       ],
       script: isDev
+        || analyticsDisabled
         ? []
         : [{
-            defer: true,
-            src: `https://${analyticsDomain}/script.js`,
+            'defer': true,
+            'src': `https://${analyticsDomain}/script.js`,
             'data-website-id': analyticsWebsiteId,
           }],
     },
@@ -78,7 +80,7 @@ export default defineNuxtConfig({
     },
     prerender: {
       crawlLinks: false,
-      routes: ['/', '/account', '/admin', '/help', '/service-directory', '/post', '/service-request', '/item-request', '/item-lending'],
+      routes: ['/', '/account', '/admin', '/help', '/service-directory', '/service-search', '/post', '/service-request', '/item-request', '/item-lending'],
       ignore: ['/hi'],
     },
   },

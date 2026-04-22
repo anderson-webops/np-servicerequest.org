@@ -31,17 +31,6 @@ export interface ServiceDirectoryEntry {
   url: string
 }
 
-export interface ServiceDirectoryApiSource {
-  coverageLabel: string
-  id: string
-  integrationUrl?: string
-  name: string
-  notes: string
-  status: ServiceDirectoryApiStatus
-  summary: string
-  url: string
-}
-
 export interface ServiceDirectoryMatch extends ServiceDirectoryEntry {
   distanceMiles: number | null
   matchReason: string
@@ -101,12 +90,6 @@ export interface ServiceDirectorySearchResponse {
     refresh: boolean
   }
   results: ServiceDirectoryProviderResult[]
-}
-
-export const serviceDirectoryApiStatusLabels: Record<ServiceDirectoryApiStatus, string> = {
-  available: 'API available',
-  manual: 'Manual or site-only',
-  partner: 'Partner integration',
 }
 
 export function getServiceDirectoryEndpoint(apiBaseUrl: string, path = 'search') {
@@ -242,111 +225,6 @@ export const areaSpecificServiceSites: ServiceDirectoryEntry[] = [
     url: 'https://streetwisegeorgia.org/',
   },
 ]
-
-export const serviceDirectoryApiSources: ServiceDirectoryApiSource[] = [
-  {
-    coverageLabel: 'Large volunteer marketplace',
-    id: 'idealist-api',
-    integrationUrl: 'https://www.idealist.org/en/open-network-api',
-    name: 'Idealist Volunteer API',
-    notes: 'Most direct fit if this page eventually needs nationwide opportunity search embedded inside np-servicerequest.org.',
-    status: 'available',
-    summary: 'Official listings API for pulling large volunteer datasets into another platform.',
-    url: 'https://www.idealist.org/en/open-network-api',
-  },
-  {
-    coverageLabel: 'VolunteerMatch network',
-    id: 'volunteermatch-api',
-    integrationUrl: 'https://solutions.volunteermatch.org/open-network-api',
-    name: 'VolunteerMatch Open Network API',
-    notes: 'GraphQL-based API with a long-standing syndication model; likely strongest direct integration path if you want embedded listings.',
-    status: 'available',
-    summary: 'Open Network API v3 for embedding vetted opportunities into web or mobile products.',
-    url: 'https://solutions.volunteermatch.org/open-network-api',
-  },
-  {
-    coverageLabel: 'Partner / widget style',
-    id: 'points-of-light-engage',
-    integrationUrl: 'https://www.pointsoflight.org/press-releases/points-of-light-launches-points-of-light-engage-the-worlds-largest-digital-hub-for-volunteering-and-community-engagement/',
-    name: 'Points of Light Engage partnerships',
-    notes: 'Useful if you want aggregated discovery and affiliate reach, but the official material looked more partnership-oriented than self-serve API oriented.',
-    status: 'partner',
-    summary: 'Engage catalog plus partner widgets and website implementations for volunteer discovery.',
-    url: 'https://engage.pointsoflight.org/',
-  },
-  {
-    coverageLabel: 'Org-level volunteer system',
-    id: 'better-impact-api',
-    integrationUrl: 'https://support.betterimpact.com/en/articles/9824270-api',
-    name: 'Better Impact / Volunteer Impact API',
-    notes: 'Best for integrating with a single organization’s managed volunteer system, not for broad public marketplace discovery.',
-    status: 'partner',
-    summary: 'API for tenant-managed volunteer system data rather than a cross-platform public service marketplace.',
-    url: 'https://support.betterimpact.com/en/articles/9824270-api',
-  },
-  {
-    coverageLabel: 'Manual review still needed',
-    id: 'justserve-no-public-api',
-    name: 'JustServe',
-    notes: 'Treat JustServe as a manual directory link for now unless official API or partner documentation surfaces later.',
-    status: 'manual',
-    summary: 'Strong nationwide platform presence, but no public search API was identified in the official material reviewed.',
-    url: 'https://www.justserve.org/',
-  },
-]
-
-export const serviceDirectoryResearchPrompt = `Research volunteer and service-opportunity websites for a public-facing directory on np-servicerequest.org.
-
-Goal:
-Build a vetted list of websites that help people find service opportunities.
-
-Return two buckets:
-1. Nationwide U.S. service / volunteer platforms and networks.
-2. Area-specific platforms, affiliates, nonprofits, and civic portals for a target metro area.
-
-Target metro area:
-- City / region: [INSERT CITY OR METRO]
-- Search radius: [INSERT RADIUS IN MILES]
-
-Include examples or close analogs to:
-- Idealist / VolunteerMatch
-- JustServe
-- AmeriCorps Volunteer Search
-- Points of Light Engage
-- Hands On affiliate sites such as Hands On Atlanta
-- local nonprofits similar to StreetWise Georgia
-
-Use only official or first-party sources unless absolutely necessary for confirmation.
-
-For every website you find, capture:
-- Name
-- Homepage URL
-- Direct volunteer or opportunities URL
-- Coverage level: national, state, metro, county, neighborhood
-- Geography served
-- Type: discovery platform, affiliate network, government portal, nonprofit, faith-based, civic organization
-- Whether it appears active as of 2025-2026
-- Whether users can search by keyword, location, or radius
-- Whether the site supports virtual opportunities, recurring opportunities, or group volunteering if stated
-- Whether there is an official API, search widget, syndication program, RSS feed, or partner integration
-- Source URL that proves the above
-
-Prioritize findings that are actually useful for this product:
-- platforms that let a user discover opportunities
-- regional hubs with an active project calendar
-- nonprofits that clearly publish volunteer opportunities on their own site
-- sources with some integration path or clean structured discovery experience
-
-Then produce:
-1. A deduplicated table of nationwide options.
-2. A deduplicated table of area-specific options for the target metro.
-3. A short recommendation section:
-   - best sites to seed manually first
-   - best API or integration candidates
-   - sites that appear useful but require manual linking only
-4. A gap list showing which metros or service categories still need additional research.
-
-Flag anything unclear instead of guessing.`
 
 function normalizeSearchValue(value: string) {
   return value
