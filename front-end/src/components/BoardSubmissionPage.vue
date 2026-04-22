@@ -4,8 +4,9 @@ import type {
   FormStatus,
 } from '~/composables/useBoardSubmission'
 
-defineProps<{
+const props = defineProps<{
   description: string
+  draftKey?: string
   eyebrow: string
   examples: string[]
   pendingLabel: string
@@ -19,6 +20,154 @@ defineProps<{
 const emit = defineEmits<{
   submit: [event: Event]
 }>()
+
+const formElement = ref<HTMLFormElement | null>(null)
+const draftSaved = ref(false)
+const draftRestored = ref(false)
+
+const draftStorageKey = computed(() =>
+  props.draftKey ? `np_sr_submission_draft:${props.draftKey}` : '',
+)
+
+function readStoredDraft() {
+  if (!import.meta.client || !draftStorageKey.value)
+    return null
+
+  try {
+    const rawValue = window.localStorage.getItem(draftStorageKey.value)
+
+    if (!rawValue)
+      return null
+
+    const parsed = JSON.parse(rawValue)
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+      return null
+
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        (entry): entry is [string, string] =>
+          typeof entry[0] === 'string' && typeof entry[1] === 'string',
+      ),
+    )
+  }
+  catch {
+    return null
+  }
+}
+
+function clearStoredDraft() {
+  if (!import.meta.client || !draftStorageKey.value)
+    return
+
+  window.localStorage.removeItem(draftStorageKey.value)
+}
+
+function serializeForm(form: HTMLFormElement) {
+  return Object.fromEntries(
+    Array.from(new FormData(form).entries())
+      .map(([key, value]) => [key, typeof value === 'string' ? value : ''] as const)
+      .filter(([key, value]) => key !== 'bot-field' && value.trim().length > 0),
+  )
+}
+
+function dispatchFieldSync(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement) {
+  element.dispatchEvent(new Event('input', { bubbles: true }))
+  element.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
+function applyDraftValue(field: Element | null, value: string) {
+  if (
+    field instanceof HTMLInputElement
+    || field instanceof HTMLTextAreaElement
+    || field instanceof HTMLSelectElement
+  ) {
+    field.value = value
+    dispatchFieldSync(field)
+  }
+}
+
+function restoreDraftIntoForm(form: HTMLFormElement, draft: Record<string, string>) {
+  for (const [fieldName, value] of Object.entries(draft)) {
+    const field = form.elements.namedItem(fieldName)
+
+    if (!field)
+      continue
+
+    if (typeof RadioNodeList !== 'undefined' && field instanceof RadioNodeList) {
+      for (const option of Array.from(field))
+        applyDraftValue(option, value)
+      continue
+    }
+
+    applyDraftValue(field as Element, value)
+  }
+}
+
+function persistDraft() {
+  if (!import.meta.client || !draftStorageKey.value || !formElement.value)
+    return
+
+  const nextDraft = serializeForm(formElement.value)
+
+  if (!Object.keys(nextDraft).length) {
+    clearStoredDraft()
+    draftSaved.value = false
+    draftRestored.value = false
+    return
+  }
+
+  window.localStorage.setItem(draftStorageKey.value, JSON.stringify(nextDraft))
+  draftSaved.value = true
+}
+
+function clearDraftAndResetForm() {
+  clearStoredDraft()
+  draftSaved.value = false
+  draftRestored.value = false
+
+  if (!formElement.value)
+    return
+
+  formElement.value.reset()
+
+  for (const field of Array.from(formElement.value.elements)) {
+    if (
+      field instanceof HTMLInputElement
+      || field instanceof HTMLTextAreaElement
+      || field instanceof HTMLSelectElement
+    ) {
+      dispatchFieldSync(field)
+    }
+  }
+}
+
+onMounted(async () => {
+  await nextTick()
+
+  if (!formElement.value)
+    return
+
+  const savedDraft = readStoredDraft()
+
+  if (savedDraft && Object.keys(savedDraft).length) {
+    restoreDraftIntoForm(formElement.value, savedDraft)
+    draftSaved.value = true
+    draftRestored.value = true
+  }
+})
+
+watch(
+  () => props.status.success,
+  (nextSuccess, previousSuccess) => {
+    if (!nextSuccess || previousSuccess)
+      return
+
+    clearStoredDraft()
+    draftSaved.value = false
+    draftRestored.value = false
+  },
+)
 </script>
 
 <template>
@@ -54,10 +203,33 @@ const emit = defineEmits<{
       </div>
 
       <form
+        ref="formElement"
         class="submission-page__form"
         :aria-busy="status.pending"
+        @change="persistDraft"
+        @input="persistDraft"
         @submit.prevent="emit('submit', $event)"
       >
+        <div
+          v-if="draftSaved || draftRestored"
+          class="submission-page__draft"
+        >
+          <p>
+            {{
+              draftRestored
+                ? 'Saved draft restored in this browser.'
+                : 'Draft saves automatically in this browser.'
+            }}
+          </p>
+          <button
+            class="submission-page__draft-clear"
+            type="button"
+            @click="clearDraftAndResetForm"
+          >
+            Clear draft
+          </button>
+        </div>
+
         <p v-if="status.success" class="success-note" role="status">
           {{ successText }}
         </p>
@@ -197,6 +369,39 @@ const emit = defineEmits<{
   gap: 1rem;
 }
 
+.submission-page__draft {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 1rem;
+  background: var(--site-surface-soft);
+  border: 1px solid var(--site-border);
+  color: var(--site-subtle);
+}
+
+.submission-page__draft p {
+  margin: 0;
+}
+
+.submission-page__draft-clear {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--site-link);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.submission-page__draft-clear:hover,
+.submission-page__draft-clear:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
 :deep(.field-grid) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -325,6 +530,10 @@ const emit = defineEmits<{
   .submission-page__tips,
   .submission-page__form {
     padding: 1.2rem;
+  }
+
+  .submission-page__draft {
+    align-items: flex-start;
   }
 
   :deep(.field-grid) {

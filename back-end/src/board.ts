@@ -26,6 +26,25 @@ export const boardItemResolutionStatuses = [
 
 export type BoardItemResolutionStatus = (typeof boardItemResolutionStatuses)[number]
 
+export const boardItemSortOrders = [
+  'recent-activity',
+  'newest',
+  'oldest',
+] as const
+
+export type BoardItemSortOrder = (typeof boardItemSortOrders)[number]
+
+export const boardReportReasons = [
+  'spam',
+  'scam',
+  'unsafe',
+  'harassment',
+  'wrong-category',
+  'other',
+] as const
+
+export type BoardReportReason = (typeof boardReportReasons)[number]
+
 export const boardInteractionStatuses = [
   'visible',
   'deleted_by_author',
@@ -316,6 +335,89 @@ function createEmptyBoardItemCounts(): BoardItemCounts {
   }
 }
 
+function normalizeBoardSearchQuery(value: string | undefined) {
+  return cleanValue(value).slice(0, 120)
+}
+
+function buildBoardItemSearchText(item: StoredBoardItem) {
+  return [
+    item.kindLabel,
+    item.title,
+    item.summary,
+    item.author.displayName,
+    ...item.attributes.flatMap(attribute => [attribute.label, attribute.value]),
+  ]
+    .join(' ')
+    .toLowerCase()
+}
+
+function matchesBoardSearchQuery(item: StoredBoardItem, query: string) {
+  if (!query)
+    return true
+
+  const searchText = buildBoardItemSearchText(item)
+  const normalizedQuery = query.toLowerCase()
+
+  return normalizedQuery
+    .split(/\s+/)
+    .filter(Boolean)
+    .every(term => searchText.includes(term))
+}
+
+function sortBoardItems(items: StoredBoardItem[], sort: BoardItemSortOrder) {
+  return [...items].sort((left, right) => {
+    if (sort === 'newest')
+      return Date.parse(right.createdAt) - Date.parse(left.createdAt)
+
+    if (sort === 'oldest')
+      return Date.parse(left.createdAt) - Date.parse(right.createdAt)
+
+    return Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt)
+  })
+}
+
+function formatBoardReportReason(reason: BoardReportReason) {
+  switch (reason) {
+    case 'spam':
+      return 'spam'
+    case 'scam':
+      return 'a scam'
+    case 'unsafe':
+      return 'unsafe behavior'
+    case 'harassment':
+      return 'harassment'
+    case 'wrong-category':
+      return 'the wrong category'
+    default:
+      return 'another issue'
+  }
+}
+
+function buildBoardReportDetail(reason: BoardReportReason, details: string, targetLabel: string) {
+  const issueText = formatBoardReportReason(reason)
+
+  if (details)
+    return `Reported ${targetLabel} for ${issueText}. Note: ${details}`
+
+  return `Reported ${targetLabel} for ${issueText}.`
+}
+
+function validateBoardReportPayload(input: { details: string, reason: string }) {
+  if (!boardReportReasons.includes(input.reason as BoardReportReason))
+    throw new BoardValidationError('Choose a valid report reason.')
+
+  if (input.details.length > 1000)
+    throw new BoardValidationError('Report details are too long.')
+
+  if (input.details)
+    validateHumanText(input.details, 'Report details', 1000)
+
+  return {
+    details: input.details,
+    reason: input.reason as BoardReportReason,
+  }
+}
+
 function assertPublicBoardItemAvailable(item: StoredBoardItem) {
   if (!isBoardItemVisibleToPublic(item))
     throw new BoardNotFoundError('That board item is no longer available on the public board.')
@@ -565,30 +667,37 @@ export async function listBoardItems(options?: {
   kind?: SubmissionKind | 'all'
   page?: number
   pageSize?: number
+  query?: string
+  sort?: BoardItemSortOrder
 }): Promise<BoardItemListResult> {
   const kindFilter = options?.kind && options.kind !== 'all' ? options.kind : 'all'
   const requestedPageSize = options?.pageSize ?? 12
   const pageSize = Math.min(Math.max(Math.trunc(requestedPageSize) || 12, 1), 50)
   const requestedPage = Math.max(Math.trunc(options?.page || 1), 1)
+  const searchQuery = normalizeBoardSearchQuery(options?.query)
+  const sort = options?.sort && boardItemSortOrders.includes(options.sort)
+    ? options.sort
+    : 'recent-activity'
   const allVisibleItems = (await listStoredBoardItems())
     .filter(isBoardItemVisibleToPublic)
-    .sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt))
+  const searchedItems = allVisibleItems.filter(item => matchesBoardSearchQuery(item, searchQuery))
 
-  const counts = allVisibleItems.reduce<BoardItemCounts>((summary, item) => {
+  const counts = searchedItems.reduce<BoardItemCounts>((summary, item) => {
     summary.all += 1
     summary[item.kind] += 1
     return summary
   }, createEmptyBoardItemCounts())
 
   const filteredItems = kindFilter === 'all'
-    ? allVisibleItems
-    : allVisibleItems.filter(item => item.kind === kindFilter)
+    ? searchedItems
+    : searchedItems.filter(item => item.kind === kindFilter)
+  const sortedItems = sortBoardItems(filteredItems, sort)
 
-  const totalItems = filteredItems.length
+  const totalItems = sortedItems.length
   const totalPages = totalItems > 0 ? Math.ceil(totalItems / pageSize) : 1
   const page = Math.min(requestedPage, totalPages)
   const startIndex = (page - 1) * pageSize
-  const pagedItems = filteredItems.slice(startIndex, startIndex + pageSize)
+  const pagedItems = sortedItems.slice(startIndex, startIndex + pageSize)
 
   const publicItems = await Promise.all(
     pagedItems.map(async (item) => {
@@ -869,6 +978,77 @@ export async function revealBoardInteractionContact(itemId: string, interactionI
     throw new BoardNotFoundError('No contact method is available for that response.')
 
   return interaction.contact
+}
+
+export async function createBoardItemReport(input: {
+  details: string
+  itemId: string
+  reason: string
+  viewer: ViewerAccount | null
+}) {
+  const item = await getStoredBoardItem(input.itemId)
+  assertPublicBoardItemAvailable(item)
+
+  const report = validateBoardReportPayload({
+    details: cleanValue(input.details),
+    reason: cleanValue(input.reason),
+  })
+
+  const entry = await recordBoardActivity({
+    action: 'board_item_reported',
+    actor: input.viewer
+      ? {
+          kind: input.viewer.isAdmin ? 'admin' : 'account',
+          label: input.viewer.displayName,
+        }
+      : { kind: 'anonymous', label: 'Anonymous reporter' },
+    category: 'reports',
+    detail: buildBoardReportDetail(report.reason, report.details, 'this post'),
+    itemId: item.id,
+    kind: item.kind,
+    submissionId: item.sourceSubmission?.id,
+    title: item.title,
+    visibilityState: item.status,
+  })
+
+  return entry.id
+}
+
+export async function createBoardInteractionReport(input: {
+  details: string
+  interactionId: string
+  itemId: string
+  reason: string
+  viewer: ViewerAccount | null
+}) {
+  const item = await getStoredBoardItem(input.itemId)
+  assertPublicBoardItemAvailable(item)
+  const interaction = await getStoredBoardInteraction(input.itemId, input.interactionId)
+  assertPublicBoardInteractionAvailable(interaction)
+  const report = validateBoardReportPayload({
+    details: cleanValue(input.details),
+    reason: cleanValue(input.reason),
+  })
+
+  const entry = await recordBoardActivity({
+    action: 'board_interaction_reported',
+    actor: input.viewer
+      ? {
+          kind: input.viewer.isAdmin ? 'admin' : 'account',
+          label: input.viewer.displayName,
+        }
+      : { kind: 'anonymous', label: 'Anonymous reporter' },
+    category: 'reports',
+    detail: buildBoardReportDetail(report.reason, report.details, `reply on "${item.title}"`),
+    interactionId: interaction.id,
+    itemId: item.id,
+    kind: item.kind,
+    submissionId: item.sourceSubmission?.id,
+    title: item.title,
+    visibilityState: interaction.status,
+  })
+
+  return entry.id
 }
 
 export async function claimBoardItemManagement(input: {

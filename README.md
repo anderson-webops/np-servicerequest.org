@@ -48,6 +48,7 @@ The previous PWA/service-worker runtime is intentionally disabled right now so c
 The live board and admin review filters now stay in the URL query string so refresh, back/forward navigation, and shared links preserve the current view. The optional account page also supports `?tab=login`.
 Each public board post also has a dedicated static-safe detail page at `/post?id=<boardItemId>`, so individual requests can be shared even under static hosting.
 New posts and replies now collect structured contact details instead of one free-text field, so contributors can explicitly choose email or phone and optionally add a short contact note.
+The homepage board now supports keyword search plus server-backed sorting, the dedicated submission pages save drafts in local browser storage, and the public post page includes report actions for posts and replies.
 
 Set `NUXT_PUBLIC_API_BASE_URL` when the front-end should target a non-default API host. This value should be the full API base, for example `https://np-servicerequest.org/api`.
 
@@ -67,8 +68,10 @@ The API lives in `back-end` and exposes:
 - `POST /api/board/items/:itemId/claim-management`
 - `POST /api/board/items/:itemId/interactions`
 - `POST /api/board/items/:itemId/contact`
+- `POST /api/board/items/:itemId/report`
 - `POST /api/board/items/:itemId/resolution`
 - `POST /api/board/items/:itemId/interactions/:interactionId/contact`
+- `POST /api/board/items/:itemId/interactions/:interactionId/report`
 - `DELETE /api/board/items/:itemId`
 - `DELETE /api/board/items/:itemId/interactions/:interactionId`
 - `POST /api/board/account/register`
@@ -79,8 +82,8 @@ The API lives in `back-end` and exposes:
 
 Listing endpoints now support server-side filtering and pagination:
 
-- `GET /api/board/items?kind=all|service-request|item-request|item-lending&page=1&pageSize=12`
-- `GET /api/admin/submissions?review=all|pending|approved|needs-follow-up|rejected&kind=all|service-request|item-request|item-lending&submissionsPage=1&submissionsPageSize=20&activityCategory=all|posts|replies|moderation|deletions&activityPage=1&activityPageSize=40`
+- `GET /api/board/items?kind=all|service-request|item-request|item-lending&query=ladder&sort=recent-activity|newest|oldest&page=1&pageSize=12`
+- `GET /api/admin/submissions?review=all|pending|approved|needs-follow-up|rejected&kind=all|service-request|item-request|item-lending&submissionsPage=1&submissionsPageSize=20&activityCategory=all|posts|replies|moderation|deletions|reports&activityPage=1&activityPageSize=40`
 - `GET /api/service-directory/search?provider=idealist&query=food%20pantry&lat=33.749&lng=-84.388&radiusMiles=40&page=1&pageSize=12`
 
 Default port: `3006`
@@ -137,7 +140,7 @@ Resolved posts remain shareable and readable, but new public replies are blocked
 
 The dedicated admin review UI at `/admin` does not use the normal board account session flow.
 It sends an admin key in the `x-admin-key` header to the review API and stores that key only in browser `sessionStorage`.
-Rejected submissions are now soft-hidden from the public board instead of being destructively removed, and the admin UI exposes an activity log for posts, replies, moderation actions, and deletions so review history stays auditable.
+Rejected submissions are now soft-hidden from the public board instead of being destructively removed, and the admin UI exposes an activity log for posts, replies, reports, moderation actions, and deletions so review history stays auditable.
 
 The back-end accepts the admin key from the first configured value found in:
 

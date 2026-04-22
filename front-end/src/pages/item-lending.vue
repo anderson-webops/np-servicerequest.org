@@ -40,6 +40,7 @@ watch(
 <template>
   <BoardSubmissionPage
     description="Use this page to offer an item that someone else can borrow."
+    draft-key="item-lending"
     eyebrow="Volunteer an item to lend"
     :examples="[
       'Say what the item is and what condition it is in.',

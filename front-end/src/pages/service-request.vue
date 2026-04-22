@@ -40,6 +40,7 @@ watch(
 <template>
   <BoardSubmissionPage
     description="Use this page for hands-on help such as cleanups, repairs, setup, moving help, or accessibility work."
+    draft-key="service-request"
     eyebrow="Request a service project"
     :examples="[
       'Give a short title to the project.',

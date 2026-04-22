@@ -21,11 +21,14 @@ import {
 } from './admin.js'
 import {
   BoardAuthorizationError,
+  boardItemSortOrders,
   BoardNotFoundError,
   BoardValidationError,
   claimBoardItemManagement,
   createBoardInteraction,
+  createBoardInteractionReport,
   createBoardItemFromSubmission,
+  createBoardItemReport,
   deleteBoardInteraction,
   deleteBoardItem,
   getPublicBoardItem,
@@ -294,12 +297,17 @@ export function createApp() {
 
   app.get('/api/board/items', async (request, response) => {
     const kindFilter = getSingleQueryValue(request.query.kind)
+    const sort = getSingleQueryValue(request.query.sort)
 
     response.json({
       ...await listBoardItems({
         kind: isSubmissionKind(kindFilter) ? kindFilter : 'all',
         page: parsePositiveInt(request.query.page, 1, 999),
         pageSize: parsePositiveInt(request.query.pageSize, 12, 50),
+        query: getSingleQueryValue(request.query.query),
+        sort: boardItemSortOrders.includes(sort as typeof boardItemSortOrders[number])
+          ? sort as typeof boardItemSortOrders[number]
+          : 'recent-activity',
       }),
     })
   })
@@ -531,6 +539,37 @@ export function createApp() {
     }
   })
 
+  app.post('/api/board/items/:itemId/report', async (request, response) => {
+    try {
+      consumeRateLimit(`report:item:${getRequestIp(request)}`, {
+        limit: 8,
+        windowMs: 1000 * 60 * 60,
+      })
+      validateAntiBotPayload(request.body)
+
+      response.status(201).json({
+        antiBot: createAntiBotChallenge(),
+        ok: true,
+        reportId: await createBoardItemReport({
+          details: typeof request.body.details === 'string' ? request.body.details : '',
+          itemId: request.params.itemId,
+          reason: typeof request.body.reason === 'string' ? request.body.reason : '',
+          viewer: await getViewerFromCookie(request.get('cookie')),
+        }),
+      })
+    }
+    catch (error) {
+      if (handleApiError(response, error))
+        return
+
+      console.error('Failed to report board item:', error)
+      response.status(500).json({
+        antiBot: createAntiBotChallenge(),
+        message: 'Unable to save that report right now.',
+      })
+    }
+  })
+
   app.post('/api/board/items/:itemId/resolution', async (request, response) => {
     try {
       consumeRateLimit(`resolution:item:${request.params.itemId}:${getRequestIp(request)}`, {
@@ -616,6 +655,38 @@ export function createApp() {
       response.status(500).json({
         antiBot: createAntiBotChallenge(),
         message: 'Unable to reveal that contact right now.',
+      })
+    }
+  })
+
+  app.post('/api/board/items/:itemId/interactions/:interactionId/report', async (request, response) => {
+    try {
+      consumeRateLimit(`report:interaction:${getRequestIp(request)}`, {
+        limit: 8,
+        windowMs: 1000 * 60 * 60,
+      })
+      validateAntiBotPayload(request.body)
+
+      response.status(201).json({
+        antiBot: createAntiBotChallenge(),
+        ok: true,
+        reportId: await createBoardInteractionReport({
+          details: typeof request.body.details === 'string' ? request.body.details : '',
+          interactionId: request.params.interactionId,
+          itemId: request.params.itemId,
+          reason: typeof request.body.reason === 'string' ? request.body.reason : '',
+          viewer: await getViewerFromCookie(request.get('cookie')),
+        }),
+      })
+    }
+    catch (error) {
+      if (handleApiError(response, error))
+        return
+
+      console.error('Failed to report board interaction:', error)
+      response.status(500).json({
+        antiBot: createAntiBotChallenge(),
+        message: 'Unable to save that report right now.',
       })
     }
   })

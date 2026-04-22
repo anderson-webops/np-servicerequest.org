@@ -94,6 +94,7 @@ export interface AdminActivityCounts {
   deletions: number
   moderation: number
   posts: number
+  reports: number
   replies: number
   total: number
 }
@@ -212,6 +213,7 @@ function createEmptyActivityCounts(): AdminActivityCounts {
     deletions: 0,
     moderation: 0,
     posts: 0,
+    reports: 0,
     replies: 0,
     total: 0,
   }

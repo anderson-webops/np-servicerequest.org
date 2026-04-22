@@ -46,6 +46,7 @@ const emptyActivityCounts: AdminActivityCounts = {
   deletions: 0,
   moderation: 0,
   posts: 0,
+  reports: 0,
   replies: 0,
   total: 0,
 }
@@ -164,6 +165,7 @@ const activityCategoryLabels: Record<Exclude<ActivityFilter, 'all'>, string> = {
   replies: 'Replies',
   moderation: 'Moderation',
   deletions: 'Deletions',
+  reports: 'Reports',
 }
 
 const filteredActivityEntries = computed(() => activityEntries.value)
@@ -341,6 +343,12 @@ function formatActivityAction(action: string) {
 
   if (action === 'board_interaction_deleted')
     return 'Reply deleted'
+
+  if (action === 'board_item_reported')
+    return 'Post reported'
+
+  if (action === 'board_interaction_reported')
+    return 'Reply reported'
 
   return action.replaceAll('_', ' ')
 }
@@ -1068,7 +1076,7 @@ watch(
           Activity log
         </p>
         <h2>
-          Track posts, replies, moderation actions, and deletions in one place.
+          Track posts, replies, reports, moderation actions, and deletions.
         </h2>
         <p class="section-copy">
           This log keeps the internal moderation trail even when a post is

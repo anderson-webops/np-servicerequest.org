@@ -10,12 +10,14 @@ import type {
   BoardItem,
   BoardItemDetailResponse,
   BoardItemResolutionResponse,
+  BoardReportReason,
+  BoardReportResponse,
   ViewerAccount,
 } from '~/utils/board'
 import type { BoardFormErrorState, BoardFormStatus, BoardReplyDraft } from '~/utils/boardUi'
 
 import { isAntiBotChallenge, isAntiBotChallengeExpired, markAntiBotChallengeObserved, waitForAntiBotChallengeMinimumAge } from '~/utils/antiBot'
-import { forgetBoardDeleteToken, getBoardEndpoint, getStoredBoardDeleteToken, rememberBoardDeleteToken } from '~/utils/board'
+import { boardReportReasonOptions, forgetBoardDeleteToken, getBoardEndpoint, getStoredBoardDeleteToken, rememberBoardDeleteToken } from '~/utils/board'
 import { formatBoardDate, getBoardApiErrorState, getContactActionLabel, getInteractionDeleteKey, getReplyActionLabel, getRevealKey } from '~/utils/boardUi'
 import {
   boardContactMethodOptions,
@@ -67,6 +69,12 @@ const revealItemContact = ref('')
 const revealItemContactVisible = ref(false)
 const revealItemError = ref<BoardFormErrorState | null>(null)
 const revealItemPending = ref(false)
+const itemReportOpen = ref(false)
+const itemReportReason = ref<BoardReportReason>('spam')
+const itemReportDetails = ref('')
+const itemReportError = ref<BoardFormErrorState | null>(null)
+const itemReportNotice = ref('')
+const itemReportPending = ref(false)
 
 const revealInteractionContacts = reactive<Record<string, string>>({})
 const revealInteractionContactVisibility = reactive<Record<string, boolean>>({})
@@ -74,6 +82,12 @@ const revealErrors = reactive<Record<string, BoardFormErrorState | null>>({})
 const revealPending = reactive<Record<string, boolean>>({})
 const deleteInteractionErrors = reactive<Record<string, BoardFormErrorState | null>>({})
 const deleteInteractionPending = reactive<Record<string, boolean>>({})
+const reportInteractionOpen = reactive<Record<string, boolean>>({})
+const reportInteractionReason = reactive<Record<string, BoardReportReason>>({})
+const reportInteractionDetails = reactive<Record<string, string>>({})
+const reportInteractionErrors = reactive<Record<string, BoardFormErrorState | null>>({})
+const reportInteractionNotices = reactive<Record<string, string>>({})
+const reportInteractionPending = reactive<Record<string, boolean>>({})
 
 const deleteError = ref<BoardFormErrorState | null>(null)
 const deletePending = ref(false)
@@ -210,6 +224,26 @@ function ensureRevealState(key: string) {
     revealErrors[key] = null
 }
 
+function ensureInteractionReportState(interactionId: string) {
+  if (!(interactionId in reportInteractionOpen))
+    reportInteractionOpen[interactionId] = false
+
+  if (!(interactionId in reportInteractionReason))
+    reportInteractionReason[interactionId] = 'spam'
+
+  if (!(interactionId in reportInteractionDetails))
+    reportInteractionDetails[interactionId] = ''
+
+  if (!(interactionId in reportInteractionPending))
+    reportInteractionPending[interactionId] = false
+
+  if (!(interactionId in reportInteractionErrors))
+    reportInteractionErrors[interactionId] = null
+
+  if (!(interactionId in reportInteractionNotices))
+    reportInteractionNotices[interactionId] = ''
+}
+
 function canDeleteItem(currentItem: BoardItem) {
   if (viewer.value?.isAdmin)
     return true
@@ -291,6 +325,19 @@ function getResolutionActionLabel(currentItem: BoardItem) {
 function getResolvedNote(currentItem: BoardItem) {
   const resolvedAt = currentItem.resolutionChangedAt || currentItem.lastActivityAt
   return `This post was marked resolved ${formatBoardDate(resolvedAt)}. It stays visible for reference, and new public replies are closed until it is reopened.`
+}
+
+function toggleItemReportForm() {
+  itemReportOpen.value = !itemReportOpen.value
+  itemReportError.value = null
+  itemReportNotice.value = ''
+}
+
+function toggleInteractionReportForm(interactionId: string) {
+  ensureInteractionReportState(interactionId)
+  reportInteractionOpen[interactionId] = !reportInteractionOpen[interactionId]
+  reportInteractionErrors[interactionId] = null
+  reportInteractionNotices[interactionId] = ''
 }
 
 async function loadBootstrap() {
@@ -501,6 +548,67 @@ async function revealInteractionContact(interactionId: string) {
   }
 }
 
+async function submitItemReport() {
+  if (!item.value)
+    return
+
+  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `items/${item.value.id}/report`)
+  itemReportPending.value = true
+  itemReportError.value = null
+  itemReportNotice.value = ''
+
+  try {
+    const response = await protectedPost<BoardReportResponse>(endpoint, {
+      'bot-field': '',
+      'details': itemReportDetails.value,
+      'reason': itemReportReason.value,
+    })
+
+    applyServerContext(response)
+    itemReportOpen.value = false
+    itemReportDetails.value = ''
+    itemReportReason.value = 'spam'
+    itemReportNotice.value = 'Report saved for admin review.'
+  }
+  catch (error) {
+    itemReportError.value = getBoardApiErrorState(error, endpoint, 'We could not save that report right now.', applyServerContext)
+  }
+  finally {
+    itemReportPending.value = false
+  }
+}
+
+async function submitInteractionReport(interactionId: string) {
+  if (!item.value)
+    return
+
+  ensureInteractionReportState(interactionId)
+  const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `items/${item.value.id}/interactions/${interactionId}/report`)
+  reportInteractionPending[interactionId] = true
+  reportInteractionErrors[interactionId] = null
+  reportInteractionNotices[interactionId] = ''
+
+  try {
+    const response = await protectedPost<BoardReportResponse>(endpoint, {
+      'bot-field': '',
+      'details': reportInteractionDetails[interactionId] || '',
+      'reason': reportInteractionReason[interactionId] || 'spam',
+    })
+
+    applyServerContext(response)
+    reportInteractionOpen[interactionId] = false
+    reportInteractionDetails[interactionId] = ''
+    reportInteractionReason[interactionId] = 'spam'
+    reportInteractionNotices[interactionId] = 'Reply report saved for admin review.'
+  }
+  catch (error) {
+    reportInteractionErrors[interactionId] = getBoardApiErrorState(error, endpoint, 'We could not save that report right now.', applyServerContext)
+  }
+  finally {
+    reportInteractionPending[interactionId] = false
+  }
+}
+
 async function toggleBoardResolution() {
   if (!item.value)
     return
@@ -638,11 +746,24 @@ watch(routeItemId, (nextItemId, previousItemId) => {
   revealItemContact.value = ''
   revealItemContactVisible.value = false
   revealItemError.value = null
+  itemReportOpen.value = false
+  itemReportReason.value = 'spam'
+  itemReportDetails.value = ''
+  itemReportError.value = null
+  itemReportNotice.value = ''
   deleteError.value = null
   resolveError.value = null
   openReply.value = false
   confirmDelete.value = false
   confirmDeleteInteractionKey.value = null
+  Object.keys(reportInteractionOpen).forEach((key) => {
+    reportInteractionOpen[key] = false
+    reportInteractionReason[key] = 'spam'
+    reportInteractionDetails[key] = ''
+    reportInteractionErrors[key] = null
+    reportInteractionNotices[key] = ''
+    reportInteractionPending[key] = false
+  })
   resetReplyDraft()
   resetReplyStatus()
 
@@ -776,6 +897,53 @@ watch(routeManagementToken, (nextToken, previousToken) => {
           </button>
         </div>
 
+        <div class="board-card__report">
+          <button
+            class="inline-action"
+            type="button"
+            @click="toggleItemReportForm"
+          >
+            {{ itemReportOpen ? "Hide report form" : "Report post" }}
+          </button>
+
+          <form
+            v-if="itemReportOpen"
+            class="report-form"
+            :aria-busy="itemReportPending"
+            @submit.prevent="submitItemReport"
+          >
+            <label class="field">
+              <span>Reason</span>
+              <select v-model="itemReportReason">
+                <option
+                  v-for="option in boardReportReasonOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
+              </select>
+            </label>
+
+            <label class="field field--wide">
+              <span>Details (optional)</span>
+              <textarea
+                v-model="itemReportDetails"
+                placeholder="Add a short note if it would help an admin understand the problem."
+                rows="3"
+              />
+            </label>
+
+            <button
+              class="submit-button submit-button--slim"
+              :disabled="itemReportPending"
+              type="submit"
+            >
+              {{ itemReportPending ? "Sending report..." : "Send report" }}
+            </button>
+          </form>
+        </div>
+
         <p class="board-card__contact-note">
           Contact details are hidden until you deliberately reveal them to reduce scraping.
         </p>
@@ -794,6 +962,12 @@ watch(routeManagementToken, (nextToken, previousToken) => {
         </p>
         <p v-if="revealItemContact && revealItemContactVisible" class="inline-note inline-note--success" role="status">
           Contact: {{ revealItemContact }}
+        </p>
+        <p v-if="itemReportError" class="inline-note inline-note--error" role="alert">
+          {{ itemReportError.message }} {{ itemReportError.detail }}
+        </p>
+        <p v-if="itemReportNotice" class="inline-note inline-note--success" role="status">
+          {{ itemReportNotice }}
         </p>
 
         <div class="board-card__thread">
@@ -828,11 +1002,68 @@ watch(routeManagementToken, (nextToken, previousToken) => {
               >
                 {{ getDeleteInteractionActionLabel(interaction.id) }}
               </button>
+              <button
+                class="thread-item__contact"
+                type="button"
+                @click="toggleInteractionReportForm(interaction.id)"
+              >
+                {{
+                  reportInteractionOpen[interaction.id]
+                    ? "Hide report form"
+                    : "Report reply"
+                }}
+              </button>
+              <form
+                v-if="reportInteractionOpen[interaction.id]"
+                class="report-form report-form--thread"
+                :aria-busy="reportInteractionPending[interaction.id]"
+                @submit.prevent="submitInteractionReport(interaction.id)"
+              >
+                <label class="field">
+                  <span>Reason</span>
+                  <select v-model="reportInteractionReason[interaction.id]">
+                    <option
+                      v-for="option in boardReportReasonOptions"
+                      :key="option.value"
+                      :value="option.value"
+                    >
+                      {{ option.label }}
+                    </option>
+                  </select>
+                </label>
+
+                <label class="field field--wide">
+                  <span>Details (optional)</span>
+                  <textarea
+                    v-model="reportInteractionDetails[interaction.id]"
+                    placeholder="Add a short note if it would help an admin understand the problem."
+                    rows="3"
+                  />
+                </label>
+
+                <button
+                  class="submit-button submit-button--slim"
+                  :disabled="reportInteractionPending[interaction.id]"
+                  type="submit"
+                >
+                  {{
+                    reportInteractionPending[interaction.id]
+                      ? "Sending report..."
+                      : "Send report"
+                  }}
+                </button>
+              </form>
               <p v-if="revealErrors[getRevealKey(item.id, interaction.id)]" class="inline-note inline-note--error" role="alert">
                 {{ revealErrors[getRevealKey(item.id, interaction.id)]?.message }} {{ revealErrors[getRevealKey(item.id, interaction.id)]?.detail }}
               </p>
               <p v-if="deleteInteractionErrors[getInteractionDeleteKey(item.id, interaction.id)]" class="inline-note inline-note--error" role="alert">
                 {{ deleteInteractionErrors[getInteractionDeleteKey(item.id, interaction.id)]?.message }} {{ deleteInteractionErrors[getInteractionDeleteKey(item.id, interaction.id)]?.detail }}
+              </p>
+              <p v-if="reportInteractionErrors[interaction.id]" class="inline-note inline-note--error" role="alert">
+                {{ reportInteractionErrors[interaction.id]?.message }} {{ reportInteractionErrors[interaction.id]?.detail }}
+              </p>
+              <p v-if="reportInteractionNotices[interaction.id]" class="inline-note inline-note--success" role="status">
+                {{ reportInteractionNotices[interaction.id] }}
               </p>
               <p v-if="isInteractionContactVisible(interaction.id)" class="inline-note inline-note--success" role="status">
                 Contact: {{ revealInteractionContacts[getRevealKey(item.id, interaction.id)] }}
@@ -1119,6 +1350,11 @@ watch(routeManagementToken, (nextToken, previousToken) => {
   gap: 0.75rem;
 }
 
+.board-card__report {
+  display: grid;
+  gap: 0.85rem;
+}
+
 .board-card__contact-note,
 .board-card__resolved-note {
   margin: 0;
@@ -1208,6 +1444,23 @@ watch(routeManagementToken, (nextToken, previousToken) => {
   color: var(--site-error-text);
 }
 
+.inline-action {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--site-link);
+  font: inherit;
+  font-weight: 700;
+  justify-self: flex-start;
+  cursor: pointer;
+}
+
+.inline-action:hover,
+.inline-action:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
 .board-card__thread {
   display: grid;
   gap: 0.8rem;
@@ -1272,6 +1525,19 @@ watch(routeManagementToken, (nextToken, previousToken) => {
   padding: 1rem;
   border-radius: 1.2rem;
   background: var(--site-elevated);
+}
+
+.report-form {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+  border-radius: 1.2rem;
+  background: var(--site-elevated);
+  border: 1px solid var(--site-border);
+}
+
+.report-form--thread {
+  margin-top: 0.35rem;
 }
 
 .field-grid {

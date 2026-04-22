@@ -12,7 +12,7 @@ export type AdminReviewStatus = (typeof adminReviewStatuses)[number]
 
 export type AdminBoardPublicState = 'visible' | 'hidden_by_admin' | 'deleted_by_owner' | 'deleted_by_admin' | 'not_created'
 
-export type AdminActivityCategory = 'posts' | 'replies' | 'moderation' | 'deletions'
+export type AdminActivityCategory = 'posts' | 'replies' | 'moderation' | 'deletions' | 'reports'
 
 export type AdminActivityActorKind = 'system' | 'admin' | 'account' | 'anonymous' | 'delete_token'
 
@@ -85,6 +85,7 @@ export interface AdminActivityCounts {
   deletions: number
   moderation: number
   posts: number
+  reports: number
   replies: number
   total: number
 }

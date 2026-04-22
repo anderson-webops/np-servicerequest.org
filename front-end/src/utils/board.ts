@@ -35,6 +35,23 @@ export interface BoardInteraction {
 }
 
 export type BoardResolutionStatus = 'open' | 'resolved'
+export type BoardSortOrder = 'recent-activity' | 'newest' | 'oldest'
+export type BoardReportReason = 'spam' | 'scam' | 'unsafe' | 'harassment' | 'wrong-category' | 'other'
+
+export const boardSortOptions: Array<{ label: string, value: BoardSortOrder }> = [
+  { label: 'Recently active', value: 'recent-activity' },
+  { label: 'Newest first', value: 'newest' },
+  { label: 'Oldest first', value: 'oldest' },
+]
+
+export const boardReportReasonOptions: Array<{ label: string, value: BoardReportReason }> = [
+  { label: 'Spam', value: 'spam' },
+  { label: 'Scam', value: 'scam' },
+  { label: 'Unsafe behavior', value: 'unsafe' },
+  { label: 'Harassment', value: 'harassment' },
+  { label: 'Wrong category', value: 'wrong-category' },
+  { label: 'Other', value: 'other' },
+]
 
 export interface BoardItem {
   attributes: BoardAttribute[]
@@ -122,6 +139,12 @@ export interface BoardItemResolutionResponse {
   antiBot: AntiBotChallenge
   item: BoardItem
   ok: boolean
+}
+
+export interface BoardReportResponse {
+  antiBot: AntiBotChallenge
+  ok: boolean
+  reportId: string
 }
 
 export interface SubmissionResponse {

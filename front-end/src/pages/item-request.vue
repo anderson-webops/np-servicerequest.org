@@ -40,6 +40,7 @@ watch(
 <template>
   <BoardSubmissionPage
     description="Use this page when you want to borrow a practical item such as a tool, book, kitchen item, or ladder."
+    draft-key="item-request"
     eyebrow="Request an item"
     :examples="[
       'Name the exact item if you can.',

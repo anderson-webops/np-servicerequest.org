@@ -270,6 +270,24 @@ test('board and admin listings support server-side pagination and filters', asyn
   assert.equal((secondBoardPage.items as Array<{ id: string }>).length, 1)
   assert.equal((secondBoardPage.items as Array<{ id: string }>)[0]?.id, createdBoardItemIds[0])
 
+  const { body: searchedBoard, response: searchedBoardResponse } = await fetchJson('/api/board/items?kind=service-request&query=gamma&sort=oldest', {
+    method: 'GET',
+  })
+
+  assert.equal(searchedBoardResponse.status, 200)
+  assert.equal((searchedBoard.pagination as { totalItems: number }).totalItems, 1)
+  assert.equal((searchedBoard.items as Array<{ id: string }>).length, 1)
+  assert.equal((searchedBoard.items as Array<{ id: string }>)[0]?.id, createdBoardItemIds[2])
+  assert.equal((searchedBoard.counts as Record<string, number>)['service-request'], 1)
+
+  const { body: oldestBoard, response: oldestBoardResponse } = await fetchJson('/api/board/items?kind=service-request&sort=oldest&page=1&pageSize=2', {
+    method: 'GET',
+  })
+
+  assert.equal(oldestBoardResponse.status, 200)
+  assert.equal((oldestBoard.items as Array<{ id: string }>)[0]?.id, createdBoardItemIds[0])
+  assert.equal((oldestBoard.items as Array<{ id: string }>)[1]?.id, createdBoardItemIds[1])
+
   const { body: adminListing, response: adminListingResponse } = await fetchJson('/api/admin/submissions?review=pending&kind=service-request&submissionsPage=1&submissionsPageSize=2&activityCategory=posts&activityPage=1&activityPageSize=2', {
     headers: {
       'x-admin-key': adminKey,
@@ -287,6 +305,95 @@ test('board and admin listings support server-side pagination and filters', asyn
   assert.ok((adminListing.activity as Array<{ category: string }>).length <= 2)
   assert.ok((adminListing.activity as Array<{ category: string }>).every(entry => entry.category === 'posts'))
   assert.ok(((adminListing.activityCounts as Record<string, number>).posts || 0) >= 3)
+})
+
+test('public reports are stored for admins while leaving the reported post visible until moderation decides otherwise', async () => {
+  const antiBot = await getAgedAntiBotChallenge()
+
+  const { body: createdSubmission, response: createResponse } = await fetchJson('/api/submissions/item-request', {
+    body: JSON.stringify({
+      challengeIssuedAt: String(antiBot.issuedAt),
+      challengeToken: antiBot.token,
+      contact_method: 'email',
+      contact_value: 'report-target@example.com',
+      details: 'Need a wheelbarrow for two days.',
+      duration: 'Two days',
+      item_needed: 'Wheelbarrow',
+      name: 'Report Target',
+      neighborhood: 'East side',
+      pickup_plan: 'Can pick it up',
+    }),
+    method: 'POST',
+  })
+
+  assert.equal(createResponse.status, 201)
+  const createdBoardItem = createdSubmission.boardItem as { id: string, title: string }
+
+  const { body: replyResponse, response: replyCreateResponse } = await fetchJson(`/api/board/items/${createdBoardItem.id}/interactions`, {
+    body: JSON.stringify({
+      challengeIssuedAt: String(antiBot.issuedAt),
+      challengeToken: antiBot.token,
+      contact_method: 'email',
+      contact_value: 'reply@example.com',
+      message: 'I might be able to help next week.',
+      name: 'Questionable Reply',
+    }),
+    method: 'POST',
+  })
+
+  assert.equal(replyCreateResponse.status, 201)
+  const createdReply = replyResponse.interaction as { id: string }
+
+  const { body: itemReport, response: itemReportResponse } = await fetchJson(`/api/board/items/${createdBoardItem.id}/report`, {
+    body: JSON.stringify({
+      challengeIssuedAt: String(antiBot.issuedAt),
+      challengeToken: antiBot.token,
+      details: 'This looks like spam.',
+      reason: 'spam',
+    }),
+    method: 'POST',
+  })
+
+  assert.equal(itemReportResponse.status, 201)
+  assert.equal(typeof itemReport.reportId, 'string')
+
+  const { body: replyReport, response: replyReportResponse } = await fetchJson(`/api/board/items/${createdBoardItem.id}/interactions/${createdReply.id}/report`, {
+    body: JSON.stringify({
+      challengeIssuedAt: String(antiBot.issuedAt),
+      challengeToken: antiBot.token,
+      details: 'This reply reads unsafe.',
+      reason: 'unsafe',
+    }),
+    method: 'POST',
+  })
+
+  assert.equal(replyReportResponse.status, 201)
+  assert.equal(typeof replyReport.reportId, 'string')
+
+  const { body: boardAfterReports, response: boardAfterReportsResponse } = await fetchJson(`/api/board/items?query=${encodeURIComponent(createdBoardItem.title)}`, {
+    method: 'GET',
+  })
+
+  assert.equal(boardAfterReportsResponse.status, 200)
+  assert.ok((boardAfterReports.items as Array<{ id: string }>).some(item => item.id === createdBoardItem.id))
+
+  const { body: adminListing, response: adminListingResponse } = await fetchJson('/api/admin/submissions?activityCategory=reports&activityPage=1&activityPageSize=10', {
+    headers: {
+      'x-admin-key': adminKey,
+    },
+    method: 'GET',
+  })
+
+  assert.equal(adminListingResponse.status, 200)
+  assert.ok(((adminListing.activityCounts as Record<string, number>).reports || 0) >= 2)
+  assert.ok((adminListing.activity as Array<{ action: string, itemId?: string, interactionId?: string }>).some(entry =>
+    entry.action === 'board_item_reported'
+    && entry.itemId === createdBoardItem.id,
+  ))
+  assert.ok((adminListing.activity as Array<{ action: string, interactionId?: string }>).some(entry =>
+    entry.action === 'board_interaction_reported'
+    && entry.interactionId === createdReply.id,
+  ))
 })
 
 test('public item detail pages can load a visible post and owners can toggle resolved state without deleting it', async () => {

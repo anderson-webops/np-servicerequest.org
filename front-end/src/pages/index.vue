@@ -8,6 +8,7 @@ import type {
   BoardItemCounts,
   BoardItemsPagination,
   BoardItemsResponse,
+  BoardSortOrder,
 } from '~/utils/board'
 import type { BoardFormErrorState } from '~/utils/boardUi'
 import type { SubmissionKind } from '~/utils/submissions'
@@ -17,7 +18,7 @@ import {
   markAntiBotChallengeObserved,
   waitForAntiBotChallengeMinimumAge,
 } from '~/utils/antiBot'
-import { getBoardEndpoint, rememberBoardDeleteToken } from '~/utils/board'
+import { boardSortOptions, getBoardEndpoint, rememberBoardDeleteToken } from '~/utils/board'
 import {
   formatBoardDate,
   getBoardApiErrorState,
@@ -51,6 +52,9 @@ const boardPending = ref(false)
 const boardError = ref<BoardFormErrorState | null>(null)
 const securityError = ref<BoardFormErrorState | null>(null)
 const boardFilter = ref<BoardFilter>('all')
+const boardSearch = ref('')
+const boardSearchDraft = ref('')
+const boardSort = ref<BoardSortOrder>('recent-activity')
 const boardCounts = ref<BoardItemCounts>({
   all: 0,
   [submissionKinds.service]: 0,
@@ -99,6 +103,10 @@ const activeBoardTotal = computed(() =>
     ? displayBoardCounts.value.all
     : displayBoardCounts.value[boardFilter.value],
 )
+const activeBoardSortLabel = computed(() =>
+  boardSortOptions.find(option => option.value === boardSort.value)?.label
+  || 'Recently active',
+)
 
 function applyServerContext(payload: unknown) {
   if (!payload || typeof payload !== 'object')
@@ -108,13 +116,6 @@ function applyServerContext(payload: unknown) {
 
   if (isAntiBotChallenge(record.antiBot))
     antiBotChallenge.value = markAntiBotChallengeObserved(record.antiBot)
-}
-
-function sortBoardItems(items: BoardItem[]) {
-  return [...items].sort(
-    (left, right) =>
-      Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt),
-  )
 }
 
 function getQueryValue(value: unknown) {
@@ -139,6 +140,16 @@ function parsePositivePage(value: string) {
     return 1
 
   return parsedValue
+}
+
+function normalizeBoardSearch(value: string) {
+  return value.trim().slice(0, 120)
+}
+
+function parseBoardSort(value: string): BoardSortOrder {
+  return boardSortOptions.some(option => option.value === value)
+    ? value as BoardSortOrder
+    : 'recent-activity'
 }
 
 function ensureRevealState(key: string) {
@@ -199,6 +210,11 @@ async function loadBoardItems() {
   endpoint.searchParams.set('kind', boardFilter.value)
   endpoint.searchParams.set('page', String(boardPagination.value.page))
   endpoint.searchParams.set('pageSize', String(boardPagination.value.pageSize))
+  endpoint.searchParams.set('sort', boardSort.value)
+
+  if (boardSearch.value)
+    endpoint.searchParams.set('query', boardSearch.value)
+
   boardPending.value = true
   boardError.value = null
 
@@ -209,7 +225,7 @@ async function loadBoardItems() {
 
     boardCounts.value = response.counts
     boardPagination.value = response.pagination
-    boardItems.value = sortBoardItems(response.items)
+    boardItems.value = response.items
   }
   catch (error) {
     boardError.value = getBoardApiErrorState(
@@ -357,10 +373,23 @@ function getResolvedNote(item: BoardItem) {
 function syncBoardStateFromRoute() {
   let changed = false
   const nextBoardFilter = parseBoardFilter(getQueryValue(route.query.filter))
+  const nextBoardSearch = normalizeBoardSearch(getQueryValue(route.query.q))
+  const nextBoardSort = parseBoardSort(getQueryValue(route.query.sort))
   const nextPage = parsePositivePage(getQueryValue(route.query.page))
 
   if (boardFilter.value !== nextBoardFilter) {
     boardFilter.value = nextBoardFilter
+    changed = true
+  }
+
+  if (boardSearch.value !== nextBoardSearch) {
+    boardSearch.value = nextBoardSearch
+    boardSearchDraft.value = nextBoardSearch
+    changed = true
+  }
+
+  if (boardSort.value !== nextBoardSort) {
+    boardSort.value = nextBoardSort
     changed = true
   }
 
@@ -378,9 +407,13 @@ function syncBoardStateFromRoute() {
 async function pushBoardRouteState(nextState?: {
   filter?: BoardFilter
   page?: number
+  query?: string
+  sort?: BoardSortOrder
 }) {
   const nextFilter = nextState?.filter ?? boardFilter.value
   const nextPage = Math.max(nextState?.page ?? boardPagination.value.page, 1)
+  const nextQuery = normalizeBoardSearch(nextState?.query ?? boardSearch.value)
+  const nextSort = nextState?.sort ?? boardSort.value
 
   await router.push({
     hash: route.hash,
@@ -389,6 +422,8 @@ async function pushBoardRouteState(nextState?: {
       ...route.query,
       filter: nextFilter === 'all' ? undefined : nextFilter,
       page: nextPage > 1 ? String(nextPage) : undefined,
+      q: nextQuery || undefined,
+      sort: nextSort === 'recent-activity' ? undefined : nextSort,
     },
   })
 }
@@ -417,6 +452,43 @@ function changeBoardPage(nextPage: number) {
   })
 }
 
+function submitBoardSearch() {
+  const nextQuery = normalizeBoardSearch(boardSearchDraft.value)
+
+  if (boardSearch.value === nextQuery && boardPagination.value.page === 1)
+    return
+
+  void pushBoardRouteState({
+    page: 1,
+    query: nextQuery,
+  })
+}
+
+function clearBoardSearch() {
+  if (!boardSearch.value && !boardSearchDraft.value)
+    return
+
+  boardSearchDraft.value = ''
+  void pushBoardRouteState({
+    page: 1,
+    query: '',
+  })
+}
+
+function setBoardSort(nextSort: BoardSortOrder) {
+  const currentRouteSort = parseBoardSort(getQueryValue(route.query.sort))
+
+  boardSort.value = nextSort
+
+  if (currentRouteSort === nextSort && boardPagination.value.page === 1)
+    return
+
+  void pushBoardRouteState({
+    page: 1,
+    sort: nextSort,
+  })
+}
+
 onMounted(() => {
   hasHydrated.value = true
   syncBoardStateFromRoute()
@@ -430,7 +502,12 @@ onMounted(() => {
 })
 
 watch(
-  () => [getQueryValue(route.query.filter), getQueryValue(route.query.page)],
+  () => [
+    getQueryValue(route.query.filter),
+    getQueryValue(route.query.page),
+    getQueryValue(route.query.q),
+    getQueryValue(route.query.sort),
+  ],
   () => {
     if (!hasHydrated.value)
       return
@@ -520,6 +597,49 @@ watch(
           </p>
         </div>
 
+        <div class="board-tools">
+          <form class="board-search" @submit.prevent="submitBoardSearch">
+            <label class="board-search__field">
+              <span class="sr-only">Search the live board</span>
+              <input
+                v-model="boardSearchDraft"
+                autocomplete="off"
+                name="board_search"
+                placeholder="Search titles, details, names, or neighborhoods"
+                type="search"
+              >
+            </label>
+            <button class="secondary-button secondary-button--dark" type="submit">
+              Search
+            </button>
+            <button
+              v-if="boardSearch || boardSearchDraft"
+              class="secondary-button"
+              type="button"
+              @click="clearBoardSearch"
+            >
+              Clear
+            </button>
+          </form>
+
+          <label class="board-sort">
+            <span>Sort</span>
+            <select
+              v-model="boardSort"
+              name="board_sort"
+              @change="setBoardSort(boardSort)"
+            >
+              <option
+                v-for="option in boardSortOptions"
+                :key="option.value"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </option>
+            </select>
+          </label>
+        </div>
+
         <div
           class="board-filter-strip"
           role="tablist"
@@ -570,6 +690,10 @@ watch(
               {{ activeBoardTotal }}
               {{ boardFilter === "all" ? "live posts" : "matching posts" }}
             </p>
+            <p v-if="boardSearch">
+              Search: "{{ boardSearch }}"
+            </p>
+            <p>Sorted by {{ activeBoardSortLabel.toLowerCase() }}.</p>
             <p>Open a post for replies and the full thread.</p>
             <p v-if="managementPending">
               Claiming management access...
@@ -597,7 +721,13 @@ watch(
           </div>
 
           <div v-else-if="!boardItems.length" class="board-empty">
-            <p>No posts match this filter yet.</p>
+            <p>
+              {{
+                boardSearch
+                  ? 'No posts match this search yet.'
+                  : 'No posts match this filter yet.'
+              }}
+            </p>
             <p>
               Start one from the dedicated
               <NuxtLink prefetch-on="interaction" to="/service-request">
@@ -969,6 +1099,64 @@ watch(
 .live-board__heading {
   display: grid;
   gap: 1rem;
+}
+
+.board-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.9rem;
+  align-items: end;
+}
+
+.board-search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.board-search__field,
+.board-sort {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.board-search__field {
+  flex: 1 1 20rem;
+}
+
+.board-sort {
+  min-width: 11rem;
+}
+
+.board-sort span {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--site-muted);
+}
+
+.board-search__field input,
+.board-sort select {
+  width: 100%;
+  border: 1px solid var(--site-border-strong);
+  border-radius: 1rem;
+  background: var(--site-input-bg);
+  color: var(--site-input-text);
+  padding: 0.92rem 1rem;
+  font: inherit;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
+}
+
+.board-search__field input:focus-visible,
+.board-sort select:focus-visible {
+  outline: none;
+  border-color: var(--site-focus);
+  box-shadow: 0 0 0 4px var(--site-focus-ring);
+  background: var(--site-elevated-strong);
 }
 
 .section-heading {
@@ -1465,6 +1653,7 @@ watch(
 }
 
 @media (max-width: 860px) {
+  .board-tools,
   .field-grid,
   .poster__lanes {
     grid-template-columns: 1fr;
@@ -1496,6 +1685,7 @@ watch(
   }
 
   .hero__actions,
+  .board-search,
   .board-card__actions {
     flex-direction: column;
     align-items: stretch;

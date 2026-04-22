@@ -9,6 +9,7 @@ export const boardActivityCategories = [
   'replies',
   'moderation',
   'deletions',
+  'reports',
 ] as const
 
 export type BoardActivityCategory = (typeof boardActivityCategories)[number]
