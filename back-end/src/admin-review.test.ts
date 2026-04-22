@@ -47,6 +47,9 @@ before(async () => {
   dataDirectory = await mkdtemp(join(tmpdir(), 'np-sr-admin-review-'))
   env.SUBMISSIONS_DATA_DIR = dataDirectory
   env.BOARD_ADMIN_KEY = adminKey
+  env.ENABLE_BOARD_EMAIL_NOTIFICATIONS = 'false'
+  env.ENABLE_BOARD_MANAGEMENT_EMAILS = 'false'
+  env.ENABLE_BOARD_REPLY_NOTIFICATION_EMAILS = 'false'
 
   const { createApp } = await import('./app.js')
   server = createServer(createApp())
@@ -73,6 +76,9 @@ before(async () => {
 after(async () => {
   delete env.SUBMISSIONS_DATA_DIR
   delete env.BOARD_ADMIN_KEY
+  delete env.ENABLE_BOARD_EMAIL_NOTIFICATIONS
+  delete env.ENABLE_BOARD_MANAGEMENT_EMAILS
+  delete env.ENABLE_BOARD_REPLY_NOTIFICATION_EMAILS
 
   if (server) {
     await new Promise<void>((resolve, reject) => {

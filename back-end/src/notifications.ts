@@ -8,6 +8,10 @@ function parseBooleanFlag(value: string | undefined) {
   return value === '1' || value === 'true' || value === 'yes' || value === 'on'
 }
 
+function isProductionEnvironment() {
+  return env.NODE_ENV === 'production'
+}
+
 function getEmailSettings() {
   return {
     from: env.BOARD_NOTIFICATION_EMAIL_FROM || env.SMTP_USER || 'no-reply@np-servicerequest.local',
@@ -49,7 +53,7 @@ async function deliverMessage(input: { subject: string, text: string, to: string
   }
 
   if (!settings.host || !settings.user || !settings.pass) {
-    if (!hasWarnedAboutEmailConfig) {
+    if (isProductionEnvironment() && !hasWarnedAboutEmailConfig) {
       console.warn('Board email delivery is enabled, but SMTP credentials are incomplete.')
       hasWarnedAboutEmailConfig = true
     }
