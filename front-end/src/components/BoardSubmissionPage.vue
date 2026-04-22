@@ -270,7 +270,7 @@ watch(
 <style scoped>
 .submission-page {
   display: grid;
-  gap: 1.5rem;
+  gap: var(--page-section-gap);
   padding-top: 0;
   padding-right: var(--page-inline-end);
   padding-bottom: 2.75rem;
@@ -279,9 +279,9 @@ watch(
 
 .submission-page__hero {
   display: grid;
-  gap: 0.9rem;
+  gap: var(--page-hero-gap);
   min-width: 0;
-  max-width: 56rem;
+  max-width: var(--page-hero-max);
   padding-block: var(--page-hero-space);
 }
 
@@ -317,9 +317,9 @@ watch(
 }
 
 .submission-page h1 {
-  font-size: clamp(2.35rem, 4.6vw, 4rem);
+  font-size: var(--page-hero-title-size);
   line-height: 0.92;
-  max-width: 15ch;
+  max-width: var(--page-hero-title-max);
   overflow-wrap: anywhere;
   text-wrap: balance;
 }
@@ -332,7 +332,7 @@ watch(
 }
 
 .submission-page__lede {
-  max-width: 42rem;
+  max-width: var(--page-hero-copy-max);
   margin: 0;
   font-size: 1.02rem;
 }
@@ -341,14 +341,14 @@ watch(
   display: grid;
   gap: 0.95rem;
   align-items: start;
-  max-width: 48rem;
+  max-width: 50rem;
 }
 
 .submission-page__tips,
 .submission-page__form {
   min-width: 0;
-  padding: 1.2rem 1.3rem;
-  border-radius: 1.35rem;
+  padding: var(--page-surface-padding);
+  border-radius: var(--page-surface-radius);
   background: var(--site-surface);
   border: 1px solid var(--site-border);
   box-shadow: var(--site-shadow);
@@ -357,6 +357,7 @@ watch(
 .submission-page__tips {
   display: grid;
   gap: 0.7rem;
+  background: color-mix(in srgb, var(--site-surface-soft) 82%, transparent);
 }
 
 .submission-page__examples {

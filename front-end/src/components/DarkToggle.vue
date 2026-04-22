@@ -131,14 +131,14 @@ onBeforeUnmount(() => {
   min-height: 2.9rem;
   padding: 0.7rem 1rem;
   border: 1px solid var(--site-border);
-  border-radius: 999px;
-  background: var(--site-elevated);
+  border-radius: 1rem;
+  background: transparent;
   color: var(--site-heading);
   font: inherit;
   font-size: 0.9rem;
   font-weight: 700;
-  box-shadow: 0 10px 24px rgba(21, 17, 13, 0.08);
-  backdrop-filter: blur(16px);
+  box-shadow: none;
+  backdrop-filter: blur(12px);
   cursor: pointer;
   transition:
     transform 180ms ease,
@@ -150,10 +150,8 @@ onBeforeUnmount(() => {
 
 .theme-toggle:hover,
 .theme-toggle:focus-visible {
-  transform: translateY(-1px);
   border-color: var(--site-accent-soft-strong);
-  background: var(--site-elevated-strong);
-  box-shadow: 0 16px 30px rgba(21, 17, 13, 0.12);
+  background: color-mix(in srgb, var(--site-surface-soft) 86%, transparent);
 }
 
 .theme-toggle:focus-visible {

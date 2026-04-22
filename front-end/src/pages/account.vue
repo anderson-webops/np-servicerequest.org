@@ -585,7 +585,7 @@ watch(
 <style scoped>
 .account-page {
   display: grid;
-  gap: 1.5rem;
+  gap: var(--page-section-gap);
   padding-top: 0;
   padding-right: var(--page-inline-end);
   padding-bottom: 2.75rem;
@@ -594,9 +594,9 @@ watch(
 
 .account-page__hero {
   display: grid;
-  gap: 0.9rem;
+  gap: var(--page-hero-gap);
   min-width: 0;
-  max-width: 56rem;
+  max-width: var(--page-hero-max);
   padding-block: var(--page-hero-space);
 }
 
@@ -632,9 +632,9 @@ watch(
 }
 
 .account-page h1 {
-  font-size: clamp(2.35rem, 4.6vw, 4rem);
+  font-size: var(--page-hero-title-size);
   line-height: 0.92;
-  max-width: 15ch;
+  max-width: var(--page-hero-title-max);
   overflow-wrap: anywhere;
   text-wrap: balance;
 }
@@ -646,21 +646,21 @@ watch(
 }
 
 .account-page__lede {
-  max-width: 42rem;
+  max-width: var(--page-hero-copy-max);
   margin: 0;
   font-size: 1.02rem;
 }
 
 .account-page__panel {
-  max-width: 42rem;
+  max-width: 46rem;
 }
 
 .account-panel {
   display: grid;
   gap: 1rem;
   min-width: 0;
-  padding: 1.5rem;
-  border-radius: 1.65rem;
+  padding: var(--page-surface-padding);
+  border-radius: var(--page-surface-radius);
   background: var(--site-surface);
   border: 1px solid var(--site-border);
   box-shadow: var(--site-shadow);
@@ -682,10 +682,10 @@ watch(
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 3.1rem;
+  min-height: 2.95rem;
   padding: 0.88rem 1.2rem;
   border: 0;
-  border-radius: 999px;
+  border-radius: 1rem;
   text-decoration: none;
   font-size: 0.96rem;
   font-weight: 700;
@@ -698,7 +698,7 @@ watch(
 }
 
 .account-tabs__button {
-  background: var(--site-elevated);
+  background: transparent;
   color: var(--site-text-strong);
   border: 1px solid var(--site-border);
   touch-action: manipulation;

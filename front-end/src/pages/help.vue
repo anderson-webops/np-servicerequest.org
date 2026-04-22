@@ -134,7 +134,7 @@ const boardGroups = [
 <style scoped>
 .help-page {
   display: grid;
-  gap: 1.5rem;
+  gap: var(--page-section-gap);
   padding-top: 0;
   padding-right: var(--page-inline-end);
   padding-bottom: 2.75rem;
@@ -149,8 +149,9 @@ const boardGroups = [
 
 .help-page__hero {
   min-width: 0;
-  max-width: 58rem;
+  max-width: var(--page-hero-max);
   padding-block: var(--page-hero-space);
+  gap: var(--page-hero-gap);
 }
 
 .help-page__back {
@@ -187,9 +188,9 @@ const boardGroups = [
 }
 
 .help-page h1 {
-  font-size: clamp(2.35rem, 4.8vw, 4.25rem);
+  font-size: var(--page-hero-title-size);
   line-height: 0.92;
-  max-width: 14ch;
+  max-width: var(--page-hero-title-max);
   overflow-wrap: anywhere;
   text-wrap: balance;
 }
@@ -202,13 +203,13 @@ const boardGroups = [
 }
 
 .help-page__lede {
-  max-width: 42rem;
+  max-width: var(--page-hero-copy-max);
   margin: 0;
   font-size: 1.02rem;
 }
 
 .section-heading {
-  max-width: 42rem;
+  max-width: var(--page-hero-copy-max);
 }
 
 .process__list {
@@ -222,9 +223,9 @@ const boardGroups = [
 
 .process__list li,
 .board-groups__grid article {
-  padding: 1.25rem;
-  border-radius: 1.4rem;
-  background: var(--site-surface-soft);
+  padding: var(--page-surface-padding);
+  border-radius: var(--page-surface-radius);
+  background: color-mix(in srgb, var(--site-surface-soft) 82%, transparent);
   border: 1px solid var(--site-border);
 }
 

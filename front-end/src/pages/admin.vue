@@ -1189,7 +1189,7 @@ watch(
 <style scoped>
 .admin-page {
   display: grid;
-  gap: 1.5rem;
+  gap: var(--page-section-gap);
   padding-top: 0;
   padding-right: var(--page-inline-end);
   padding-bottom: 2.75rem;
@@ -1204,8 +1204,9 @@ watch(
 
 .admin-page__hero {
   min-width: 0;
-  max-width: 60rem;
+  max-width: var(--page-hero-max);
   padding-block: var(--page-hero-space);
+  gap: var(--page-hero-gap);
 }
 
 .admin-page__back {
@@ -1241,8 +1242,8 @@ watch(
 }
 
 .admin-page h1 {
-  max-width: 15ch;
-  font-size: clamp(2.35rem, 4.6vw, 4rem);
+  max-width: var(--page-hero-title-max);
+  font-size: var(--page-hero-title-size);
   line-height: 0.92;
   overflow-wrap: anywhere;
   text-wrap: balance;
@@ -1257,13 +1258,13 @@ watch(
 }
 
 .admin-page__lede {
-  max-width: 46rem;
+  max-width: var(--page-hero-copy-max);
   margin: 0;
   font-size: 1.02rem;
 }
 
 .section-heading {
-  max-width: 44rem;
+  max-width: var(--page-hero-copy-max);
 }
 
 .section-copy {
@@ -1289,8 +1290,8 @@ watch(
 .admin-panel,
 .admin-card {
   min-width: 0;
-  padding: 1.5rem;
-  border-radius: 1.65rem;
+  padding: var(--page-surface-padding);
+  border-radius: var(--page-surface-radius);
   background: var(--site-surface);
   border: 1px solid var(--site-border);
   box-shadow: var(--site-shadow);
@@ -1362,10 +1363,10 @@ watch(
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 3.1rem;
+  min-height: 2.95rem;
   padding: 0.88rem 1.2rem;
   border: 0;
-  border-radius: 999px;
+  border-radius: 1rem;
   text-decoration: none;
   font-size: 0.96rem;
   font-weight: 700;
@@ -1395,7 +1396,7 @@ watch(
 
 .secondary-button,
 .filter-chip {
-  background: var(--site-elevated);
+  background: transparent;
   color: var(--site-heading);
   border: 1px solid var(--site-border-strong);
 }
@@ -1486,21 +1487,19 @@ watch(
 }
 
 .filter-strip {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.75rem;
 }
 
 .filter-chip {
-  width: 100%;
-  gap: 0.7rem;
+  gap: 0.5rem;
+  min-width: fit-content;
 }
 
 .filter-chip strong {
-  padding: 0.2rem 0.55rem;
-  border-radius: 999px;
-  background: var(--site-accent-soft);
-  font-size: 0.82rem;
+  font-size: 0.84rem;
+  color: var(--site-subtle);
 }
 
 .admin-review__list {
@@ -1566,7 +1565,7 @@ watch(
   align-items: center;
   justify-content: center;
   padding: 0.28rem 0.55rem;
-  border-radius: 999px;
+  border-radius: 0.78rem;
   background: var(--site-accent-soft);
   color: var(--site-link);
   font-size: 0.76rem;

@@ -860,44 +860,65 @@ watch(routeManagementToken, (nextToken, previousToken) => {
           </div>
         </dl>
 
-        <div class="board-card__actions">
-          <button
-            class="secondary-button"
-            :disabled="revealItemPending"
-            type="button"
-            @click="revealCurrentItemContact"
+        <div class="board-card__utility">
+          <div class="board-card__action-group">
+            <p class="board-card__utility-label">
+              Public actions
+            </p>
+            <div class="board-card__actions">
+              <button
+                class="secondary-button"
+                :disabled="revealItemPending"
+                type="button"
+                @click="revealCurrentItemContact"
+              >
+                {{ getItemContactActionLabel(item) }}
+              </button>
+              <button
+                v-if="canReplyToItem(item)"
+                class="secondary-button secondary-button--dark"
+                type="button"
+                @click="openReplyForm"
+              >
+                {{ openReply ? 'Hide reply form' : getReplyActionLabel(item.kind) }}
+              </button>
+            </div>
+          </div>
+
+          <div
+            v-if="canResolveItem(item) || canDeleteItem(item)"
+            class="board-card__action-group board-card__action-group--owner"
           >
-            {{ getItemContactActionLabel(item) }}
-          </button>
-          <button
-            v-if="canReplyToItem(item)"
-            class="secondary-button secondary-button--dark"
-            type="button"
-            @click="openReplyForm"
-          >
-            {{ openReply ? 'Hide reply form' : getReplyActionLabel(item.kind) }}
-          </button>
-          <button
-            v-if="canResolveItem(item)"
-            class="secondary-button"
-            :disabled="resolvePending"
-            type="button"
-            @click="toggleBoardResolution"
-          >
-            {{ getResolutionActionLabel(item) }}
-          </button>
-          <button
-            v-if="canDeleteItem(item)"
-            class="secondary-button secondary-button--danger"
-            :disabled="deletePending"
-            type="button"
-            @click="deleteBoardPost"
-          >
-            {{ getDeleteActionLabel() }}
-          </button>
+            <p class="board-card__utility-label">
+              Owner tools
+            </p>
+            <div class="board-card__actions">
+              <button
+                v-if="canResolveItem(item)"
+                class="secondary-button"
+                :disabled="resolvePending"
+                type="button"
+                @click="toggleBoardResolution"
+              >
+                {{ getResolutionActionLabel(item) }}
+              </button>
+              <button
+                v-if="canDeleteItem(item)"
+                class="secondary-button secondary-button--danger"
+                :disabled="deletePending"
+                type="button"
+                @click="deleteBoardPost"
+              >
+                {{ getDeleteActionLabel() }}
+              </button>
+            </div>
+          </div>
         </div>
 
         <div class="board-card__report">
+          <p class="board-card__utility-label">
+            Safety and moderation
+          </p>
           <button
             class="inline-action"
             type="button"
@@ -970,10 +991,15 @@ watch(routeManagementToken, (nextToken, previousToken) => {
           {{ itemReportNotice }}
         </p>
 
-        <div class="board-card__thread">
-          <p class="board-card__thread-label">
-            Board responses
-          </p>
+        <section class="board-thread">
+          <div class="board-thread__header">
+            <p class="board-card__thread-label">
+              Board responses
+            </p>
+            <p class="board-thread__hint">
+              Replies stay public here unless someone deliberately reveals direct contact.
+            </p>
+          </div>
 
           <div v-if="item.interactions.length" class="thread-list">
             <article v-for="interaction in item.interactions" :key="interaction.id" class="thread-item">
@@ -1074,14 +1100,28 @@ watch(routeManagementToken, (nextToken, previousToken) => {
           <p v-else class="board-card__thread-empty">
             No responses yet. This is the place where neighbors can answer the request directly.
           </p>
-        </div>
+        </section>
 
         <p v-if="item.resolutionStatus === 'resolved'" class="board-card__thread-empty">
           This post is resolved, so new public replies are closed unless the owner or an admin reopens it.
         </p>
+      </article>
+
+      <section
+        v-if="item && openReply && canReplyToItem(item)"
+        class="reply-panel"
+      >
+        <div class="reply-panel__header">
+          <p class="board-card__thread-label">
+            Reply
+          </p>
+          <h2>{{ getReplyActionLabel(item.kind) }}</h2>
+          <p class="reply-panel__lede">
+            Keep the reply practical so the person who posted can decide quickly whether to continue the conversation.
+          </p>
+        </div>
 
         <form
-          v-if="openReply && canReplyToItem(item)"
           class="reply-form"
           :aria-busy="replyStatus.pending"
           @submit.prevent="submitBoardReply"
@@ -1139,7 +1179,7 @@ watch(routeManagementToken, (nextToken, previousToken) => {
             {{ replyStatus.pending ? 'Posting response...' : 'Post board response' }}
           </button>
         </form>
-      </article>
+      </section>
     </section>
   </div>
 </template>
@@ -1147,7 +1187,7 @@ watch(routeManagementToken, (nextToken, previousToken) => {
 <style scoped>
 .post-page {
   display: grid;
-  gap: 1.5rem;
+  gap: var(--page-section-gap);
   padding-right: var(--page-inline-end);
   padding-bottom: 2.75rem;
   padding-left: var(--page-inline-start);
@@ -1156,11 +1196,11 @@ watch(routeManagementToken, (nextToken, previousToken) => {
 .post-page__hero,
 .post-page__body {
   display: grid;
-  gap: 1rem;
+  gap: var(--page-hero-gap);
 }
 
 .post-page__hero {
-  max-width: 58rem;
+  max-width: var(--page-hero-max);
   padding-block: var(--page-hero-space);
 }
 
@@ -1187,7 +1227,8 @@ watch(routeManagementToken, (nextToken, previousToken) => {
 }
 
 .post-page h1,
-.board-card__header h2 {
+.board-card__header h2,
+.reply-panel__header h2 {
   margin: 0;
   font-family: 'DM Serif Display', serif;
   font-weight: 400;
@@ -1196,8 +1237,8 @@ watch(routeManagementToken, (nextToken, previousToken) => {
 }
 
 .post-page h1 {
-  max-width: 14ch;
-  font-size: clamp(2.35rem, 4.8vw, 4.25rem);
+  max-width: var(--page-hero-title-max);
+  font-size: var(--page-hero-title-size);
   line-height: 0.92;
   overflow-wrap: anywhere;
   text-wrap: balance;
@@ -1214,7 +1255,7 @@ watch(routeManagementToken, (nextToken, previousToken) => {
 }
 
 .post-page__lede {
-  max-width: 44rem;
+  max-width: var(--page-hero-copy-max);
   margin: 0;
   font-size: 1.02rem;
 }
@@ -1238,8 +1279,8 @@ watch(routeManagementToken, (nextToken, previousToken) => {
 .board-card {
   display: grid;
   gap: 1rem;
-  padding: 1.5rem;
-  border-radius: 1.65rem;
+  padding: var(--page-surface-padding);
+  border-radius: var(--page-surface-radius);
   background: var(--site-surface);
   border: 1px solid var(--site-border);
   box-shadow: var(--site-shadow);
@@ -1275,6 +1316,11 @@ watch(routeManagementToken, (nextToken, previousToken) => {
   text-wrap: balance;
 }
 
+.reply-panel__header h2 {
+  font-size: 1.95rem;
+  line-height: 0.98;
+}
+
 .board-card__meta {
   display: grid;
   gap: 0.35rem;
@@ -1293,8 +1339,8 @@ watch(routeManagementToken, (nextToken, previousToken) => {
 
 .board-card__badge {
   display: inline-flex;
-  padding: 0.28rem 0.55rem;
-  border-radius: 999px;
+  padding: 0.32rem 0.62rem;
+  border-radius: 0.8rem;
   background: var(--site-accent-soft);
   color: var(--site-link);
   font-size: 0.76rem;
@@ -1350,9 +1396,34 @@ watch(routeManagementToken, (nextToken, previousToken) => {
   gap: 0.75rem;
 }
 
+.board-card__utility {
+  display: grid;
+  gap: 1rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--site-border);
+}
+
+.board-card__action-group {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.board-card__utility-label {
+  margin: 0;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--site-muted);
+}
+
 .board-card__report {
   display: grid;
   gap: 0.85rem;
+  padding: 1rem;
+  border-radius: 1.15rem;
+  background: color-mix(in srgb, var(--site-surface-soft) 82%, transparent);
+  border: 1px solid var(--site-border);
 }
 
 .board-card__contact-note,
@@ -1365,10 +1436,10 @@ watch(routeManagementToken, (nextToken, previousToken) => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 3.1rem;
+  min-height: 2.95rem;
   padding: 0.88rem 1.2rem;
   border: 0;
-  border-radius: 999px;
+  border-radius: 1rem;
   text-decoration: none;
   font-size: 0.96rem;
   font-weight: 700;
@@ -1382,7 +1453,7 @@ watch(routeManagementToken, (nextToken, previousToken) => {
 }
 
 .secondary-button {
-  background: var(--site-elevated);
+  background: transparent;
   color: var(--site-heading);
   border: 1px solid var(--site-border-strong);
 }
@@ -1390,7 +1461,7 @@ watch(routeManagementToken, (nextToken, previousToken) => {
 .secondary-button:hover,
 .secondary-button:focus-visible {
   transform: translateY(-1px);
-  background: var(--site-elevated-strong);
+  background: var(--site-elevated);
 }
 
 .secondary-button:disabled,
@@ -1461,22 +1532,37 @@ watch(routeManagementToken, (nextToken, previousToken) => {
   text-underline-offset: 0.2em;
 }
 
-.board-card__thread {
+.board-thread {
   display: grid;
-  gap: 0.8rem;
-  padding-top: 0.25rem;
+  gap: 0.9rem;
+  padding-top: 0.4rem;
   border-top: 1px solid var(--site-border);
+}
+
+.board-thread__header,
+.reply-panel__header {
+  display: grid;
+  gap: 0.45rem;
+  max-width: var(--page-hero-copy-max);
+}
+
+.board-thread__hint,
+.reply-panel__lede {
+  margin: 0;
+  color: var(--site-subtle);
+  line-height: 1.65;
 }
 
 .thread-list {
   display: grid;
-  gap: 0.8rem;
+  gap: 0.9rem;
 }
 
 .thread-item {
-  padding: 1rem;
+  padding: 1.05rem 1.1rem;
   border-radius: 1.15rem;
-  background: var(--site-elevated);
+  background: color-mix(in srgb, var(--site-surface-soft) 82%, transparent);
+  border: 1px solid var(--site-border);
   display: grid;
   gap: 0.65rem;
 }
@@ -1519,12 +1605,18 @@ watch(routeManagementToken, (nextToken, previousToken) => {
   color: var(--site-error-text);
 }
 
+.reply-panel {
+  display: grid;
+  gap: 1rem;
+  padding: var(--page-surface-padding);
+  border-radius: var(--page-surface-radius);
+  background: color-mix(in srgb, var(--site-surface-soft) 82%, transparent);
+  border: 1px solid var(--site-border);
+}
+
 .reply-form {
   display: grid;
   gap: 0.9rem;
-  padding: 1rem;
-  border-radius: 1.2rem;
-  background: var(--site-elevated);
 }
 
 .report-form {
@@ -1562,7 +1654,8 @@ watch(routeManagementToken, (nextToken, previousToken) => {
 }
 
 .field input,
-.field textarea {
+.field textarea,
+.field select {
   width: 100%;
   border: 1px solid var(--site-border-strong);
   border-radius: 1rem;
@@ -1582,7 +1675,8 @@ watch(routeManagementToken, (nextToken, previousToken) => {
 }
 
 .field input:focus-visible,
-.field textarea:focus-visible {
+.field textarea:focus-visible,
+.field select:focus-visible {
   outline: none;
   border-color: var(--site-focus);
   box-shadow: 0 0 0 4px var(--site-focus-ring);
@@ -1631,6 +1725,10 @@ watch(routeManagementToken, (nextToken, previousToken) => {
   }
 
   .board-card {
+    padding: 1.2rem;
+  }
+
+  .reply-panel {
     padding: 1.2rem;
   }
 
