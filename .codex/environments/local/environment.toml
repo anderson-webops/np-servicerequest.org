@@ -1,0 +1,47 @@
+version = 1
+name = "np-servicerequest.org"
+
+[setup]
+script = """
+npm ci --include=optional
+"""
+
+[[actions]]
+name = "Install"
+icon = "tool"
+command = "npm ci --include=optional"
+
+[[actions]]
+name = "Build"
+icon = "run"
+command = "npm run build"
+
+[[actions]]
+name = "Typecheck"
+icon = "test"
+command = "npm run typecheck"
+
+[[actions]]
+name = "Lint"
+icon = "test"
+command = "npm run lint"
+
+[[actions]]
+name = "Backend Test"
+icon = "test"
+command = "npm run -w back-end test"
+
+[[actions]]
+name = "Frontend Dev"
+icon = "debug"
+command = "npm run dev"
+
+[[actions]]
+name = "Backend Dev"
+icon = "debug"
+command = "npm run server"
+
+[[actions]]
+name = "Preview"
+icon = "run"
+command = "npm run preview"
