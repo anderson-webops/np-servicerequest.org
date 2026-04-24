@@ -99,7 +99,7 @@ watch(
       <span>Contact note (optional)</span>
       <input
         name="contact_note"
-        placeholder="Example: text first, porch pickup only, or evenings are easiest."
+        placeholder="Text first or porch pickup."
         type="text"
       >
     </label>
@@ -122,7 +122,7 @@ watch(
       <input
         autocomplete="email"
         name="notification_email"
-        :placeholder="contactMethod === 'email' ? 'Leave blank to reuse your contact email' : 'jane@email.com'"
+        :placeholder="contactMethod === 'email' ? 'Optional reply email' : 'jane@email.com'"
         :required="contactMethod === 'phone'"
         type="email"
       >
@@ -172,7 +172,7 @@ watch(
       <span>Borrowing guidelines</span>
       <textarea
         name="guidelines"
-        placeholder="Let people know how long they can borrow the item, whether you need a text before pickup, and anything else they should respect."
+        placeholder="List borrowing limits, pickup notes, and return expectations."
         required
         rows="6"
       />

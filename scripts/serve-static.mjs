@@ -2,7 +2,7 @@ import { createReadStream } from 'node:fs'
 import { access, stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { extname, join, normalize, resolve } from 'node:path'
-import { argv, cwd, env, exit, once } from 'node:process'
+import process, { argv, cwd, env, exit } from 'node:process'
 
 const rootDirectory = resolve(cwd(), env.STATIC_ROOT || argv[2] || 'front-end/.output/public')
 const port = Number(env.PORT || argv[3] || 3333)
@@ -86,7 +86,7 @@ server.listen(port, '127.0.0.1', () => {
 })
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
-  once(signal, () => {
+  process.once(signal, () => {
     server.close(() => exit(0))
   })
 }

@@ -99,7 +99,7 @@ watch(
       <span>Contact note (optional)</span>
       <input
         name="contact_note"
-        placeholder="Example: text first, weekdays only, or mention the item name when you reach out."
+        placeholder="Text first or weekdays."
         type="text"
       >
     </label>
@@ -122,7 +122,7 @@ watch(
       <input
         autocomplete="email"
         name="notification_email"
-        :placeholder="contactMethod === 'email' ? 'Leave blank to reuse your contact email' : 'jane@email.com'"
+        :placeholder="contactMethod === 'email' ? 'Optional reply email' : 'jane@email.com'"
         :required="contactMethod === 'phone'"
         type="email"
       >
@@ -177,7 +177,7 @@ watch(
       <span>Details</span>
       <textarea
         name="details"
-        placeholder="Share any size, edition, quantity, or use-case details that would help a lender know whether they have the right item."
+        placeholder="Share size, edition, quantity, or use details."
         required
         rows="6"
       />

@@ -709,7 +709,7 @@ watch(
                 v-model="boardSearchDraft"
                 autocomplete="off"
                 name="board_search"
-                placeholder="Search titles, details, names, or neighborhoods"
+                placeholder="Search the board"
                 type="search"
               >
             </label>
@@ -1675,6 +1675,10 @@ watch(
   .board-card__actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .board-search__field {
+    flex-basis: auto;
   }
 
   .secondary-button,

@@ -99,7 +99,7 @@ watch(
       <span>Contact note (optional)</span>
       <input
         name="contact_note"
-        placeholder="Example: text first, evenings are best, or include the address in the subject line."
+        placeholder="Text first or evenings."
         type="text"
       >
     </label>
@@ -122,7 +122,7 @@ watch(
       <input
         autocomplete="email"
         name="notification_email"
-        :placeholder="contactMethod === 'email' ? 'Leave blank to reuse your contact email' : 'jane@email.com'"
+        :placeholder="contactMethod === 'email' ? 'Optional reply email' : 'jane@email.com'"
         :required="contactMethod === 'phone'"
         type="email"
       >
@@ -156,7 +156,7 @@ watch(
       <span>Timing</span>
       <input
         name="timing"
-        placeholder="Example: Saturday morning or sometime next week"
+        placeholder="Saturday morning or next week"
         required
         type="text"
       >
@@ -166,7 +166,7 @@ watch(
       <span>Project details</span>
       <textarea
         name="details"
-        placeholder="Explain what needs to be done, what supplies are already available, and anything someone should know before responding."
+        placeholder="Explain the work, supplies, and anything responders should know."
         required
         rows="6"
       />

@@ -1203,12 +1203,12 @@ watch(routeManagementToken, (nextToken, previousToken) => {
 
             <label class="field field--wide">
               <span>Contact note (optional)</span>
-              <input v-model="replyDraft.contact_note" placeholder="Example: text first, evenings are best, or include the item name when you reach out." type="text">
+              <input v-model="replyDraft.contact_note" placeholder="Text first or evenings." type="text">
             </label>
 
             <label class="field field--wide">
               <span>Message</span>
-              <textarea v-model="replyDraft.message" placeholder="Tell them what you can offer, what timing works, and anything they should know before reaching out." required rows="5" />
+              <textarea v-model="replyDraft.message" placeholder="Share what you can offer and what timing works." required rows="5" />
             </label>
           </div>
 
