@@ -190,18 +190,18 @@ watch(
       </p>
     </section>
 
-    <section class="submission-page__panel">
-      <div class="submission-page__tips">
-        <p class="eyebrow">
-          Quick checklist
-        </p>
-        <ul class="submission-page__examples">
-          <li v-for="example in examples" :key="example">
-            {{ example }}
-          </li>
-        </ul>
-      </div>
+    <aside class="submission-page__tips" aria-labelledby="submission-checklist-heading">
+      <p id="submission-checklist-heading" class="eyebrow">
+        Quick checklist
+      </p>
+      <ul class="submission-page__examples">
+        <li v-for="example in examples" :key="example">
+          {{ example }}
+        </li>
+      </ul>
+    </aside>
 
+    <section class="submission-page__panel">
       <form
         ref="formElement"
         class="submission-page__form"
@@ -270,7 +270,9 @@ watch(
 <style scoped>
 .submission-page {
   display: grid;
-  gap: var(--page-section-gap);
+  grid-template-columns: minmax(0, 50rem) minmax(18rem, 26rem);
+  gap: var(--page-section-gap) clamp(2rem, 5vw, 5rem);
+  align-items: start;
   padding-top: 0;
   padding-right: var(--page-inline-end);
   padding-bottom: 2.75rem;
@@ -279,9 +281,10 @@ watch(
 
 .submission-page__hero {
   display: grid;
+  grid-column: 1;
   gap: var(--page-hero-gap);
   min-width: 0;
-  max-width: var(--page-hero-max);
+  max-width: none;
   padding-block: var(--page-hero-space);
 }
 
@@ -338,10 +341,11 @@ watch(
 }
 
 .submission-page__panel {
+  grid-column: 1;
   display: grid;
   gap: 0.95rem;
   align-items: start;
-  max-width: 50rem;
+  max-width: none;
 }
 
 .submission-page__tips,
@@ -356,8 +360,13 @@ watch(
 
 .submission-page__tips {
   display: grid;
+  grid-column: 2;
+  grid-row: 1 / span 2;
   gap: 0.7rem;
+  margin-top: calc(var(--page-hero-space) + 2rem);
   background: color-mix(in srgb, var(--site-surface-soft) 82%, transparent);
+  position: sticky;
+  top: 6.5rem;
 }
 
 .submission-page__examples {
@@ -525,6 +534,29 @@ watch(
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+@media (max-width: 1080px) {
+  .submission-page {
+    grid-template-columns: 1fr;
+  }
+
+  .submission-page__hero,
+  .submission-page__tips,
+  .submission-page__panel {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .submission-page__tips {
+    position: static;
+    margin-top: 0;
+    max-width: 50rem;
+  }
+
+  .submission-page__panel {
+    max-width: 50rem;
+  }
 }
 
 @media (max-width: 760px) {
