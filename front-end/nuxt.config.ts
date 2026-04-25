@@ -42,6 +42,9 @@ export default defineNuxtConfig({
           }],
     },
   },
+  css: [
+    '~/assets/styles/theme-schemes.css',
+  ],
 
   colorMode: {
     classSuffix: '',

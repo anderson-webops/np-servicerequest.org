@@ -13,22 +13,28 @@
       </NuxtLink>
     </div>
 
-    <div class="site-footer__links">
-      <NuxtLink prefetch-on="interaction" to="/#live-board">
-        Live board
-      </NuxtLink>
-      <NuxtLink prefetch-on="interaction" to="/service-request">
-        Service projects
-      </NuxtLink>
-      <NuxtLink prefetch-on="interaction" to="/item-request">
-        Borrow an item
-      </NuxtLink>
-      <NuxtLink prefetch-on="interaction" to="/item-lending">
-        Lend an item
-      </NuxtLink>
-      <NuxtLink prefetch-on="interaction" to="/account">
-        Optional account
-      </NuxtLink>
+    <div class="site-footer__right">
+      <div class="site-footer__links">
+        <NuxtLink prefetch-on="interaction" to="/#live-board">
+          Live board
+        </NuxtLink>
+        <NuxtLink prefetch-on="interaction" to="/service-request">
+          Service projects
+        </NuxtLink>
+        <NuxtLink prefetch-on="interaction" to="/item-request">
+          Borrow an item
+        </NuxtLink>
+        <NuxtLink prefetch-on="interaction" to="/item-lending">
+          Lend an item
+        </NuxtLink>
+        <NuxtLink prefetch-on="interaction" to="/account">
+          Optional account
+        </NuxtLink>
+      </div>
+
+      <div class="site-footer__theme">
+        <ThemeSchemePicker compact align="end" panel-align="end" />
+      </div>
     </div>
   </footer>
 </template>
@@ -52,13 +58,23 @@
   gap: 0.4rem;
 }
 
+.site-footer__right {
+  display: grid;
+  gap: 1rem;
+  justify-items: end;
+  margin-left: auto;
+}
+
 .site-footer__links {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 0.75rem;
-  margin-left: auto;
   max-width: 48rem;
+}
+
+.site-footer__theme {
+  width: min(100%, 13.5rem);
 }
 
 .site-footer__help,
@@ -82,9 +98,19 @@
     align-items: flex-start;
   }
 
+  .site-footer__right {
+    width: 100%;
+    justify-items: start;
+    margin-left: 0;
+  }
+
   .site-footer__links {
     margin-left: 0;
     justify-content: flex-start;
+  }
+
+  .site-footer__theme {
+    width: 100%;
   }
 }
 </style>

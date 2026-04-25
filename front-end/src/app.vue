@@ -1,16 +1,23 @@
 <script setup lang="ts">
 import { appName } from '~/constants'
+import { isDarkThemeValue } from '~/utils/theme'
 
 const colorMode = useColorMode()
+const { activeScheme, scheme } = useThemeScheme()
 
-useHead({
+useHead(() => ({
+  htmlAttrs: {
+    'data-theme-scheme': scheme.value,
+  },
   title: appName,
   meta: [{
     id: 'theme-color-active',
     name: 'theme-color',
-    content: () => colorMode.value === 'dark' ? '#0d1510' : '#f5f0e5',
+    content: () => isDarkThemeValue(colorMode.value)
+      ? activeScheme.value.swatches.dark.surface
+      : activeScheme.value.swatches.light.surface,
   }],
-})
+}))
 </script>
 
 <template>

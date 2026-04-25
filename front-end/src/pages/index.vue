@@ -35,7 +35,7 @@ definePageMeta({
 })
 
 useSeoMeta({
-  title: 'Live request board for service projects, borrowing, and lending',
+  title: 'North Point Ward Service Board',
   description:
     'Post service projects, borrow requests, and lending offers on a live community board.',
 })
@@ -626,13 +626,19 @@ watch(
 
 <template>
   <div class="home-page">
+    <section class="home-title" aria-labelledby="home-title-heading">
+      <h1 id="home-title-heading">
+        North Point Ward Service Board
+      </h1>
+    </section>
+
     <section class="hero">
       <div class="hero__inner">
         <div class="hero__copy">
           <p class="eyebrow">
             One shared place for community requests
           </p>
-          <h1>Help, borrow, and lend.</h1>
+          <h2>Help, borrow, and lend.</h2>
           <p class="hero__lede">
             Post a service project, ask to borrow something practical, or lend
             an item to a neighbor.
@@ -1006,10 +1012,28 @@ watch(
   padding-bottom: 2rem;
 }
 
+.home-title,
 .hero,
 .live-board {
   padding-right: var(--page-inline-end);
   padding-left: var(--page-inline-start);
+}
+
+.home-title {
+  padding-top: clamp(2rem, 4.5vw, 4.6rem);
+  text-align: center;
+}
+
+.home-title h1 {
+  max-width: 13ch;
+  margin: 0 auto;
+  font-family: 'DM Serif Display', serif;
+  font-size: clamp(3.1rem, 8vw, 7rem);
+  font-weight: 400;
+  line-height: 0.88;
+  letter-spacing: -0.05em;
+  color: var(--site-heading);
+  text-wrap: balance;
 }
 
 .hero {
@@ -1042,7 +1066,7 @@ watch(
   color: var(--site-muted);
 }
 
-.hero h1,
+.hero h2,
 .section-heading h2 {
   margin: 0;
   font-family: 'DM Serif Display', serif;
@@ -1051,7 +1075,7 @@ watch(
   color: var(--site-heading);
 }
 
-.hero h1 {
+.hero h2 {
   max-width: 15ch;
   font-size: clamp(2.2rem, 3.7vw, 3.65rem);
   line-height: 0.95;
@@ -1656,12 +1680,20 @@ watch(
 }
 
 @media (max-width: 760px) {
+  .home-title {
+    padding-top: 1.65rem;
+  }
+
+  .home-title h1 {
+    font-size: clamp(2.75rem, 15vw, 4.35rem);
+  }
+
   .hero__inner {
     gap: 1.45rem;
     padding-block: clamp(1.75rem, 7vw, 3rem);
   }
 
-  .hero h1 {
+  .hero h2 {
     max-width: 100%;
   }
 
