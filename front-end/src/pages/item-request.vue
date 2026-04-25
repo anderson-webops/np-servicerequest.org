@@ -51,6 +51,7 @@ watch(
       'Say how long you expect to borrow it.',
       'Include whether you can pick it up yourself or need help getting it.',
     ]"
+    kind="item-request"
     pending-label="Posting item request..."
     :security-error="securityError"
     :status="status"

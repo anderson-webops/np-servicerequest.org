@@ -168,6 +168,15 @@ export interface BoardItemCounts {
   'service-request': number
 }
 
+export interface BoardActivitySummary {
+  answered: number
+  closed: number
+  fulfilled: number
+  needsFirstReply: number
+  open: number
+  total: number
+}
+
 export interface BoardItemsPage {
   hasNextPage: boolean
   hasPreviousPage: boolean
@@ -178,6 +187,7 @@ export interface BoardItemsPage {
 }
 
 export interface BoardItemListResult {
+  activitySummary: BoardActivitySummary
   counts: BoardItemCounts
   items: PublicBoardItem[]
   pagination: BoardItemsPage
@@ -416,6 +426,35 @@ function createEmptyBoardItemCounts(): BoardItemCounts {
     'item-request': 0,
     'service-request': 0,
   }
+}
+
+function createBoardActivitySummary(items: StoredBoardItem[]): BoardActivitySummary {
+  return items.reduce<BoardActivitySummary>((summary, item) => {
+    const resolutionStatus = normalizeBoardResolutionStatus(item.resolutionStatus)
+
+    summary.total += 1
+
+    if (resolutionStatus === 'open')
+      summary.open += 1
+    else if (resolutionStatus === 'fulfilled')
+      summary.fulfilled += 1
+    else if (resolutionStatus === 'closed')
+      summary.closed += 1
+
+    if (item.interactionCount > 0)
+      summary.answered += 1
+    else if (resolutionStatus === 'open')
+      summary.needsFirstReply += 1
+
+    return summary
+  }, {
+    answered: 0,
+    closed: 0,
+    fulfilled: 0,
+    needsFirstReply: 0,
+    open: 0,
+    total: 0,
+  })
 }
 
 function normalizeBoardSearchQuery(value: string | undefined) {
@@ -818,6 +857,7 @@ export async function listBoardItems(options?: {
   const filteredItems = kindFilter === 'all'
     ? searchedItems
     : searchedItems.filter(item => item.kind === kindFilter)
+  const activitySummary = createBoardActivitySummary(filteredItems)
   const sortedItems = sortBoardItems(filteredItems, {
     origin,
     sort,
@@ -837,6 +877,7 @@ export async function listBoardItems(options?: {
   )
 
   return {
+    activitySummary,
     counts,
     items: publicItems,
     pagination: {

@@ -51,6 +51,7 @@ watch(
       'Say where the work will happen and when it is needed.',
       'Explain whether the project needs tools, lifting, transport, or a special skill.',
     ]"
+    kind="service-request"
     pending-label="Posting service request..."
     :security-error="securityError"
     :status="status"

@@ -266,6 +266,14 @@ test('board and admin listings support server-side pagination and filters', asyn
   assert.equal((firstBoardPage.items as Array<{ id: string }>)[0]?.id, createdBoardItemIds[2])
   assert.equal((firstBoardPage.items as Array<{ id: string }>)[1]?.id, createdBoardItemIds[1])
   assert.equal((firstBoardPage.counts as Record<string, number>)['service-request'], 3)
+  assert.deepEqual(firstBoardPage.activitySummary, {
+    answered: 0,
+    closed: 0,
+    fulfilled: 0,
+    needsFirstReply: 3,
+    open: 3,
+    total: 3,
+  })
 
   const { body: secondBoardPage, response: secondBoardPageResponse } = await fetchJson('/api/board/items?kind=service-request&page=2&pageSize=2', {
     method: 'GET',

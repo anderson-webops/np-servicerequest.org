@@ -3,12 +3,17 @@ import type {
   FormErrorState,
   FormStatus,
 } from '~/composables/useBoardSubmission'
+import type { BoardActivitySummary, BoardItem, BoardItemsResponse } from '~/utils/board'
+import type { SubmissionKind } from '~/utils/submissions'
+import { getBoardEndpoint } from '~/utils/board'
+import { getBoardDetailPath } from '~/utils/boardUi'
 
 const props = defineProps<{
   description: string
   draftKey?: string
   eyebrow: string
   examples: string[]
+  kind: SubmissionKind
   pendingLabel: string
   securityError: FormErrorState | null
   status: FormStatus
@@ -24,6 +29,63 @@ const emit = defineEmits<{
 const formElement = ref<HTMLFormElement | null>(null)
 const draftSaved = ref(false)
 const draftRestored = ref(false)
+const runtimeConfig = useRuntimeConfig()
+const activityPending = ref(false)
+const activityLoaded = ref(false)
+const activityError = ref<FormErrorState | null>(null)
+const recentItems = ref<BoardItem[]>([])
+const activitySummary = ref<BoardActivitySummary>({
+  answered: 0,
+  closed: 0,
+  fulfilled: 0,
+  needsFirstReply: 0,
+  open: 0,
+  total: 0,
+})
+
+const categoryCopy = computed(() => {
+  if (props.kind === 'service-request') {
+    return {
+      empty: 'No public service projects are waiting yet.',
+      label: 'Service projects',
+      nextAction: 'Neighbors can offer help publicly, then reveal contact only when follow-up is needed.',
+      postNoun: 'service project',
+    }
+  }
+
+  if (props.kind === 'item-request') {
+    return {
+      empty: 'No public borrow requests are waiting yet.',
+      label: 'Borrow requests',
+      nextAction: 'Neighbors can reply if they have the item, then coordinate pickup after contact is revealed.',
+      postNoun: 'borrow request',
+    }
+  }
+
+  return {
+    empty: 'No public lending offers are available yet.',
+    label: 'Lending offers',
+    nextAction: 'Neighbors can ask to borrow the item, and you can use a management link to remove it later.',
+    postNoun: 'lending offer',
+  }
+})
+
+const activityStats = computed(() => [
+  {
+    label: 'Open',
+    value: activitySummary.value.open,
+  },
+  {
+    label: 'Answered',
+    value: activitySummary.value.answered,
+  },
+  {
+    label: 'No replies',
+    value: activitySummary.value.needsFirstReply,
+  },
+])
+
+const recentItem = computed(() => recentItems.value[0] || null)
 
 const draftStorageKey = computed(() =>
   props.draftKey ? `np_sr_submission_draft:${props.draftKey}` : '',
@@ -142,8 +204,88 @@ function clearDraftAndResetForm() {
   }
 }
 
+function buildActivityEndpoint() {
+  const params = new URLSearchParams({
+    kind: props.kind,
+    page: '1',
+    pageSize: '3',
+    sort: 'recent-activity',
+  })
+
+  return `${getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'items')}?${params.toString()}`
+}
+
+function getFallbackActivitySummary(items: BoardItem[], totalItems: number): BoardActivitySummary {
+  return items.reduce<BoardActivitySummary>((summary, item) => {
+    summary.total = totalItems
+
+    if (item.resolutionStatus === 'open')
+      summary.open += 1
+    else if (item.resolutionStatus === 'fulfilled')
+      summary.fulfilled += 1
+    else if (item.resolutionStatus === 'closed')
+      summary.closed += 1
+
+    if (item.interactionCount > 0)
+      summary.answered += 1
+    else if (item.resolutionStatus === 'open')
+      summary.needsFirstReply += 1
+
+    return summary
+  }, {
+    answered: 0,
+    closed: 0,
+    fulfilled: 0,
+    needsFirstReply: 0,
+    open: 0,
+    total: totalItems,
+  })
+}
+
+function getActivityErrorState(error: unknown, endpoint: string): FormErrorState {
+  let serverMessage = ''
+
+  if (error && typeof error === 'object' && 'data' in error) {
+    const data = (error as { data?: unknown }).data
+
+    if (data && typeof data === 'object' && 'message' in data && typeof data.message === 'string')
+      serverMessage = data.message
+  }
+
+  return {
+    detail: `Request URL: ${endpoint}.`,
+    message: serverMessage || 'Category activity is unavailable right now.',
+  }
+}
+
+async function loadCategoryActivity() {
+  const endpoint = buildActivityEndpoint()
+
+  activityPending.value = true
+  activityError.value = null
+
+  try {
+    const response = await $fetch<BoardItemsResponse>(endpoint, {
+      credentials: 'include',
+    })
+
+    recentItems.value = response.items
+    activitySummary.value = response.activitySummary
+      || getFallbackActivitySummary(response.items, response.pagination.totalItems)
+    activityLoaded.value = true
+  }
+  catch (error) {
+    activityError.value = getActivityErrorState(error, endpoint)
+  }
+  finally {
+    activityPending.value = false
+  }
+}
+
 onMounted(async () => {
   await nextTick()
+
+  void loadCategoryActivity()
 
   if (!formElement.value)
     return
@@ -166,6 +308,7 @@ watch(
     clearStoredDraft()
     draftSaved.value = false
     draftRestored.value = false
+    void loadCategoryActivity()
   },
 )
 </script>
@@ -189,17 +332,6 @@ watch(
         {{ description }}
       </p>
     </section>
-
-    <aside class="submission-page__tips" aria-labelledby="submission-checklist-heading">
-      <p id="submission-checklist-heading" class="eyebrow">
-        Quick checklist
-      </p>
-      <ul class="submission-page__examples">
-        <li v-for="example in examples" :key="example">
-          {{ example }}
-        </li>
-      </ul>
-    </aside>
 
     <section class="submission-page__panel">
       <form
@@ -264,13 +396,74 @@ watch(
         </button>
       </form>
     </section>
+
+    <aside class="submission-page__rail" aria-label="Submission guidance and board activity">
+      <section class="submission-page__activity" aria-labelledby="submission-activity-heading">
+        <p class="eyebrow">
+          Live category
+        </p>
+        <div class="submission-page__activity-head">
+          <h2 id="submission-activity-heading">
+            {{ categoryCopy.label }}
+          </h2>
+          <span v-if="activityPending" class="submission-page__live-dot" aria-label="Loading category activity" />
+        </div>
+
+        <div class="submission-page__stat-grid">
+          <div v-for="stat in activityStats" :key="stat.label" class="submission-page__stat">
+            <strong>{{ activityLoaded ? stat.value : '—' }}</strong>
+            <span>{{ stat.label }}</span>
+          </div>
+        </div>
+
+        <p class="submission-page__activity-total">
+          {{ activityLoaded ? activitySummary.total : '—' }} total public {{ categoryCopy.label.toLowerCase() }}
+        </p>
+
+        <p v-if="activityError" class="submission-page__rail-note submission-page__rail-note--error" role="status">
+          {{ activityError.message }}
+        </p>
+        <p v-else-if="recentItem" class="submission-page__rail-note">
+          Recent {{ categoryCopy.postNoun }}:
+          <NuxtLink :to="getBoardDetailPath(recentItem.id)" prefetch-on="interaction">
+            {{ recentItem.title }}
+          </NuxtLink>
+        </p>
+        <p v-else class="submission-page__rail-note">
+          {{ activityLoaded ? categoryCopy.empty : 'Loading current board activity...' }}
+        </p>
+      </section>
+
+      <section class="submission-page__tips" aria-labelledby="submission-checklist-heading">
+        <p id="submission-checklist-heading" class="eyebrow">
+          Quick checklist
+        </p>
+        <ul class="submission-page__examples">
+          <li v-for="example in examples" :key="example">
+            {{ example }}
+          </li>
+        </ul>
+      </section>
+
+      <section class="submission-page__flow" aria-labelledby="submission-flow-heading">
+        <p id="submission-flow-heading" class="eyebrow">
+          After posting
+        </p>
+        <p>
+          Posts publish to the public board immediately. {{ categoryCopy.nextAction }}
+        </p>
+        <p>
+          If you post with email, the server sends a private management link so you can delete it later.
+        </p>
+      </section>
+    </aside>
   </div>
 </template>
 
 <style scoped>
 .submission-page {
   display: grid;
-  grid-template-columns: minmax(0, 50rem) minmax(18rem, 26rem);
+  grid-template-columns: minmax(0, 56rem) minmax(19rem, 27rem);
   gap: var(--page-section-gap) clamp(2rem, 5vw, 5rem);
   align-items: start;
   padding-top: 0;
@@ -329,7 +522,10 @@ watch(
 
 .submission-page__lede,
 .submission-page__tips,
-.submission-page__examples {
+.submission-page__examples,
+.submission-page__flow,
+.submission-page__activity,
+.submission-page__rail-note {
   color: var(--site-text);
   line-height: 1.7;
 }
@@ -348,7 +544,20 @@ watch(
   max-width: none;
 }
 
+.submission-page__rail {
+  display: grid;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  gap: 1rem;
+  min-width: 0;
+  padding-top: var(--page-hero-space);
+  position: sticky;
+  top: 6.5rem;
+}
+
 .submission-page__tips,
+.submission-page__activity,
+.submission-page__flow,
 .submission-page__form {
   min-width: 0;
   padding: var(--page-surface-padding);
@@ -360,18 +569,93 @@ watch(
 
 .submission-page__tips {
   display: grid;
-  grid-column: 2;
-  grid-row: 1 / span 2;
   gap: 0.7rem;
-  margin-top: calc(var(--page-hero-space) + 2rem);
   background: color-mix(in srgb, var(--site-surface-soft) 82%, transparent);
-  position: sticky;
-  top: 6.5rem;
 }
 
 .submission-page__examples {
   margin: 0;
   padding-left: 1.15rem;
+}
+
+.submission-page__activity,
+.submission-page__flow {
+  display: grid;
+  gap: 0.85rem;
+  background: color-mix(in srgb, var(--site-surface-strong) 88%, transparent);
+}
+
+.submission-page__activity-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.submission-page__activity h2 {
+  font-size: clamp(1.75rem, 3vw, 2.4rem);
+  line-height: 0.98;
+}
+
+.submission-page__live-dot {
+  width: 0.78rem;
+  height: 0.78rem;
+  border-radius: 999px;
+  background: var(--site-link);
+  box-shadow: 0 0 0 0.38rem var(--site-focus-ring);
+}
+
+.submission-page__stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.submission-page__stat {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+  padding: 0.85rem 0.75rem;
+  border-radius: 1rem;
+  background: var(--site-elevated);
+  border: 1px solid var(--site-border);
+}
+
+.submission-page__stat strong {
+  color: var(--site-heading);
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.submission-page__stat span {
+  color: var(--site-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.submission-page__rail-note,
+.submission-page__activity-total,
+.submission-page__flow p {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.submission-page__activity-total {
+  color: var(--site-subtle);
+  font-weight: 700;
+}
+
+.submission-page__rail-note a {
+  color: var(--site-link);
+  font-weight: 700;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.18em;
+}
+
+.submission-page__rail-note--error {
+  color: var(--site-error-text);
 }
 
 .submission-page__form {
@@ -542,15 +826,15 @@ watch(
   }
 
   .submission-page__hero,
-  .submission-page__tips,
-  .submission-page__panel {
+  .submission-page__panel,
+  .submission-page__rail {
     grid-column: 1;
     grid-row: auto;
   }
 
-  .submission-page__tips {
+  .submission-page__rail {
     position: static;
-    margin-top: 0;
+    padding-top: 0;
     max-width: 50rem;
   }
 
@@ -561,6 +845,8 @@ watch(
 
 @media (max-width: 760px) {
   .submission-page__tips,
+  .submission-page__activity,
+  .submission-page__flow,
   .submission-page__form {
     padding: 1.2rem;
   }

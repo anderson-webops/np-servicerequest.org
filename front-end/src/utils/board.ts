@@ -92,6 +92,15 @@ export interface BoardItemCounts {
   'service-request': number
 }
 
+export interface BoardActivitySummary {
+  answered: number
+  closed: number
+  fulfilled: number
+  needsFirstReply: number
+  open: number
+  total: number
+}
+
 export interface BoardItemsPagination {
   hasNextPage: boolean
   hasPreviousPage: boolean
@@ -102,6 +111,7 @@ export interface BoardItemsPagination {
 }
 
 export interface BoardItemsResponse {
+  activitySummary?: BoardActivitySummary
   counts: BoardItemCounts
   items: BoardItem[]
   pagination: BoardItemsPagination

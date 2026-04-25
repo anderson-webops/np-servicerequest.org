@@ -51,6 +51,7 @@ watch(
       'Explain any borrowing rules, pickup limits, or return expectations.',
       'Let people know the neighborhood and how to reach you.',
     ]"
+    kind="item-lending"
     pending-label="Posting lending offer..."
     :security-error="securityError"
     :status="status"
