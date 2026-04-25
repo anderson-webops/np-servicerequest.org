@@ -36,7 +36,7 @@
 .not-found h1 {
   margin: 0;
   font-family: 'DM Serif Display', serif;
-  font-size: clamp(2.6rem, 6vw, 4.4rem);
+  font-size: clamp(2.15rem, 4.4vw, 3.35rem);
   font-weight: 400;
   line-height: 0.95;
   letter-spacing: -0.03em;

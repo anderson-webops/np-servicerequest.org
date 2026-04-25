@@ -169,7 +169,7 @@ test('the separate admin page rejects a bad key, accepts the admin key, and hidi
   const boardItemId = (submission.boardItem as { id: string }).id
 
   await page.goto('/admin', { waitUntil: 'commit' })
-  await expect(page.getByRole('heading', { name: 'Review submissions with the separate admin key.' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Review board submissions.' })).toBeVisible()
 
   await page.getByLabel('Admin key').fill('wrong-key')
   await page.getByRole('button', { name: 'Sign in with admin key' }).click()

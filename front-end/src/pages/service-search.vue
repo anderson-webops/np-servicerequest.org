@@ -230,7 +230,7 @@ function changeProviderPage(nextPage: number) {
       <p class="eyebrow">
         Live service search
       </p>
-      <h1>Search live service opportunities and local links.</h1>
+      <h1>Search service opportunities.</h1>
       <p class="service-directory-page__lede">
         Use your current location or a place name to narrow local service
         websites, then pull live results from the configured provider when

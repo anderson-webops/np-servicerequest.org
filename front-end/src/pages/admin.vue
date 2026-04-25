@@ -778,7 +778,7 @@ watch(
       <p class="eyebrow">
         Admin review
       </p>
-      <h1>Review submissions with the separate admin key.</h1>
+      <h1>Review board submissions.</h1>
       <p class="admin-page__lede">
         This page is separate from the normal board account flow. Use the admin
         key here when you need moderation and review access.

@@ -374,10 +374,7 @@ watch(
       <p class="eyebrow">
         Account optional
       </p>
-      <h1>
-        Use an account only if you want a saved identity for repeat
-        participation.
-      </h1>
+      <h1>Create a saved board identity.</h1>
       <p class="account-page__lede">
         You can browse, post, and reply without signing in. This page is only
         for people who want a reusable board identity.

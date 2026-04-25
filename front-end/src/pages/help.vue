@@ -78,7 +78,7 @@ const boardGroups = [
       <p class="eyebrow">
         Help
       </p>
-      <h1>Quick guidance for using the board well.</h1>
+      <h1>Use the board well.</h1>
       <p class="help-page__lede">
         Use the right posting page, keep requests specific, and make it easy for
         someone else to act.

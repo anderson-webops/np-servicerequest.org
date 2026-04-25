@@ -632,7 +632,7 @@ watch(
           <p class="eyebrow">
             One shared place for community requests
           </p>
-          <h1>A live request board for help, borrowing, and lending.</h1>
+          <h1>Help, borrow, and lend.</h1>
           <p class="hero__lede">
             Post a service project, ask to borrow something practical, or lend
             an item to a neighbor.
@@ -1052,8 +1052,8 @@ watch(
 }
 
 .hero h1 {
-  max-width: 13ch;
-  font-size: clamp(2.7rem, 5.4vw, 5.15rem);
+  max-width: 15ch;
+  font-size: clamp(2.35rem, 4.4vw, 4.25rem);
   line-height: 0.92;
   overflow-wrap: anywhere;
   text-wrap: balance;

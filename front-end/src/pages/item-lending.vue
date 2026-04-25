@@ -56,7 +56,7 @@ watch(
     :status="status"
     submit-label="Post lending offer"
     success-text="Posted. Your lending offer now appears on the live board. If you used an email address, a management link was sent there so you can delete it later from another browser."
-    title="Offer an item for someone else to borrow."
+    title="Offer an item to lend."
     @submit="submit"
   >
     <label class="field">

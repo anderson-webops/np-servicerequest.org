@@ -56,7 +56,7 @@ watch(
     :status="status"
     submit-label="Post service request"
     success-text="Posted. Your service project now appears on the live board. If you used an email address, a management link was sent there so you can delete it later from another browser."
-    title="Describe the work, the timing, and how someone should reach you."
+    title="Describe the service project."
     @submit="submit"
   >
     <label class="field">

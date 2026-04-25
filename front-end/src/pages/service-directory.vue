@@ -30,7 +30,7 @@ useSeoMeta({
       <p class="eyebrow">
         Service directory
       </p>
-      <h1>Browse service websites beyond this board.</h1>
+      <h1>Browse service websites.</h1>
       <p class="service-directory-page__lede">
         Start with the broad volunteer networks, then move into regional
         organizations and local service hubs.
