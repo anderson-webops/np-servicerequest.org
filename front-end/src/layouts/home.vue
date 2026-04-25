@@ -23,12 +23,12 @@
 }
 
 .site-shell__content {
-  --page-hero-space: clamp(1.65rem, 3vw, 3rem);
+  --page-hero-space: clamp(1.35rem, 2.5vw, 2.6rem);
   --page-hero-gap: 0.95rem;
   --page-hero-max: 58rem;
-  --page-hero-title-max: 20ch;
+  --page-hero-title-max: 26ch;
   --page-hero-copy-max: 44rem;
-  --page-hero-title-size: clamp(2rem, 3.25vw, 3.2rem);
+  --page-hero-title-size: clamp(1.85rem, 2.75vw, 2.8rem);
   --page-section-gap: 1.2rem;
   --page-surface-padding: clamp(1.15rem, 2vw, 1.35rem);
   --page-surface-radius: 1.5rem;

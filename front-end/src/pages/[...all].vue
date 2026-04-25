@@ -4,7 +4,7 @@
       Nothing posted here
     </p>
     <h1>
-      That page is not part of the request board.
+      Page not found.
     </h1>
     <p>
       Head back to the main page to browse the live board, request a service project, borrow an item, or offer something useful to lend.

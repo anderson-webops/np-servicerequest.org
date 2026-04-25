@@ -1013,16 +1013,16 @@ watch(
 }
 
 .hero {
-  padding-top: 0.4rem;
+  padding-top: 0;
 }
 
 .hero__inner {
-  min-height: calc(100svh - 7rem);
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(250px, 0.65fr);
   align-items: center;
   gap: clamp(2rem, 4vw, 4.5rem);
-  padding-block: var(--page-hero-space);
+  padding-block: clamp(3rem, 7vw, 5.5rem);
 }
 
 .hero__copy {
@@ -1053,8 +1053,8 @@ watch(
 
 .hero h1 {
   max-width: 15ch;
-  font-size: clamp(2.35rem, 4.4vw, 4.25rem);
-  line-height: 0.92;
+  font-size: clamp(2.2rem, 3.7vw, 3.65rem);
+  line-height: 0.95;
   overflow-wrap: anywhere;
   text-wrap: balance;
 }
@@ -1068,7 +1068,7 @@ watch(
 
 .hero__lede {
   max-width: 38rem;
-  margin: 1.35rem 0 0;
+  margin: 1.1rem 0 0;
   font-size: 1.04rem;
 }
 
@@ -1076,7 +1076,7 @@ watch(
   display: flex;
   flex-wrap: wrap;
   gap: 0.9rem;
-  margin-top: 2rem;
+  margin-top: 1.55rem;
 }
 
 .hero__actions a,
@@ -1133,9 +1133,9 @@ watch(
 
 .poster {
   position: relative;
-  width: min(27rem, 100%);
-  padding: 1.55rem;
-  border-radius: 2rem;
+  width: min(24rem, 100%);
+  padding: 1.35rem;
+  border-radius: 1.75rem;
   background: linear-gradient(160deg, var(--site-poster-start), var(--site-poster-end)), var(--site-elevated-strong);
   border: 1px solid var(--site-border);
   box-shadow:
@@ -1149,8 +1149,8 @@ watch(
   position: absolute;
   top: 1rem;
   right: 1rem;
-  width: 5.5rem;
-  height: 5.5rem;
+  width: 4.75rem;
+  height: 4.75rem;
   border-radius: 50%;
   background: var(--site-highlight);
   filter: blur(2px);
@@ -1175,7 +1175,7 @@ watch(
 
 .poster__headline strong {
   font-family: 'DM Serif Display', serif;
-  font-size: clamp(2.7rem, 6vw, 4rem);
+  font-size: clamp(2.35rem, 5vw, 3.35rem);
   line-height: 0.95;
   color: var(--site-text-strong);
 }
@@ -1189,12 +1189,12 @@ watch(
 .poster__lanes {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.8rem;
-  margin-top: 1.45rem;
+  gap: 0.65rem;
+  margin-top: 1.2rem;
 }
 
 .poster__lanes div {
-  padding: 0.9rem 0.95rem;
+  padding: 0.78rem 0.82rem;
   border-radius: 1.2rem;
   background: var(--site-elevated);
   border: 1px solid var(--site-border);
@@ -1631,11 +1631,11 @@ watch(
 @media (max-width: 1080px) {
   .hero__inner {
     grid-template-columns: 1fr;
+    padding-block: clamp(2.35rem, 6vw, 4.25rem);
   }
 
   .hero__poster {
-    align-self: start;
-    justify-content: center;
+    display: none;
   }
 }
 
@@ -1657,8 +1657,8 @@ watch(
 
 @media (max-width: 760px) {
   .hero__inner {
-    min-height: auto;
-    gap: 2rem;
+    gap: 1.45rem;
+    padding-block: clamp(1.75rem, 7vw, 3rem);
   }
 
   .hero h1 {

@@ -8,16 +8,20 @@
     <div class="site-header__actions">
       <nav aria-label="Primary" class="site-header__nav">
         <NuxtLink prefetch-on="interaction" to="/#live-board">
-          Live board
+          <span class="site-header__label-full">Live board</span>
+          <span class="site-header__label-short">Board</span>
         </NuxtLink>
         <NuxtLink prefetch-on="interaction" to="/service-request">
-          Service projects
+          <span class="site-header__label-full">Service projects</span>
+          <span class="site-header__label-short">Service</span>
         </NuxtLink>
         <NuxtLink prefetch-on="interaction" to="/item-request">
-          Borrow an item
+          <span class="site-header__label-full">Borrow an item</span>
+          <span class="site-header__label-short">Borrow</span>
         </NuxtLink>
         <NuxtLink prefetch-on="interaction" to="/item-lending">
-          Lend an item
+          <span class="site-header__label-full">Lend an item</span>
+          <span class="site-header__label-short">Lend</span>
         </NuxtLink>
       </nav>
 
@@ -108,6 +112,10 @@
   color: var(--site-text-strong);
 }
 
+.site-header__label-short {
+  display: none;
+}
+
 @media (max-width: 1080px) {
   .site-header {
     align-items: flex-start;
@@ -127,23 +135,68 @@
 }
 
 @media (max-width: 760px) {
+  .site-header {
+    position: sticky;
+    gap: 0.8rem;
+    padding-top: max(0.85rem, var(--page-block-start));
+    padding-bottom: 0.85rem;
+  }
+
+  .site-header__brand {
+    padding-right: 4.25rem;
+  }
+
+  .site-header__eyebrow {
+    font-size: 0.66rem;
+  }
+
+  .site-header__name {
+    font-size: 1.35rem;
+  }
+
   .site-header__actions {
-    flex-direction: column-reverse;
-    align-items: stretch;
+    display: block;
+    width: 100%;
   }
 
   .site-header__nav {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    justify-content: stretch;
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 0.05rem;
+    scrollbar-width: none;
+  }
+
+  .site-header__nav::-webkit-scrollbar {
+    display: none;
   }
 
   .site-header__nav a {
+    flex: 0 0 auto;
+    padding: 0.55rem 0.64rem;
+    font-size: 0.86rem;
     text-align: center;
   }
 
+  .site-header__label-full {
+    display: none;
+  }
+
+  .site-header__label-short {
+    display: inline;
+  }
+
+  :deep(.theme-control) {
+    position: absolute;
+    top: max(0.85rem, var(--page-block-start));
+    right: var(--page-inline-end);
+  }
+
   :deep(.theme-toggle) {
-    align-self: flex-end;
+    min-height: 2.55rem;
+    padding: 0.55rem 0.75rem;
+    border-radius: 0.9rem;
   }
 }
 </style>
