@@ -1012,7 +1012,6 @@ watch(
   padding-bottom: 2rem;
 }
 
-.home-title,
 .hero,
 .live-board {
   padding-right: var(--page-inline-end);
@@ -1020,15 +1019,18 @@ watch(
 }
 
 .home-title {
+  padding-right: max(1rem, env(safe-area-inset-right));
+  padding-left: max(1rem, env(safe-area-inset-left));
   padding-top: clamp(2rem, 4.5vw, 4.6rem);
   text-align: center;
 }
 
 .home-title h1 {
-  max-width: 13ch;
+  width: 100%;
+  max-width: none;
   margin: 0 auto;
   font-family: 'DM Serif Display', serif;
-  font-size: clamp(3.1rem, 8vw, 7rem);
+  font-size: clamp(3rem, 5.65vw, 6.75rem);
   font-weight: 400;
   line-height: 0.88;
   letter-spacing: -0.05em;
@@ -1685,7 +1687,7 @@ watch(
   }
 
   .home-title h1 {
-    font-size: clamp(2.75rem, 15vw, 4.35rem);
+    font-size: clamp(2.7rem, 14vw, 4.25rem);
   }
 
   .hero__inner {
