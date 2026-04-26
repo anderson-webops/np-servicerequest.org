@@ -17,7 +17,10 @@ const { activeScheme, scheme, schemes } = useThemeScheme()
 
 const hasMounted = ref(false)
 const open = ref(false)
+const panelElement = ref<HTMLElement | null>(null)
+const panelStyle = ref<Record<string, string>>({})
 const rootElement = ref<HTMLElement | null>(null)
+const triggerElement = ref<HTMLElement | null>(null)
 
 const panelAlignment = computed(() => props.panelAlign || props.align)
 const modeLabel = computed(() => {
@@ -38,6 +41,24 @@ function togglePanel() {
   open.value = !open.value
 }
 
+function updatePanelPosition() {
+  if (!open.value || !panelElement.value || !triggerElement.value)
+    return
+
+  const viewportMargin = 12
+  const triggerRect = triggerElement.value.getBoundingClientRect()
+  const panelRect = panelElement.value.getBoundingClientRect()
+  const preferredLeft = panelAlignment.value === 'start'
+    ? triggerRect.left
+    : triggerRect.right - panelRect.width
+  const maxLeft = Math.max(viewportMargin, window.innerWidth - panelRect.width - viewportMargin)
+  const left = Math.min(Math.max(preferredLeft, viewportMargin), maxLeft)
+
+  panelStyle.value = {
+    transform: `translateX(${Math.round(left - triggerRect.left)}px)`,
+  }
+}
+
 function selectScheme(nextScheme: ThemeSchemeId) {
   scheme.value = nextScheme
 }
@@ -55,15 +76,39 @@ function handleEscape(event: KeyboardEvent) {
     closePanel()
 }
 
+function handleResize() {
+  updatePanelPosition()
+}
+
 onMounted(() => {
   hasMounted.value = true
   window.addEventListener('mousedown', handlePointerDown)
   window.addEventListener('keydown', handleEscape)
+  window.addEventListener('resize', handleResize)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('mousedown', handlePointerDown)
   window.removeEventListener('keydown', handleEscape)
+  window.removeEventListener('resize', handleResize)
+})
+
+watch(open, async (nextOpen) => {
+  if (!nextOpen) {
+    panelStyle.value = {}
+    return
+  }
+
+  await nextTick()
+  updatePanelPosition()
+})
+
+watch(panelAlignment, async () => {
+  if (!open.value)
+    return
+
+  await nextTick()
+  updatePanelPosition()
 })
 </script>
 
@@ -78,8 +123,10 @@ onBeforeUnmount(() => {
   >
     <div
       v-if="hasMounted && open"
+      ref="panelElement"
       class="palette-control__panel"
       :class="panelAlignment === 'start' ? 'palette-control__panel--start' : 'palette-control__panel--end'"
+      :style="panelStyle"
       role="dialog"
       aria-label="Color scheme picker"
     >
@@ -140,6 +187,7 @@ onBeforeUnmount(() => {
     </div>
 
     <button
+      ref="triggerElement"
       class="palette-control__trigger"
       :class="{ 'palette-control__trigger--compact': props.compact }"
       type="button"
@@ -236,6 +284,7 @@ onBeforeUnmount(() => {
 .palette-control__panel {
   position: absolute;
   bottom: calc(100% + 0.75rem);
+  left: 0;
   width: min(30rem, calc(100vw - 1.5rem));
   padding: 1rem;
   border: 1px solid var(--site-border);
@@ -243,14 +292,6 @@ onBeforeUnmount(() => {
   background: var(--site-surface-strong);
   box-shadow: var(--site-shadow-strong);
   backdrop-filter: blur(20px);
-}
-
-.palette-control__panel--start {
-  left: 0;
-}
-
-.palette-control__panel--end {
-  right: 0;
 }
 
 .palette-control__panel-head {

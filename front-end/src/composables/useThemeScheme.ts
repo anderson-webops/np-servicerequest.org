@@ -1,4 +1,4 @@
-import type { ThemeSchemeId } from '~/utils/theme'
+import type { ThemeSchemeId, ThemeSchemeOption } from '~/utils/theme'
 import { defaultThemeScheme, normalizeThemeScheme, themeSchemeOptions } from '~/utils/theme'
 
 const themeSchemeCookieName = 'np-service-request-theme-scheme'
@@ -17,9 +17,9 @@ export function useThemeScheme() {
     },
   })
 
-  const activeScheme = computed(() =>
+  const activeScheme = computed<ThemeSchemeOption>(() =>
     themeSchemeOptions.find(option => option.id === scheme.value)
-    || themeSchemeOptions[0],
+    || themeSchemeOptions[0]!,
   )
 
   return {
