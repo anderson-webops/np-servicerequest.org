@@ -3,6 +3,7 @@
 **/dist
 **/.output
 **/.nuxt
+**/*.tsbuildinfo
 .run
 
 # local env files
