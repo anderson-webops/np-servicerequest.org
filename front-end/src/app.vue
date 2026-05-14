@@ -7,6 +7,7 @@ const { activeScheme, scheme } = useThemeScheme()
 
 useHead(() => ({
   htmlAttrs: {
+    'lang': 'en',
     'data-theme-scheme': scheme.value,
   },
   title: appName,

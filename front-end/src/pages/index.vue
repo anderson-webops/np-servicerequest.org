@@ -774,13 +774,13 @@ watch(
 
         <div
           class="board-filter-strip"
-          role="tablist"
+          role="group"
           aria-label="Board filters"
         >
           <button
             v-for="filter in boardFilters"
             :key="filter.key"
-            :aria-selected="boardFilter === filter.key"
+            :aria-pressed="boardFilter === filter.key"
             :disabled="boardPending"
             class="board-filter"
             :class="[{ 'board-filter--active': boardFilter === filter.key }]"
