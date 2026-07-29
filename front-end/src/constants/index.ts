@@ -1,6 +1,6 @@
 export const appName = 'np-servicerequest.org'
 export const appDescription = 'Use the live community board to request service projects, borrow useful items, lend tools or books, and respond with or without an account.'
-export const dedicatedAnalyticsDomain = 'analytics.np-servicerequests.com'
+export const dedicatedAnalyticsDomain = 'analytics.np-servicerequest.org'
 export const dedicatedAnalyticsWebsiteId = '352127b8-0c06-43d4-bb24-dd309723660d'
 export const centralAnalyticsDomain = 'analytics.jacobdanderson.net'
 export const centralAnalyticsWebsiteId = '211385a8-e6ee-4fcf-b06e-f669a4487a82'
