@@ -1,6 +1,12 @@
 import process from 'node:process'
 
-import { analyticsDomain, analyticsWebsiteId, appDescription } from './src/constants/index'
+import {
+  appDescription,
+  centralAnalyticsDomain,
+  centralAnalyticsWebsiteId,
+  dedicatedAnalyticsDomain,
+  dedicatedAnalyticsWebsiteId,
+} from './src/constants/index'
 
 const isDev = process.env.NODE_ENV === 'development'
 const analyticsDisabled = process.env.DISABLE_ANALYTICS === 'true'
@@ -35,11 +41,18 @@ export default defineNuxtConfig({
       script: isDev
         || analyticsDisabled
         ? []
-        : [{
-            'defer': true,
-            'src': `https://${analyticsDomain}/script.js`,
-            'data-website-id': analyticsWebsiteId,
-          }],
+        : [
+            {
+              'defer': true,
+              'src': `https://${dedicatedAnalyticsDomain}/script.js`,
+              'data-website-id': dedicatedAnalyticsWebsiteId,
+            },
+            {
+              'defer': true,
+              'src': `https://${centralAnalyticsDomain}/script.js`,
+              'data-website-id': centralAnalyticsWebsiteId,
+            },
+          ],
     },
   },
 
