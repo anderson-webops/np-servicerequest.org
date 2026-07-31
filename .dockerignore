@@ -3,6 +3,7 @@
 .tmp
 .nuxt
 .output
+**/*.tsbuildinfo
 node_modules
 **/node_modules
 front-end/.nuxt

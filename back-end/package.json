@@ -14,7 +14,7 @@
 		"server": "tsx watch -r dotenv/config src/server.ts",
 		"server:once": "tsx -r dotenv/config src/server.ts",
 		"start": "node dist/server.js",
-		"build": "tsc -p tsconfig.json",
+		"build": "tsc -p tsconfig.json --incremental false",
 		"watch": "tsc -w",
 		"dev": "tsx watch -r dotenv/config src/server.ts",
 		"test": "tsx --test src/**/*.test.ts",
