@@ -30,7 +30,7 @@ RUN node -e ' \
         || !/^[0-9a-f]{40}$/.test(revision)) process.exit(1); \
     ' "$NP_RELEASE_VERSION" "$SOURCE_REVISION" \
     && npm run build \
-    && npm prune --omit=dev --workspaces
+    && npm prune --omit=dev --workspaces --ignore-scripts
 
 FROM node:24.18.1-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3 AS production-stage
 
