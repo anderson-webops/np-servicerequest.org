@@ -30,7 +30,12 @@ RUN node -e ' \
         || !/^[0-9a-f]{40}$/.test(revision)) process.exit(1); \
     ' "$NP_RELEASE_VERSION" "$SOURCE_REVISION" \
     && npm run build \
-    && npm prune --omit=dev --workspaces --ignore-scripts
+    && test -f /app/back-end/dist/server.js \
+    && test -f /app/front-end/.output/public/release.json
+
+FROM build-stage AS production-dependencies
+
+RUN npm prune --omit=dev --workspaces --ignore-scripts
 
 FROM node:24.18.1-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3 AS production-stage
 
@@ -50,7 +55,7 @@ RUN rm -rf /usr/local/lib/node_modules/npm \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx \
     && install -d -m 0700 -o node -g node /app/data
 
-COPY --from=build-stage --chown=node:node /app/node_modules ./node_modules
+COPY --from=production-dependencies --chown=node:node /app/node_modules ./node_modules
 COPY --from=build-stage --chown=node:node /app/back-end/dist ./back-end/dist
 COPY --from=build-stage --chown=node:node /app/front-end/.output/public ./front-end/public
 
