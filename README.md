@@ -8,7 +8,8 @@ This repo is based on the local `vitesse-nuxt` monorepo template, which itself w
 - `back-end`: separate Express API package
 - root `package.json`: npm workspace entrypoint
 - root `tsconfig.base.json`: shared TypeScript settings
-- root `Dockerfile` and `netlify.toml`: deploy helpers for the static front-end build
+- root `Dockerfile`: production API and generated front-end image
+- root `netlify.toml`: static front-end preview configuration
 
 ## Scripts
 
@@ -52,7 +53,10 @@ Each public board post now uses a canonical detail path at `/posts/<boardItemId>
 New posts and replies now collect structured contact details instead of one free-text field, so contributors can explicitly choose email or phone and optionally add a short contact note.
 The homepage board now supports keyword search plus server-backed sorting, including nearby sorting from a browser location origin. The dedicated submission pages save drafts in local browser storage and let posters choose per-post reply notification preferences. The public post page includes report actions for posts and replies.
 
-Set `NUXT_PUBLIC_API_BASE_URL` when the front-end should target a non-default API host. This value should be the full API base, for example `https://np-servicerequest.org/api`.
+Production uses the same-origin `/api` path by default. Set
+`NUXT_PUBLIC_API_BASE_URL` only when the front-end intentionally targets a
+different API host; use a full API base such as
+`https://np-servicerequest.org/api`.
 
 ## Back-End
 
@@ -137,10 +141,13 @@ Posts can also opt into owner reply emails on a per-post basis without turning o
 - `BOARD_EMAIL_CAPTURE_DIR` writes outgoing emails to JSON files instead of SMTP, which is useful for local development and browser E2E tests
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, and `SMTP_PASS` configure delivery when notifications are enabled
 
-### Admin Moderation
+### Account Roles
 
-Signed-in board accounts whose email addresses appear in `BOARD_ADMIN_EMAILS` are treated as admins.
-Admins can delete any board post and any board reply directly from the live board.
+Public registration always creates a member account. Email addresses do not
+grant administrator rights. Operators can preview and explicitly apply account
+promotion or demotion with `npm run roles:account`; see
+[`SECURITY.md`](SECURITY.md) for the required command and safeguards.
+Administrators can delete any board post or reply directly from the live board.
 
 ### Board Resolution States
 
@@ -150,8 +157,10 @@ Fulfilled and closed posts remain shareable and readable, but new public replies
 
 ### Admin Review API
 
-The dedicated admin review UI at `/admin` does not use the normal board account session flow.
-It sends an admin key in the `x-admin-key` header to the review API and stores that key only in browser `sessionStorage`.
+The dedicated admin review UI at `/admin` does not use the normal board account
+session flow. It exchanges an administrator key once for an eight-hour
+server-side session held in a secure, `HttpOnly`, `SameSite=Strict` cookie. The
+key is not stored by browser code, and logout revokes the server-side session.
 Rejected submissions are now soft-hidden from the public board instead of being destructively removed, and the admin UI exposes an activity log for posts, replies, reports, moderation actions, and deletions so review history stays auditable.
 
 The back-end accepts the admin key from the first configured value found in:
@@ -161,6 +170,10 @@ The back-end accepts the admin key from the first configured value found in:
 - `ADMIN_API_KEY`
 - `NP_SERVICE_REQUEST_ADMIN_KEY`
 - `SERVICEREQUEST_ADMIN_KEY`
+
+Production administrator keys must contain at least 32 characters. Browser
+requests cannot authorize by sending `x-admin-key`; that compatibility path is
+limited to deliberate non-browser operator clients.
 
 ### Bot Protection
 

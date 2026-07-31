@@ -3,14 +3,15 @@ import type { SubmissionBoardState } from './board.js'
 import type { SubmissionKind } from './submissions.js'
 
 import { Buffer } from 'node:buffer'
-import { timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { readdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { env } from 'node:process'
 
 import { listBoardActivity, recordBoardActivity } from './activity.js'
 import { describeBoardItemStatus, getBoardStateForSubmission, syncBoardItemVisibilityFromSubmissionReview } from './board.js'
-import { readJsonFile, resolveDataPath, writeJsonFile } from './data.js'
+import { readJsonFile, removeFileIfExists, resolveDataPath, writeJsonFile } from './data.js'
+import { readCookieValue } from './security.js'
 import { isSubmissionKind, submissionKinds } from './submissions.js'
 
 export const adminReviewStatuses = [
@@ -30,10 +31,6 @@ interface StoredSubmissionRecord {
   fields: Record<string, string>
   id: string
   kind: SubmissionKind
-  meta?: {
-    ip?: string
-    userAgent?: string
-  }
   review?: {
     notes?: string
     reviewedAt: string
@@ -62,10 +59,6 @@ export interface AdminSubmissionRecord {
   id: string
   kind: SubmissionKind
   kindLabel: string
-  meta: {
-    ip?: string
-    userAgent?: string
-  }
   review: {
     notes: string
     reviewedAt: string | null
@@ -192,7 +185,7 @@ const submissionFieldLabels: Record<SubmissionKind, Array<[string, string]>> = {
 }
 
 function getConfiguredAdminKeys() {
-  return [
+  return [...new Set([
     env.BOARD_ADMIN_KEY,
     env.BOARD_ADMIN_KEYS,
     env.ADMIN_API_KEY,
@@ -201,12 +194,18 @@ function getConfiguredAdminKeys() {
   ]
     .flatMap(value => (value || '').split(','))
     .map(value => value.trim())
-    .filter(Boolean)
+    .filter(Boolean))]
 }
 
 function isValidAdminReviewStatus(value: string): value is AdminReviewStatus {
   return adminReviewStatuses.includes(value as AdminReviewStatus)
 }
+
+const adminSessionDurationSeconds = 60 * 60 * 8
+const adminSessionDirectory = resolveDataPath('_board', 'admin-sessions')
+export const adminSessionCookieName = env.NODE_ENV === 'production'
+  ? '__Host-np_sr_admin_session'
+  : 'np_sr_admin_session'
 
 function createEmptyActivityCounts(): AdminActivityCounts {
   return {
@@ -233,6 +232,114 @@ function isMatchingAdminKey(candidate: string, configured: string) {
     return false
 
   return timingSafeEqual(Buffer.from(candidate), Buffer.from(configured))
+}
+
+function getAdminKeySetFingerprint() {
+  const configuredAdminKeys = getConfiguredAdminKeys()
+
+  if (!configuredAdminKeys.length)
+    throw new AdminConfigurationError('Admin review is not configured on this server.')
+
+  return createHash('sha256')
+    .update(`np-servicerequest-admin-session-v1\0${configuredAdminKeys.sort().join('\0')}`)
+    .digest('hex')
+}
+
+function getAdminSessionFilePath(tokenHash: string) {
+  if (!/^[0-9a-f]{64}$/.test(tokenHash))
+    throw new AdminAuthorizationError('Your admin session is invalid or has expired.')
+
+  return resolve(adminSessionDirectory, `${tokenHash}.json`)
+}
+
+export async function createAdminSessionToken(rawAdminKey: string) {
+  assertValidAdminKey(rawAdminKey)
+  const token = randomBytes(32).toString('hex')
+  const tokenHash = createHash('sha256').update(token).digest('hex')
+  await writeJsonFile(getAdminSessionFilePath(tokenHash), {
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + adminSessionDurationSeconds * 1000).toISOString(),
+    keySetFingerprint: getAdminKeySetFingerprint(),
+    tokenHash,
+  })
+  return token
+}
+
+export async function assertValidAdminSession(cookieHeader: string | undefined) {
+  const token = readCookieValue(cookieHeader, adminSessionCookieName)
+
+  if (!token || !/^[0-9a-f]{64}$/.test(token))
+    throw new AdminAuthorizationError('Your admin session is missing or has expired.')
+
+  const tokenHash = createHash('sha256').update(token).digest('hex')
+  const session = await readJsonFile<{
+    expiresAt: string
+    keySetFingerprint: string
+    tokenHash: string
+  }>(getAdminSessionFilePath(tokenHash))
+
+  if (!session)
+    throw new AdminAuthorizationError('Your admin session is invalid or has expired.')
+
+  const expiresAt = Date.parse(session.expiresAt)
+
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    await removeFileIfExists(getAdminSessionFilePath(tokenHash))
+    throw new AdminAuthorizationError('Your admin session is invalid or has expired.')
+  }
+
+  if (
+    typeof session.tokenHash !== 'string'
+    || typeof session.keySetFingerprint !== 'string'
+    || !isMatchingAdminKey(session.tokenHash, tokenHash)
+    || !isMatchingAdminKey(session.keySetFingerprint, getAdminKeySetFingerprint())
+  ) {
+    await removeFileIfExists(getAdminSessionFilePath(tokenHash))
+    throw new AdminAuthorizationError('Your admin session is invalid or has expired.')
+  }
+}
+
+export async function invalidateAdminSession(cookieHeader: string | undefined) {
+  const token = readCookieValue(cookieHeader, adminSessionCookieName)
+
+  if (!token || !/^[0-9a-f]{64}$/.test(token))
+    return
+
+  await removeFileIfExists(
+    getAdminSessionFilePath(createHash('sha256').update(token).digest('hex')),
+  )
+}
+
+export function createAdminSessionCookie(token: string) {
+  const segments = [
+    `${adminSessionCookieName}=${token}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Strict',
+    `Max-Age=${adminSessionDurationSeconds}`,
+    'Priority=High',
+  ]
+
+  if (env.NODE_ENV === 'production')
+    segments.push('Secure')
+
+  return segments.join('; ')
+}
+
+export function clearAdminSessionCookie() {
+  const segments = [
+    `${adminSessionCookieName}=`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Strict',
+    'Max-Age=0',
+    'Priority=High',
+  ]
+
+  if (env.NODE_ENV === 'production')
+    segments.push('Secure')
+
+  return segments.join('; ')
 }
 
 function buildFieldEntries(kind: SubmissionKind, fields: Record<string, string>) {
@@ -322,7 +429,6 @@ async function normalizeSubmissionRecord(submission: StoredSubmissionRecord, res
     id: submission.id,
     kind: submission.kind,
     kindLabel: submissionKindLabels[submission.kind],
-    meta: submission.meta || {},
     review: {
       notes: submission.review?.notes || '',
       reviewedAt: submission.review?.reviewedAt || null,
@@ -481,6 +587,9 @@ export function assertValidAdminKey(rawAdminKey: string) {
   if (!normalizedAdminKey)
     throw new AdminAuthorizationError('Enter a valid admin key to continue.')
 
+  if (env.NODE_ENV === 'production' && configuredAdminKeys.some(key => key.length < 32))
+    throw new AdminConfigurationError('Admin review requires keys of at least 32 characters.')
+
   if (!configuredAdminKeys.some(configuredAdminKey => isMatchingAdminKey(normalizedAdminKey, configuredAdminKey)))
     throw new AdminAuthorizationError('That admin key was not accepted.')
 }
@@ -539,6 +648,9 @@ export async function reviewAdminSubmission(input: {
   notes: string
   status: string
 }) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.id))
+    throw new AdminSubmissionValidationError('The submission id is invalid.')
+
   if (!isValidAdminReviewStatus(input.status))
     throw new AdminSubmissionValidationError('Choose a valid review status.')
 

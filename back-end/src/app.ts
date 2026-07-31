@@ -1,8 +1,13 @@
 import cors from 'cors'
 import express from 'express'
 import helmet from 'helmet'
+import { createHash } from 'node:crypto'
+import { readdirSync, readFileSync } from 'node:fs'
+import { extname, resolve } from 'node:path'
+import process from 'node:process'
 
 import {
+  AccountAuthenticationError,
   getViewerFromCookie,
   invalidateViewerSession,
   loginBoardAccount,
@@ -15,7 +20,12 @@ import {
   adminReviewStatuses,
   AdminSubmissionNotFoundError,
   AdminSubmissionValidationError,
+  assertValidAdminSession,
   assertValidAdminKey,
+  clearAdminSessionCookie,
+  createAdminSessionCookie,
+  createAdminSessionToken,
+  invalidateAdminSession,
   listAdminSubmissions,
   reviewAdminSubmission,
 } from './admin.js'
@@ -45,12 +55,16 @@ import {
   sendBoardOwnerReplyNotificationEmail,
 } from './notifications.js'
 import {
+  assertAllowedUnsafeRequest,
   BotProtectionError,
   clearSessionCookie,
   consumeRateLimit,
   createAntiBotChallenge,
   createSessionCookie,
+  hashRateLimitIdentifier,
+  isAllowedRequestOrigin,
   RateLimitError,
+  RequestOriginError,
   validateAntiBotPayload,
 } from './security.js'
 import { searchServiceDirectory } from './service-directory.js'
@@ -65,8 +79,54 @@ import {
 const startedAt = Date.now()
 let pageview = 0
 
-function getRequestIp(request: express.Request) {
-  return request.ip || request.socket.remoteAddress || 'unknown'
+function getRateLimitClientId(request: express.Request) {
+  return hashRateLimitIdentifier(
+    request.ip || request.socket.remoteAddress || 'unknown',
+  )
+}
+
+function getInlineScriptHashes(staticDirectory: string | undefined) {
+  if (!staticDirectory)
+    return []
+
+  const htmlFiles = listHtmlFiles(staticDirectory)
+  const hashes = new Set<string>()
+
+  for (const htmlFile of htmlFiles) {
+    const html = readFileSync(htmlFile, 'utf8')
+
+    for (const match of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/gi)) {
+      const attributes = match[1]
+      const contents = match[2]
+
+      if (
+        /\bsrc\s*=/i.test(attributes)
+        || /\btype\s*=\s*["']application\/json["']/i.test(attributes)
+        || !contents
+      ) {
+        continue
+      }
+
+      hashes.add(`'sha256-${createHash('sha256').update(contents).digest('base64')}'`)
+    }
+  }
+
+  if (!hashes.size)
+    throw new Error('The generated site does not expose the expected inline script hashes.')
+
+  return [...hashes]
+}
+
+function listHtmlFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true })
+    .flatMap((entry) => {
+      const entryPath = resolve(directory, entry.name)
+
+      if (entry.isDirectory())
+        return listHtmlFiles(entryPath)
+
+      return entry.isFile() && entry.name.endsWith('.html') ? [entryPath] : []
+    })
 }
 
 function getSingleQueryValue(value: unknown): string {
@@ -112,6 +172,14 @@ function handleApiError(response: express.Response, error: unknown) {
     return true
   }
 
+  if (error instanceof AccountAuthenticationError) {
+    response.status(401).json({
+      antiBot: createAntiBotChallenge(),
+      message: error.message,
+    })
+    return true
+  }
+
   if (error instanceof AdminConfigurationError) {
     response.status(503).json({
       message: error.message,
@@ -138,6 +206,13 @@ function handleApiError(response: express.Response, error: unknown) {
     response.setHeader('Retry-After', Math.ceil(error.retryAfterMs / 1000))
     response.status(429).json({
       antiBot: createAntiBotChallenge(),
+      message: error.message,
+    })
+    return true
+  }
+
+  if (error instanceof RequestOriginError) {
+    response.status(403).json({
       message: error.message,
     })
     return true
@@ -170,12 +245,104 @@ function handleApiError(response: express.Response, error: unknown) {
   return false
 }
 
-export function createApp() {
+async function assertAdminRequest(request: express.Request) {
+  try {
+    await assertValidAdminSession(request.get('cookie'))
+    return
+  }
+  catch (sessionError) {
+    const adminKey = request.get('x-admin-key') || ''
+
+    if (adminKey && !request.get('origin')) {
+      assertValidAdminKey(adminKey)
+      return
+    }
+
+    throw sessionError
+  }
+}
+
+export function createApp(options?: { staticDirectory?: string }) {
   const app = express()
+  const staticDirectory = options?.staticDirectory
+    ? resolve(options.staticDirectory)
+    : undefined
+  const inlineScriptHashes = getInlineScriptHashes(staticDirectory)
 
   app.disable('x-powered-by')
-  app.use(helmet({ contentSecurityPolicy: false }))
-  app.use(cors({ origin: true, credentials: true }))
+  if (process.env.NODE_ENV === 'production' && process.env.TRUST_PROXY_HOPS) {
+    const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS)
+
+    if (!Number.isInteger(trustProxyHops) || trustProxyHops < 0 || trustProxyHops > 5)
+      throw new Error('TRUST_PROXY_HOPS must be an integer from 0 through 5.')
+
+    if (trustProxyHops > 0)
+      app.set('trust proxy', trustProxyHops)
+  }
+
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        'base-uri': ['\'self\''],
+        'connect-src': [
+          '\'self\'',
+          'https://analytics.np-servicerequest.org',
+          'https://analytics.jacobdanderson.net',
+        ],
+        'default-src': ['\'self\''],
+        'font-src': ['\'self\'', 'data:'],
+        'form-action': ['\'self\''],
+        'frame-ancestors': ['\'none\''],
+        'frame-src': ['\'none\''],
+        'img-src': ['\'self\'', 'data:', 'blob:', 'https:'],
+        'media-src': ['\'self\'', 'blob:'],
+        'object-src': ['\'none\''],
+        'script-src': [
+          '\'self\'',
+          ...inlineScriptHashes,
+          'https://analytics.np-servicerequest.org',
+          'https://analytics.jacobdanderson.net',
+        ],
+        'style-src': ['\'self\'', '\'unsafe-inline\''],
+        'worker-src': ['\'self\'', 'blob:'],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+    referrerPolicy: {
+      policy: 'strict-origin-when-cross-origin',
+    },
+  }))
+  app.use((_request, response, next) => {
+    response.setHeader(
+      'Permissions-Policy',
+      'accelerometer=(), autoplay=(), camera=(), geolocation=(self), gyroscope=(), microphone=(), payment=(), usb=()',
+    )
+    next()
+  })
+  app.use(cors({
+    allowedHeaders: ['content-type', 'x-admin-key'],
+    credentials: true,
+    methods: ['GET', 'HEAD', 'POST', 'DELETE', 'OPTIONS'],
+    origin(origin, callback) {
+      callback(null, !origin || isAllowedRequestOrigin(origin))
+    },
+  }))
+  app.use((request, response, next) => {
+    try {
+      assertAllowedUnsafeRequest({
+        method: request.method,
+        origin: request.get('origin'),
+        secFetchSite: request.get('sec-fetch-site'),
+      })
+      next()
+    }
+    catch (error) {
+      if (handleApiError(response, error))
+        return
+
+      next(error)
+    }
+  })
   app.use('/api', (_request, response, next) => {
     response.setHeader('Cache-Control', 'no-store')
     next()
@@ -185,19 +352,36 @@ export function createApp() {
   app.get('/api/health', (_request, response) => {
     response.json({
       ok: true,
+      revision: process.env.SOURCE_REVISION || 'development',
       startedAt,
+      version: (process.env.NP_RELEASE_VERSION || 'development').replace(/^v/, ''),
     })
   })
 
-  app.get('/api/pageview', (_request, response) => {
-    response.json({
-      pageview: pageview++,
-      startAt: startedAt,
-    })
+  app.get('/api/pageview', (request, response) => {
+    try {
+      consumeRateLimit(`pageview:${getRateLimitClientId(request)}`, {
+        limit: 120,
+        windowMs: 1000 * 60,
+      })
+      response.json({
+        pageview: pageview++,
+        startAt: startedAt,
+      })
+    }
+    catch (error) {
+      if (!handleApiError(response, error))
+        response.status(500).json({ message: 'Unable to count that page view right now.' })
+    }
   })
 
   app.get('/api/service-directory/search', async (request, response) => {
     try {
+      consumeRateLimit(`service-directory:${getRateLimitClientId(request)}`, {
+        limit: 30,
+        windowMs: 1000 * 60 * 5,
+      })
+
       response.json(await searchServiceDirectory({
         lat: parseMaybeFloat(request.query.lat),
         lng: parseMaybeFloat(request.query.lng),
@@ -210,6 +394,9 @@ export function createApp() {
       }))
     }
     catch (error) {
+      if (handleApiError(response, error))
+        return
+
       console.error('Failed to search service directory:', error)
       response.status(500).json({
         message: 'Unable to load live service listings right now.',
@@ -217,9 +404,72 @@ export function createApp() {
     }
   })
 
+  app.get('/api/admin/session', async (request, response) => {
+    try {
+      await assertValidAdminSession(request.get('cookie'))
+      response.json({
+        authenticated: true,
+        ok: true,
+      })
+    }
+    catch (error) {
+      if (handleApiError(response, error))
+        return
+
+      response.status(500).json({
+        message: 'Unable to validate the admin session right now.',
+      })
+    }
+  })
+
+  app.post('/api/admin/session', async (request, response) => {
+    try {
+      const rawAdminKey = typeof request.body.adminKey === 'string' ? request.body.adminKey : ''
+      consumeRateLimit(`admin:session:${getRateLimitClientId(request)}`, {
+        limit: 8,
+        windowMs: 1000 * 60 * 15,
+      })
+      consumeRateLimit(`admin:key:${hashRateLimitIdentifier(rawAdminKey)}`, {
+        limit: 12,
+        windowMs: 1000 * 60 * 60,
+      })
+
+      const sessionToken = await createAdminSessionToken(rawAdminKey)
+      response.setHeader('Set-Cookie', createAdminSessionCookie(sessionToken))
+      response.json({
+        authenticated: true,
+        ok: true,
+      })
+    }
+    catch (error) {
+      if (handleApiError(response, error))
+        return
+
+      response.status(500).json({
+        message: 'Unable to start an admin session right now.',
+      })
+    }
+  })
+
+  app.delete('/api/admin/session', async (request, response) => {
+    try {
+      await invalidateAdminSession(request.get('cookie'))
+      response.setHeader('Set-Cookie', clearAdminSessionCookie())
+      response.json({
+        authenticated: false,
+        ok: true,
+      })
+    }
+    catch {
+      response.status(500).json({
+        message: 'Unable to end the admin session right now.',
+      })
+    }
+  })
+
   app.get('/api/admin/submissions', async (request, response) => {
     try {
-      assertValidAdminKey(request.get('x-admin-key') || '')
+      await assertAdminRequest(request)
 
       const reviewFilter = getSingleQueryValue(request.query.review)
       const kindFilter = getSingleQueryValue(request.query.kind)
@@ -264,7 +514,7 @@ export function createApp() {
     }
 
     try {
-      assertValidAdminKey(request.get('x-admin-key') || '')
+      await assertAdminRequest(request)
 
       response.json({
         ok: true,
@@ -343,7 +593,7 @@ export function createApp() {
     }
 
     try {
-      consumeRateLimit(`submission:${kind}:${getRequestIp(request)}`, {
+      consumeRateLimit(`submission:${kind}:${getRateLimitClientId(request)}`, {
         limit: 6,
         windowMs: 1000 * 60 * 15,
       })
@@ -353,8 +603,6 @@ export function createApp() {
       const result = await saveSubmission({
         kind,
         rawPayload: request.body,
-        ip: request.ip,
-        userAgent: request.get('user-agent'),
       })
 
       if (!result.accepted) {
@@ -433,7 +681,7 @@ export function createApp() {
 
   app.post('/api/board/items/:itemId/claim-management', async (request, response) => {
     try {
-      consumeRateLimit(`claim:item:${getRequestIp(request)}`, {
+      consumeRateLimit(`claim:item:${getRateLimitClientId(request)}`, {
         limit: 20,
         windowMs: 1000 * 60 * 60,
       })
@@ -464,7 +712,7 @@ export function createApp() {
 
   app.post('/api/board/items/:itemId/interactions', async (request, response) => {
     try {
-      consumeRateLimit(`interaction:${request.params.itemId}:${getRequestIp(request)}`, {
+      consumeRateLimit(`interaction:${request.params.itemId}:${getRateLimitClientId(request)}`, {
         limit: 10,
         windowMs: 1000 * 60 * 15,
       })
@@ -534,7 +782,7 @@ export function createApp() {
 
   app.post('/api/board/items/:itemId/contact', async (request, response) => {
     try {
-      consumeRateLimit(`contact:item:${getRequestIp(request)}`, {
+      consumeRateLimit(`contact:item:${getRateLimitClientId(request)}`, {
         limit: 12,
         windowMs: 1000 * 60 * 60,
       })
@@ -560,7 +808,7 @@ export function createApp() {
 
   app.post('/api/board/items/:itemId/report', async (request, response) => {
     try {
-      consumeRateLimit(`report:item:${getRequestIp(request)}`, {
+      consumeRateLimit(`report:item:${getRateLimitClientId(request)}`, {
         limit: 8,
         windowMs: 1000 * 60 * 60,
       })
@@ -591,7 +839,7 @@ export function createApp() {
 
   app.post('/api/board/items/:itemId/resolution', async (request, response) => {
     try {
-      consumeRateLimit(`resolution:item:${request.params.itemId}:${getRequestIp(request)}`, {
+      consumeRateLimit(`resolution:item:${request.params.itemId}:${getRateLimitClientId(request)}`, {
         limit: 12,
         windowMs: 1000 * 60 * 60,
       })
@@ -622,7 +870,7 @@ export function createApp() {
 
   app.delete('/api/board/items/:itemId', async (request, response) => {
     try {
-      consumeRateLimit(`delete:item:${getRequestIp(request)}`, {
+      consumeRateLimit(`delete:item:${getRateLimitClientId(request)}`, {
         limit: 8,
         windowMs: 1000 * 60 * 60,
       })
@@ -654,7 +902,7 @@ export function createApp() {
 
   app.post('/api/board/items/:itemId/interactions/:interactionId/contact', async (request, response) => {
     try {
-      consumeRateLimit(`contact:interaction:${getRequestIp(request)}`, {
+      consumeRateLimit(`contact:interaction:${getRateLimitClientId(request)}`, {
         limit: 12,
         windowMs: 1000 * 60 * 60,
       })
@@ -680,7 +928,7 @@ export function createApp() {
 
   app.post('/api/board/items/:itemId/interactions/:interactionId/report', async (request, response) => {
     try {
-      consumeRateLimit(`report:interaction:${getRequestIp(request)}`, {
+      consumeRateLimit(`report:interaction:${getRateLimitClientId(request)}`, {
         limit: 8,
         windowMs: 1000 * 60 * 60,
       })
@@ -712,7 +960,7 @@ export function createApp() {
 
   app.delete('/api/board/items/:itemId/interactions/:interactionId', async (request, response) => {
     try {
-      consumeRateLimit(`delete:interaction:${getRequestIp(request)}`, {
+      consumeRateLimit(`delete:interaction:${getRateLimitClientId(request)}`, {
         limit: 12,
         windowMs: 1000 * 60 * 60,
       })
@@ -745,7 +993,7 @@ export function createApp() {
 
   app.post('/api/board/account/register', async (request, response) => {
     try {
-      consumeRateLimit(`account:register:${getRequestIp(request)}`, {
+      consumeRateLimit(`account:register:${getRateLimitClientId(request)}`, {
         limit: 5,
         windowMs: 1000 * 60 * 15,
       })
@@ -757,6 +1005,7 @@ export function createApp() {
         password: typeof request.body.password === 'string' ? request.body.password : '',
       })
 
+      await invalidateViewerSession(request.get('cookie'))
       response.setHeader('Set-Cookie', createSessionCookie(account.sessionToken))
       response.status(201).json({
         antiBot: createAntiBotChallenge(),
@@ -778,17 +1027,23 @@ export function createApp() {
 
   app.post('/api/board/account/login', async (request, response) => {
     try {
-      consumeRateLimit(`account:login:${getRequestIp(request)}`, {
+      const loginEmail = typeof request.body.email === 'string' ? request.body.email : ''
+      consumeRateLimit(`account:login:${getRateLimitClientId(request)}`, {
         limit: 8,
         windowMs: 1000 * 60 * 15,
+      })
+      consumeRateLimit(`account:login-email:${hashRateLimitIdentifier(loginEmail)}`, {
+        limit: 12,
+        windowMs: 1000 * 60 * 60,
       })
       validateAntiBotPayload(request.body)
 
       const account = await loginBoardAccount({
-        email: typeof request.body.email === 'string' ? request.body.email : '',
+        email: loginEmail,
         password: typeof request.body.password === 'string' ? request.body.password : '',
       })
 
+      await invalidateViewerSession(request.get('cookie'))
       response.setHeader('Set-Cookie', createSessionCookie(account.sessionToken))
       response.json({
         antiBot: createAntiBotChallenge(),
@@ -814,6 +1069,59 @@ export function createApp() {
     response.json({
       antiBot: createAntiBotChallenge(),
       ok: true,
+    })
+  })
+
+  app.use('/api', (_request, response) => {
+    response.status(404).json({
+      message: 'That API route does not exist.',
+    })
+  })
+
+  if (staticDirectory) {
+    app.use(express.static(staticDirectory, {
+      index: 'index.html',
+      setHeaders(response, filePath) {
+        const extension = extname(filePath)
+
+        if (extension === '.html' || filePath.endsWith('release.json')) {
+          response.setHeader('Cache-Control', 'no-store')
+          return
+        }
+
+        if (filePath.includes('/_nuxt/'))
+          response.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+        else
+          response.setHeader('Cache-Control', 'public, max-age=3600')
+      },
+    }))
+    app.use((request, response, next) => {
+      if (!['GET', 'HEAD'].includes(request.method)) {
+        next()
+        return
+      }
+
+      response.setHeader('Cache-Control', 'no-store')
+      response.sendFile('200.html', {
+        root: staticDirectory,
+      }, (error) => {
+        if (error)
+          next(error)
+      })
+    })
+  }
+
+  app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
+    if (error instanceof SyntaxError) {
+      response.status(400).json({
+        message: 'The request body is not valid JSON.',
+      })
+      return
+    }
+
+    console.error('Unhandled API request error:', error)
+    response.status(500).json({
+      message: 'The server could not complete that request.',
     })
   })
 

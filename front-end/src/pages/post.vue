@@ -19,6 +19,7 @@ import type { BoardFormErrorState, BoardFormStatus, BoardReplyDraft } from '~/ut
 import { isAntiBotChallenge, isAntiBotChallengeExpired, markAntiBotChallengeObserved, waitForAntiBotChallengeMinimumAge } from '~/utils/antiBot'
 import { boardReportReasonOptions, forgetBoardDeleteToken, getBoardEndpoint, getStoredBoardDeleteToken, rememberBoardDeleteToken } from '~/utils/board'
 import { formatBoardDate, getBoardApiErrorState, getBoardDetailPath, getContactActionLabel, getInteractionDeleteKey, getReplyActionLabel, getRevealKey } from '~/utils/boardUi'
+import { consumePendingManagementClaim } from '~/utils/managementLink'
 import {
   boardContactMethodOptions,
   getBoardContactValueAutocomplete,
@@ -29,7 +30,6 @@ import {
 } from '~/utils/contact'
 
 definePageMeta({
-  alias: ['/posts/:id'],
   layout: 'home',
 })
 
@@ -758,8 +758,12 @@ onMounted(() => {
     itemError.value = { detail: 'Add a valid board post id to the URL and try again.', message: 'No board post was selected.' }
   }
 
-  if (routeItemId.value && routeManagementToken.value)
-    void claimBoardManagementLink(routeItemId.value, routeManagementToken.value)
+  const pendingManagementClaim = consumePendingManagementClaim()
+  const managementItemId = pendingManagementClaim?.itemId || routeItemId.value
+  const managementToken = pendingManagementClaim?.managementToken || routeManagementToken.value
+
+  if (managementItemId && managementToken)
+    void claimBoardManagementLink(managementItemId, managementToken)
 })
 
 watch(routeItemId, (nextItemId, previousItemId) => {

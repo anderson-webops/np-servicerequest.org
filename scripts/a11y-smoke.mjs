@@ -22,9 +22,13 @@ const baseUrl = `http://127.0.0.1:${frontendPort}`
 const apiUrl = `http://127.0.0.1:${apiPort}/api`
 const routes = [
   '/',
+  '/account',
+  '/admin',
   '/help',
+  '/post',
   '/service-request',
   '/item-request',
+  '/item-lending',
   '/service-directory',
   '/service-search',
 ]
@@ -76,8 +80,86 @@ function emptyCollection() {
 
 function responseFor(url) {
   const pathname = url.pathname.replace(/\/+/g, '/')
+  const antiBot = {
+    action: 'board',
+    issuedAt: Date.now() - 2_000,
+    token: 'a11y-test-token',
+  }
+  const pagination = {
+    hasNextPage: false,
+    hasPreviousPage: false,
+    page: 1,
+    pageSize: 12,
+    totalItems: 0,
+    totalPages: 1,
+  }
+
   if (pathname.endsWith('/pageview'))
     return { pageview: 0, startAt: Date.now() }
+  if (pathname.endsWith('/board/bootstrap'))
+    return { antiBot, viewer: null }
+  if (pathname.endsWith('/board/items')) {
+    return {
+      counts: {
+        'all': 0,
+        'item-lending': 0,
+        'item-request': 0,
+        'service-request': 0,
+      },
+      items: [],
+      pagination,
+    }
+  }
+  if (pathname.endsWith('/service-directory/search')) {
+    return {
+      pagination,
+      provider: {
+        configured: false,
+        id: 'idealist',
+        lastAttemptedAt: null,
+        lastError: null,
+        lastSyncedAt: null,
+        listingCount: 0,
+        message: 'Live provider disabled for accessibility checks.',
+        sourceUrl: 'https://www.idealist.org/en/open-network-api',
+        syncState: 'unconfigured',
+      },
+      query: '',
+      results: [],
+    }
+  }
+  if (pathname.endsWith('/admin/submissions')) {
+    return {
+      activity: [],
+      activityCounts: {
+        deletions: 0,
+        moderation: 0,
+        posts: 0,
+        reports: 0,
+        replies: 0,
+        total: 0,
+      },
+      activityPagination: pagination,
+      counts: {
+        approved: 0,
+        needsFollowUp: 0,
+        pending: 0,
+        rejected: 0,
+        total: 0,
+      },
+      kindCounts: {
+        'all': 0,
+        'item-lending': 0,
+        'item-request': 0,
+        'service-request': 0,
+      },
+      ok: true,
+      submissions: [],
+      submissionsPagination: pagination,
+    }
+  }
+  if (pathname.endsWith('/admin/session'))
+    return { authenticated: true, ok: true }
   if (pathname.includes('/session'))
     return { authenticated: false, user: null, admin: null }
   if (pathname.includes('/auth') || pathname.includes('/login'))
@@ -214,11 +296,12 @@ function waitForProcessExit(child, timeoutMs) {
     return Promise.resolve(true)
 
   return new Promise((resolveWait) => {
+    let timeout
     const onExit = () => {
       clearTimeout(timeout)
       resolveWait(true)
     }
-    const timeout = setTimeout(() => {
+    timeout = setTimeout(() => {
       child.off('exit', onExit)
       resolveWait(false)
     }, timeoutMs)
@@ -256,6 +339,12 @@ async function stopProcessTree(child) {
 async function analyzePage(browser, route, scheme) {
   const url = `${baseUrl}${route}`
   const page = await browser.newPage()
+  const runtimeErrors = []
+  page.on('pageerror', error => runtimeErrors.push(error.message))
+  page.on('console', (message) => {
+    if (message.type() === 'error')
+      runtimeErrors.push(message.text())
+  })
   page.setDefaultTimeout(30_000)
   await page.setViewport({ width: 1280, height: 1000, deviceScaleFactor: 1 })
   if (scheme === 'dark' || scheme === 'light') {
@@ -275,6 +364,7 @@ async function analyzePage(browser, route, scheme) {
   })
   await page.close()
   return {
+    runtimeErrors,
     url,
     scheme,
     violations: result.violations.filter(violation => violation.id !== 'frame-tested'),
@@ -299,7 +389,7 @@ try {
   for (const route of routes) {
     for (const scheme of colorSchemes) {
       const result = await analyzePage(browser, route, scheme)
-      if (result.violations.length) {
+      if (result.violations.length || result.runtimeErrors.length) {
         failures.push(result)
         continue
       }
@@ -317,6 +407,8 @@ try {
           console.error(`  ${node.target.join(', ')}`)
         }
       }
+      for (const runtimeError of failure.runtimeErrors)
+        console.error(`- [runtime] ${runtimeError}`)
     }
     process.exitCode = 1
   }

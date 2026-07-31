@@ -6,3 +6,12 @@ export function getApiEndpoint(apiBaseUrl: string, path: string) {
     ? `${normalizedBaseUrl}/${normalizedPath}`
     : normalizedBaseUrl
 }
+
+export function withApiQuery(endpoint: string, searchParams: URLSearchParams) {
+  const query = searchParams.toString()
+
+  if (!query)
+    return endpoint
+
+  return `${endpoint}${endpoint.includes('?') ? '&' : '?'}${query}`
+}

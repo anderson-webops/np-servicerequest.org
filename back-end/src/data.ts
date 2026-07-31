@@ -1,21 +1,51 @@
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { randomBytes } from 'node:crypto'
+import { chmod, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, resolve } from 'node:path'
-import { env } from 'node:process'
+import { dirname, resolve, sep } from 'node:path'
+import { env, pid } from 'node:process'
 
 const defaultDataDirectory = resolve(tmpdir(), 'np-servicerequest', 'submissions')
 
 export function getDataRoot() {
-  return env.SUBMISSIONS_DATA_DIR || defaultDataDirectory
+  return resolve(env.SUBMISSIONS_DATA_DIR || defaultDataDirectory)
 }
 
 export function resolveDataPath(...segments: string[]) {
-  return resolve(getDataRoot(), ...segments)
+  const dataRoot = getDataRoot()
+  const resolvedPath = resolve(dataRoot, ...segments)
+
+  if (resolvedPath !== dataRoot && !resolvedPath.startsWith(`${dataRoot}${sep}`))
+    throw new Error('Refusing to resolve a path outside the configured data directory.')
+
+  return resolvedPath
+}
+
+export async function ensurePrivateDirectory(directory: string) {
+  await mkdir(directory, { mode: 0o700, recursive: true })
+  await chmod(directory, 0o700)
 }
 
 export async function writeJsonFile(filePath: string, data: unknown) {
-  await mkdir(dirname(filePath), { recursive: true })
-  await writeFile(filePath, `${JSON.stringify(data, null, 2)}\n`, 'utf8')
+  const directory = dirname(filePath)
+  const temporaryPath = `${filePath}.${pid}.${randomBytes(8).toString('hex')}.tmp`
+  await ensurePrivateDirectory(directory)
+
+  try {
+    await writeFile(
+      temporaryPath,
+      `${JSON.stringify(data, null, 2)}\n`,
+      {
+        encoding: 'utf8',
+        flag: 'wx',
+        mode: 0o600,
+      },
+    )
+    await rename(temporaryPath, filePath)
+  }
+  catch (error) {
+    await rm(temporaryPath, { force: true }).catch(() => {})
+    throw error
+  }
 }
 
 export async function readJsonFile<T>(filePath: string) {

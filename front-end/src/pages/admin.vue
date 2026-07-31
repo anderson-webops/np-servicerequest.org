@@ -6,17 +6,14 @@ import type {
   AdminPagination,
   AdminReviewResponse,
   AdminReviewStatus,
+  AdminSessionResponse,
   AdminSubmissionCounts,
   AdminSubmissionRecord,
   AdminSubmissionsResponse,
 } from '~/utils/admin'
 import type { SubmissionKind } from '~/utils/submissions'
-import {
-  clearStoredAdminKey,
-  getAdminEndpoint,
-  readStoredAdminKey,
-  writeStoredAdminKey,
-} from '~/utils/admin'
+import { getAdminEndpoint } from '~/utils/admin'
+import { withApiQuery } from '~/utils/api'
 
 interface FormErrorState {
   detail: string
@@ -96,7 +93,7 @@ const router = useRouter()
 
 const hasHydrated = ref(false)
 const adminKeyInput = ref('')
-const activeAdminKey = ref('')
+const adminSessionActive = ref(false)
 const authPending = ref(false)
 const loadPending = ref(false)
 const refreshPending = ref(false)
@@ -126,7 +123,7 @@ const reviewErrors = reactive<Record<string, FormErrorState | null>>({})
 const reviewNotices = reactive<Record<string, string>>({})
 const notesDrafts = reactive<Record<string, string>>({})
 
-const isAuthenticated = computed(() => Boolean(activeAdminKey.value))
+const isAuthenticated = computed(() => adminSessionActive.value)
 const visibleSubmissions = computed(() => submissions.value)
 
 const statusFilters = computed(() => [
@@ -358,8 +355,7 @@ function getReviewButtonLabel(submissionId: string, baseLabel: string) {
 }
 
 function clearAdminSession() {
-  clearStoredAdminKey()
-  activeAdminKey.value = ''
+  adminSessionActive.value = false
   counts.value = { ...emptyCounts }
   kindCounts.value = { ...emptyKindCounts }
   activityCounts.value = { ...emptyActivityCounts }
@@ -454,49 +450,36 @@ function getApiErrorState(
   }
 }
 
-async function loadAdminSubmissions(
-  candidateKey = activeAdminKey.value,
-  options?: {
-    authAttempt?: boolean
-    background?: boolean
-    showSessionNotice?: boolean
-  },
-) {
-  const endpoint = new URL(
-    getAdminEndpoint(runtimeConfig.public.apiBaseUrl, 'submissions'),
-  )
-  endpoint.searchParams.set('review', reviewFilter.value)
-  endpoint.searchParams.set('kind', kindFilter.value)
-  endpoint.searchParams.set('activityCategory', activityFilter.value)
-  endpoint.searchParams.set(
+async function loadAdminSubmissions(options?: {
+  background?: boolean
+  showSessionNotice?: boolean
+}) {
+  const searchParams = new URLSearchParams()
+  searchParams.set('review', reviewFilter.value)
+  searchParams.set('kind', kindFilter.value)
+  searchParams.set('activityCategory', activityFilter.value)
+  searchParams.set(
     'submissionsPage',
     String(submissionsPagination.value.page),
   )
-  endpoint.searchParams.set(
+  searchParams.set(
     'submissionsPageSize',
     String(submissionsPagination.value.pageSize),
   )
-  endpoint.searchParams.set(
+  searchParams.set(
     'activityPage',
     String(activityPagination.value.page),
   )
-  endpoint.searchParams.set(
+  searchParams.set(
     'activityPageSize',
     String(activityPagination.value.pageSize),
   )
-  const normalizedKey = candidateKey.trim()
-
-  if (!normalizedKey) {
-    const nextError = {
-      message: 'Enter an admin key to continue.',
-      detail: 'This page does not use the normal board account sign-in.',
-    }
-
-    if (options?.authAttempt)
-      authError.value = nextError
-
+  const endpoint = withApiQuery(
+    getAdminEndpoint(runtimeConfig.public.apiBaseUrl, 'submissions'),
+    searchParams,
+  )
+  if (!adminSessionActive.value)
     return
-  }
 
   const useBackgroundRefresh = Boolean(options?.background)
 
@@ -508,16 +491,25 @@ async function loadAdminSubmissions(
 
   try {
     const response = await $fetch<AdminSubmissionsResponse>(
-      endpoint.toString(),
+      endpoint,
       {
-        headers: {
-          'x-admin-key': normalizedKey,
-        },
+        credentials: 'include',
       },
     )
 
-    activeAdminKey.value = normalizedKey
-    writeStoredAdminKey(normalizedKey)
+    if (
+      !response
+      || !Array.isArray(response.activity)
+      || !Array.isArray(response.submissions)
+      || !response.counts
+      || !response.kindCounts
+      || !response.activityCounts
+      || !response.activityPagination
+      || !response.submissionsPagination
+    ) {
+      throw new TypeError('The admin API returned an invalid response.')
+    }
+
     counts.value = response.counts
     kindCounts.value = response.kindCounts
     activityEntries.value = response.activity
@@ -530,13 +522,13 @@ async function loadAdminSubmissions(
     authError.value = null
     if (options?.showSessionNotice !== false) {
       authNotice.value
-        = 'Admin key accepted. It is stored only in this browser session.'
+        = 'Admin key accepted. A protected, temporary admin session is active.'
     }
   }
   catch (error) {
     const errorState = getApiErrorState(
       error,
-      endpoint.toString(),
+      endpoint,
       'Unable to load admin submissions right now.',
     )
 
@@ -553,9 +545,7 @@ async function loadAdminSubmissions(
       return
     }
 
-    if (options?.authAttempt)
-      authError.value = errorState
-    else dataError.value = errorState
+    dataError.value = errorState
   }
   finally {
     if (useBackgroundRefresh)
@@ -570,19 +560,54 @@ async function submitAdminKey() {
   authError.value = null
 
   try {
-    await loadAdminSubmissions(adminKeyInput.value, { authAttempt: true })
+    const endpoint = getAdminEndpoint(runtimeConfig.public.apiBaseUrl, 'session')
+    const response = await $fetch<AdminSessionResponse>(endpoint, {
+      body: {
+        adminKey: adminKeyInput.value,
+      },
+      credentials: 'include',
+      method: 'POST',
+    })
+
+    if (!response.authenticated)
+      throw new TypeError('The admin session was not established.')
+
+    adminSessionActive.value = true
+    adminKeyInput.value = ''
+    await loadAdminSubmissions()
+  }
+  catch (error) {
+    authError.value = getApiErrorState(
+      error,
+      getAdminEndpoint(runtimeConfig.public.apiBaseUrl, 'session'),
+      'Unable to start an admin session right now.',
+    )
+    clearAdminSession()
   }
   finally {
     authPending.value = false
   }
 }
 
-function signOutAdmin() {
-  clearAdminSession()
-  adminKeyInput.value = ''
-  authNotice.value = ''
-  dataError.value = null
-  authError.value = null
+async function signOutAdmin() {
+  try {
+    await $fetch<AdminSessionResponse>(
+      getAdminEndpoint(runtimeConfig.public.apiBaseUrl, 'session'),
+      {
+        credentials: 'include',
+        method: 'DELETE',
+      },
+    )
+  }
+  finally {
+    clearAdminSession()
+    adminKeyInput.value = ''
+    authNotice.value = ''
+    dataError.value = null
+    authError.value = null
+    await nextTick()
+    adminKeyField.value?.focus()
+  }
 }
 
 function setReviewFilter(nextFilter: ReviewFilter) {
@@ -670,13 +695,11 @@ async function saveReview(
         notes: notesDrafts[submission.id] || '',
         status,
       },
-      headers: {
-        'x-admin-key': activeAdminKey.value,
-      },
+      credentials: 'include',
       method: 'POST',
     })
 
-    await loadAdminSubmissions(activeAdminKey.value, {
+    await loadAdminSubmissions({
       background: true,
       showSessionNotice: false,
     })
@@ -726,18 +749,28 @@ async function saveReview(
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   hasHydrated.value = true
   syncAdminStateFromRoute()
 
-  const storedAdminKey = readStoredAdminKey()
+  try {
+    const response = await $fetch<AdminSessionResponse>(
+      getAdminEndpoint(runtimeConfig.public.apiBaseUrl, 'session'),
+      {
+        credentials: 'include',
+      },
+    )
 
-  if (!storedAdminKey) {
-    adminKeyField.value?.focus()
-    return
+    if (!response.authenticated)
+      throw new TypeError('No active admin session.')
+
+    adminSessionActive.value = true
+    await loadAdminSubmissions({ showSessionNotice: false })
   }
-
-  void loadAdminSubmissions(storedAdminKey, { showSessionNotice: false })
+  catch {
+    clearAdminSession()
+    adminKeyField.value?.focus()
+  }
 })
 
 watch(
@@ -755,7 +788,7 @@ watch(
     const changed = syncAdminStateFromRoute()
 
     if (changed && isAuthenticated.value) {
-      void loadAdminSubmissions(activeAdminKey.value, {
+      void loadAdminSubmissions({
         background: true,
         showSessionNotice: false,
       })
@@ -793,7 +826,7 @@ watch(
         <h2>This is not the optional account sign-in.</h2>
         <ul class="admin-page__list">
           <li>Use the admin key here, not the public account login.</li>
-          <li>The key stays only for the current browser session.</li>
+          <li>The key is exchanged for an HttpOnly, eight-hour session and is not stored by this page.</li>
           <li>Sign out here when you are done reviewing.</li>
         </ul>
       </div>
@@ -843,7 +876,7 @@ watch(
               Admin session
             </p>
             <strong>Key accepted</strong>
-            <small>Stored only for this browser session.</small>
+            <small>Protected temporary session active.</small>
           </div>
 
           <button class="secondary-button" type="button" @click="signOutAdmin">
@@ -871,13 +904,13 @@ watch(
       <div class="admin-review__filters">
         <div
           class="filter-strip"
-          role="tablist"
+          role="group"
           aria-label="Review status filters"
         >
           <button
             v-for="filter in statusFilters"
             :key="filter.key"
-            :aria-selected="reviewFilter === filter.key"
+            :aria-pressed="reviewFilter === filter.key"
             class="filter-chip"
             :class="{ 'filter-chip--active': reviewFilter === filter.key }"
             type="button"
@@ -890,13 +923,13 @@ watch(
 
         <div
           class="filter-strip"
-          role="tablist"
+          role="group"
           aria-label="Submission type filters"
         >
           <button
             v-for="filter in kindFilters"
             :key="filter.key"
-            :aria-selected="kindFilter === filter.key"
+            :aria-pressed="kindFilter === filter.key"
             class="filter-chip"
             :class="{ 'filter-chip--active': kindFilter === filter.key }"
             type="button"
@@ -978,14 +1011,6 @@ watch(
               <dd>{{ entry.value }}</dd>
             </div>
           </dl>
-
-          <div
-            v-if="submission.meta.ip || submission.meta.userAgent"
-            class="admin-card__meta-note"
-          >
-            <span v-if="submission.meta.ip">IP: {{ submission.meta.ip }}</span>
-            <span v-if="submission.meta.userAgent">User agent: {{ submission.meta.userAgent }}</span>
-          </div>
 
           <label class="field field--wide">
             <span>Admin notes</span>
@@ -1085,11 +1110,11 @@ watch(
       </div>
 
       <div class="admin-review__filters">
-        <div class="filter-strip" role="tablist" aria-label="Activity filters">
+        <div class="filter-strip" role="group" aria-label="Activity filters">
           <button
             v-for="filter in activityFilters"
             :key="filter.key"
-            :aria-selected="activityFilter === filter.key"
+            :aria-pressed="activityFilter === filter.key"
             class="filter-chip"
             :class="{ 'filter-chip--active': activityFilter === filter.key }"
             type="button"

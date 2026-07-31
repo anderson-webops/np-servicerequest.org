@@ -1,6 +1,21 @@
 [build]
 publish = "front-end/.output/public"
-command = "npm run -w front-end build"
+command = "npm run build:netlify"
 
 [build.environment]
-NODE_VERSION = "24.18.0"
+NODE_VERSION = "24.18.1"
+NPM_VERSION = "12.0.2"
+PUPPETEER_SKIP_DOWNLOAD = "true"
+
+[[headers]]
+for = "/*"
+
+[headers.values]
+Cache-Control = "no-store"
+Cross-Origin-Opener-Policy = "same-origin"
+Cross-Origin-Resource-Policy = "same-origin"
+Permissions-Policy = "accelerometer=(), autoplay=(), camera=(), geolocation=(self), gyroscope=(), microphone=(), payment=(), usb=()"
+Referrer-Policy = "strict-origin-when-cross-origin"
+Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+X-Content-Type-Options = "nosniff"
+X-Frame-Options = "DENY"

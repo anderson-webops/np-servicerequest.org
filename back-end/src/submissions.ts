@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { env } from 'node:process'
 
 import { normalizeStructuredContact } from './contact.js'
+import { ensurePrivateDirectory, writeJsonFile } from './data.js'
 
 const defaultSubmissionsDirectory = resolve(tmpdir(), 'np-servicerequest', 'submissions')
 
@@ -51,10 +52,8 @@ export class AccountValidationError extends Error {
 }
 
 export interface SaveSubmissionInput {
-  ip?: string
   kind: SubmissionKind
   rawPayload: unknown
-  userAgent?: string
 }
 
 export interface SaveSubmissionResult {
@@ -72,10 +71,6 @@ interface StoredSubmission {
   fields: Record<string, string>
   id: string
   kind: SubmissionKind
-  meta: {
-    ip?: string
-    userAgent?: string
-  }
 }
 
 export function isSubmissionKind(value: string): value is SubmissionKind {
@@ -172,7 +167,7 @@ function buildSubmissionFileName(createdAt: string, id: string) {
 
 async function findStoredSubmissionFile(kind: SubmissionKind, submissionId: string) {
   const submissionDirectory = buildSubmissionDirectory(kind)
-  await mkdir(submissionDirectory, { recursive: true })
+  await ensurePrivateDirectory(submissionDirectory)
   const fileNames = await readdir(submissionDirectory)
 
   for (const fileName of fileNames) {
@@ -217,19 +212,14 @@ export async function saveSubmission(input: SaveSubmissionInput): Promise<SaveSu
     kind: input.kind,
     createdAt,
     fields,
-    meta: {
-      ip: input.ip,
-      userAgent: input.userAgent,
-    },
   }
 
   const submissionDirectory = buildSubmissionDirectory(input.kind)
 
-  await mkdir(submissionDirectory, { recursive: true })
-  await writeFile(
+  await ensurePrivateDirectory(submissionDirectory)
+  await writeJsonFile(
     resolve(submissionDirectory, buildSubmissionFileName(createdAt, id)),
-    `${JSON.stringify(submission, null, 2)}\n`,
-    'utf8',
+    submission,
   )
 
   return {
@@ -250,16 +240,15 @@ export async function attachBoardItemToSubmission(input: {
   if (!storedSubmission)
     return false
 
-  await writeFile(
+  await writeJsonFile(
     storedSubmission.filePath,
-    `${JSON.stringify({
+    {
       ...storedSubmission.submission,
       board: {
         ...storedSubmission.submission.board,
         itemId: input.itemId,
       },
-    }, null, 2)}\n`,
-    'utf8',
+    },
   )
 
   return true

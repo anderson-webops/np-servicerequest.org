@@ -4,7 +4,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 
-const apiBaseUrl = 'http://127.0.0.1:3006/api'
+const apiBaseUrl = 'http://127.0.0.1:3333/api'
 const emailCaptureDirectory = join(process.cwd(), '.tmp/e2e/email-capture')
 
 function sleep(ms: number) {
@@ -76,6 +76,39 @@ function extractFirstUrl(text: string) {
 
   return match[0]
 }
+
+test('member registration, logout, and login preserve a non-admin identity and strict session cookie', async ({ context, page }) => {
+  const email = `member-flow-${Date.now()}@example.com`
+  const password = 'member-flow-password'
+
+  await page.goto('/account', { waitUntil: 'commit' })
+  await waitForAntiBotWindow()
+  await page.getByLabel('Display name').fill('Member Flow')
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Password').fill(password)
+  await page.getByRole('button', { name: 'Create optional account' }).click()
+
+  await expect(page.getByText('Account ready.')).toBeVisible()
+  await expect(page.getByText('Member Flow')).toBeVisible()
+  await expect(page.getByText('Admin tools active')).toHaveCount(0)
+
+  const sessionCookie = (await context.cookies()).find(cookie =>
+    cookie.name === 'np_sr_session')
+  expect(sessionCookie?.httpOnly).toBeTruthy()
+  expect(sessionCookie?.sameSite).toBe('Strict')
+
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await expect(page.getByText('Signed out.')).toBeVisible()
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  await waitForAntiBotWindow()
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Password').fill(password)
+  await page.getByRole('button', { name: 'Sign in', exact: true }).last().click()
+
+  await expect(page.getByText('Signed in.')).toBeVisible()
+  await expect(page.getByText('Member Flow')).toBeVisible()
+  await expect(page.getByText('Admin tools active')).toHaveCount(0)
+})
 
 test('anonymous posters can use the path-style detail route, reclaim management via email, reveal contact, receive replies, and delete the post', async ({ browser, page, request }) => {
   const ownerEmail = 'owner-flow@example.com'

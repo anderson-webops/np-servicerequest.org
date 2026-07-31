@@ -5,6 +5,7 @@ import type {
   ServiceDirectorySearchResponse,
   ServiceGeoPoint,
 } from '~/utils/serviceDirectory'
+import { withApiQuery } from '~/utils/api'
 
 import {
   findKnownPlace,
@@ -151,33 +152,46 @@ async function runProviderSearch(options?: {
   providerError.value = ''
 
   try {
-    const endpoint = new URL(
-      getServiceDirectoryEndpoint(runtimeConfig.public.apiBaseUrl),
-    )
+    const searchParams = new URLSearchParams()
 
-    endpoint.searchParams.set('provider', 'idealist')
-    endpoint.searchParams.set('query', locationQuery.value.trim())
-    endpoint.searchParams.set('radiusMiles', String(radiusMiles.value))
-    endpoint.searchParams.set(
+    searchParams.set('provider', 'idealist')
+    searchParams.set('query', locationQuery.value.trim())
+    searchParams.set('radiusMiles', String(radiusMiles.value))
+    searchParams.set(
       'page',
       String(options?.page || providerPagination.value.page || 1),
     )
-    endpoint.searchParams.set(
+    searchParams.set(
       'pageSize',
       String(providerPagination.value.pageSize),
     )
 
     if (activeOrigin.value) {
-      endpoint.searchParams.set('lat', String(activeOrigin.value.lat))
-      endpoint.searchParams.set('lng', String(activeOrigin.value.lng))
+      searchParams.set('lat', String(activeOrigin.value.lat))
+      searchParams.set('lng', String(activeOrigin.value.lng))
     }
 
     if (options?.refresh)
-      endpoint.searchParams.set('refresh', 'true')
+      searchParams.set('refresh', 'true')
 
     const response = await $fetch<ServiceDirectorySearchResponse>(
-      endpoint.toString(),
+      withApiQuery(
+        getServiceDirectoryEndpoint(runtimeConfig.public.apiBaseUrl),
+        searchParams,
+      ),
     )
+
+    if (
+      !response
+      || !Array.isArray(response.results)
+      || !response.pagination
+      || typeof response.pagination !== 'object'
+      || !response.provider
+      || typeof response.provider !== 'object'
+    ) {
+      throw new TypeError('The service directory API returned an invalid response.')
+    }
+
     providerResults.value = response.results
     providerPagination.value = response.pagination
     providerStatus.value = response.provider

@@ -2,14 +2,29 @@ import { Buffer } from 'node:buffer'
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { env } from 'node:process'
 
-const antiBotSecret = env.ANTI_BOT_SECRET || randomBytes(32).toString('hex')
+const configuredAntiBotSecret = env.ANTI_BOT_SECRET?.trim() || ''
+
+if (env.NODE_ENV === 'production' && configuredAntiBotSecret.length < 32)
+  throw new Error('ANTI_BOT_SECRET must contain at least 32 characters in production.')
+
+const antiBotSecret = configuredAntiBotSecret || randomBytes(32).toString('hex')
 const antiBotMinAgeMs = 1200
 const antiBotMaxAgeMs = 1000 * 60 * 60 * 12
-const sessionDurationSeconds = 60 * 60 * 24 * 30
+const sessionDurationSeconds = 60 * 60 * 24 * 7
+const rateLimitBucketLimit = 10_000
 
-const requestBuckets = new Map<string, number[]>()
+interface RequestBucket {
+  lastSeenAt: number
+  timestamps: number[]
+  windowMs: number
+}
 
-export const sessionCookieName = 'np_sr_session'
+const requestBuckets = new Map<string, RequestBucket>()
+let lastRateLimitPruneAt = 0
+
+export const sessionCookieName = env.NODE_ENV === 'production'
+  ? '__Host-np_sr_session'
+  : 'np_sr_session'
 
 export interface AntiBotChallenge {
   action: string
@@ -34,6 +49,13 @@ export class RateLimitError extends Error {
   }
 }
 
+export class RequestOriginError extends Error {
+  constructor(message = 'This request did not come from an allowed site origin.') {
+    super(message)
+    this.name = 'RequestOriginError'
+  }
+}
+
 function signChallenge(action: string, issuedAt: number) {
   return createHmac('sha256', antiBotSecret)
     .update(`${action}:${issuedAt}`)
@@ -48,7 +70,7 @@ function getObjectValue(payload: unknown, key: string) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function isSafeEqual(left: string, right: string) {
+export function isSafeEqual(left: string, right: string) {
   const leftBuffer = Buffer.from(left)
   const rightBuffer = Buffer.from(right)
 
@@ -98,7 +120,8 @@ export function validateAntiBotPayload(payload: unknown, action = 'board') {
 export function consumeRateLimit(key: string, options: { limit: number, windowMs: number }) {
   const now = Date.now()
   const windowStart = now - options.windowMs
-  const timestamps = (requestBuckets.get(key) || []).filter(timestamp => timestamp >= windowStart)
+  pruneRateLimitBuckets(now)
+  const timestamps = (requestBuckets.get(key)?.timestamps || []).filter(timestamp => timestamp >= windowStart)
 
   if (timestamps.length >= options.limit) {
     const retryAfterMs = options.windowMs - (now - timestamps[0])
@@ -106,7 +129,32 @@ export function consumeRateLimit(key: string, options: { limit: number, windowMs
   }
 
   timestamps.push(now)
-  requestBuckets.set(key, timestamps)
+  requestBuckets.set(key, {
+    lastSeenAt: now,
+    timestamps,
+    windowMs: options.windowMs,
+  })
+}
+
+function pruneRateLimitBuckets(now: number) {
+  if (now - lastRateLimitPruneAt < 60_000 && requestBuckets.size < rateLimitBucketLimit)
+    return
+
+  lastRateLimitPruneAt = now
+
+  for (const [key, bucket] of requestBuckets) {
+    if (bucket.lastSeenAt < now - bucket.windowMs)
+      requestBuckets.delete(key)
+  }
+
+  while (requestBuckets.size >= rateLimitBucketLimit) {
+    const oldestKey = requestBuckets.keys().next().value
+
+    if (typeof oldestKey !== 'string')
+      break
+
+    requestBuckets.delete(oldestKey)
+  }
 }
 
 export function hashSessionToken(token: string) {
@@ -134,8 +182,9 @@ export function createSessionCookie(token: string) {
     `${sessionCookieName}=${token}`,
     'Path=/',
     'HttpOnly',
-    'SameSite=Lax',
+    'SameSite=Strict',
     `Max-Age=${sessionDurationSeconds}`,
+    'Priority=High',
   ]
 
   if (env.NODE_ENV === 'production')
@@ -149,8 +198,9 @@ export function clearSessionCookie() {
     `${sessionCookieName}=`,
     'Path=/',
     'HttpOnly',
-    'SameSite=Lax',
+    'SameSite=Strict',
     'Max-Age=0',
+    'Priority=High',
   ]
 
   if (env.NODE_ENV === 'production')
@@ -161,4 +211,52 @@ export function clearSessionCookie() {
 
 export function createSessionExpiry() {
   return new Date(Date.now() + sessionDurationSeconds * 1000).toISOString()
+}
+
+export function hashRateLimitIdentifier(value: string) {
+  return createHash('sha256').update(value.trim().toLowerCase()).digest('hex')
+}
+
+function getAllowedOrigins() {
+  const configuredOrigins = [
+    env.BOARD_ALLOWED_ORIGINS,
+    env.ALLOWED_ORIGINS,
+  ]
+    .flatMap(value => (value || '').split(','))
+    .map(value => value.trim())
+    .filter(Boolean)
+
+  const defaults = env.NODE_ENV === 'production'
+    ? ['https://np-servicerequest.org']
+    : [
+        'http://127.0.0.1:3006',
+        'http://127.0.0.1:3333',
+        'http://localhost:3006',
+        'http://localhost:3333',
+      ]
+
+  return new Set(configuredOrigins.length ? configuredOrigins : defaults)
+}
+
+export function isAllowedRequestOrigin(origin: string | undefined) {
+  return Boolean(origin && getAllowedOrigins().has(origin))
+}
+
+export function assertAllowedUnsafeRequest(input: {
+  method: string
+  origin?: string
+  secFetchSite?: string
+}) {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(input.method.toUpperCase()))
+    return
+
+  if (input.origin) {
+    if (!isAllowedRequestOrigin(input.origin))
+      throw new RequestOriginError()
+
+    return
+  }
+
+  if (input.secFetchSite && !['none', 'same-origin'].includes(input.secFetchSite))
+    throw new RequestOriginError()
 }

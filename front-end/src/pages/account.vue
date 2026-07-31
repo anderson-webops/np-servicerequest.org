@@ -5,8 +5,9 @@ import type {
   BoardBootstrapResponse,
   ViewerAccount,
 } from '~/utils/board'
+import type { AdminSessionResponse } from '~/utils/admin'
 
-import { readStoredAdminKey } from '~/utils/admin'
+import { getAdminEndpoint } from '~/utils/admin'
 import {
   isAntiBotChallenge,
   isAntiBotChallengeExpired,
@@ -342,11 +343,20 @@ async function logoutAccount() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   hasHydrated.value = true
-  adminSessionActive.value = Boolean(readStoredAdminKey())
   syncAuthTabFromRoute()
-  void loadBootstrap()
+  await Promise.allSettled([
+    loadBootstrap(),
+    $fetch<AdminSessionResponse>(
+      getAdminEndpoint(runtimeConfig.public.apiBaseUrl, 'session'),
+      {
+        credentials: 'include',
+      },
+    ).then(() => {
+      adminSessionActive.value = true
+    }),
+  ])
 })
 
 watch(
@@ -440,13 +450,13 @@ watch(
               class="account-panel__note account-panel__note--success"
               role="status"
             >
-              Admin key accepted. It is stored only in this browser session.
+              A protected temporary admin session is active.
             </p>
             <p class="account-panel__label">
               Admin session
             </p>
             <strong>Key accepted</strong>
-            <small>Stored only for this browser session.</small>
+            <small>The admin key is not stored by this page.</small>
             <small class="account-panel__admin">
               This admin path is separate from optional board user accounts.
             </small>
@@ -524,7 +534,7 @@ watch(
               <input
                 v-model="registerForm.password"
                 autocomplete="new-password"
-                minlength="10"
+                minlength="12"
                 required
                 type="password"
               >
@@ -563,7 +573,7 @@ watch(
               <input
                 v-model="loginForm.password"
                 autocomplete="current-password"
-                minlength="10"
+                minlength="12"
                 required
                 type="password"
               >

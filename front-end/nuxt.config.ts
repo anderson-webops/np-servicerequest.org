@@ -10,6 +10,7 @@ import {
 
 const isDev = process.env.NODE_ENV === 'development'
 const analyticsDisabled = process.env.DISABLE_ANALYTICS === 'true'
+const managementLinkScrubber = `(()=>{try{const u=new URL(window.location.href);const h=new URLSearchParams(u.hash.slice(1));const i=h.get("manageItem")||u.searchParams.get("manageItem");const t=h.get("manageToken")||u.searchParams.get("manageToken");if(i&&t){sessionStorage.setItem("np_sr_pending_management_claim",JSON.stringify({issuedAt:Date.now(),itemId:i,managementToken:t}));h.delete("manageItem");h.delete("manageToken");u.searchParams.delete("manageItem");u.searchParams.delete("manageToken");const hs=h.toString();history.replaceState(null,"",u.pathname+u.search+(hs?"#"+hs:""))}}catch{}})();`
 
 export default defineNuxtConfig({
   modules: [
@@ -38,10 +39,14 @@ export default defineNuxtConfig({
         { name: 'theme-color', media: '(prefers-color-scheme: light)', content: '#f5f0e5' },
         { name: 'theme-color', media: '(prefers-color-scheme: dark)', content: '#0d1510' },
       ],
-      script: isDev
-        || analyticsDisabled
-        ? []
-        : [
+      script: [
+        {
+          innerHTML: managementLinkScrubber,
+          tagPosition: 'bodyClose',
+        },
+        ...(isDev || analyticsDisabled
+          ? []
+          : [
             {
               'defer': true,
               'src': `https://${dedicatedAnalyticsDomain}/script.js`,
@@ -52,7 +57,8 @@ export default defineNuxtConfig({
               'src': `https://${centralAnalyticsDomain}/script.js`,
               'data-website-id': centralAnalyticsWebsiteId,
             },
-          ],
+          ]),
+      ],
     },
   },
 
@@ -62,7 +68,7 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     public: {
-      apiBaseUrl: process.env.NUXT_PUBLIC_API_BASE_URL || 'http://localhost:3006/api',
+      apiBaseUrl: process.env.NUXT_PUBLIC_API_BASE_URL || (isDev ? 'http://localhost:3006/api' : '/api'),
     },
   },
 
@@ -104,4 +110,18 @@ export default defineNuxtConfig({
       },
     },
   },
+  hooks: {
+    'pages:extend': (pages) => {
+      const compatibilityPage = pages.find(page => page.name === 'post')
+
+      if (compatibilityPage) {
+        pages.push({
+          file: compatibilityPage.file,
+          name: 'posts-id',
+          path: '/posts/:id',
+        })
+      }
+    },
+  },
+
 })

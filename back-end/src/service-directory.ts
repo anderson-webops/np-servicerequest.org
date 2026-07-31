@@ -168,7 +168,12 @@ const defaultRadiusMiles = 40
 const maxRadiusMiles = 250
 const defaultInitialSyncDays = 45
 const defaultSyncTtlMinutes = 360
+const defaultMinimumRefreshMinutes = 15
 const maxFeedPages = 25
+const maxFeedListingsPerPage = 500
+const maxListingsPerSync = 250
+const maxProviderResponseBytes = 2 * 1024 * 1024
+const foregroundSyncWaitMs = 3_000
 let idealistSyncPromise: Promise<void> | null = null
 
 function getIdealistApiKey() {
@@ -186,6 +191,10 @@ function getIdealistInitialSyncDays() {
   return parsePositiveInt(env.IDEALIST_INITIAL_SYNC_DAYS, defaultInitialSyncDays)
 }
 
+function getIdealistMinimumRefreshMinutes() {
+  return parsePositiveInt(env.IDEALIST_MIN_REFRESH_MINUTES, defaultMinimumRefreshMinutes)
+}
+
 function parsePositiveInt(value: string | undefined, fallback: number) {
   const parsedValue = Number.parseInt(value || '', 10)
 
@@ -200,7 +209,7 @@ function getInitialCursorSince() {
 }
 
 function getIdealistListingFilePath(listingId: string) {
-  return resolveDataPath('_service-directory', 'idealist', 'listings', `${listingId}.json`)
+  return resolveDataPath('_service-directory', 'idealist', 'listings', `${normalizeIdealistListingId(listingId)}.json`)
 }
 
 function getIdealistStateFilePath() {
@@ -231,6 +240,39 @@ function createIdealistHeaders() {
   }
 }
 
+function normalizeIdealistListingId(value: string) {
+  const listingId = typeof value === 'string' ? value.trim() : ''
+
+  if (!/^[a-z0-9_-]{1,128}$/i.test(listingId))
+    throw new Error('Idealist returned an invalid listing id.')
+
+  return listingId
+}
+
+function normalizeExternalHttpUrl(
+  value: string | null | undefined,
+  fallback: string | null,
+  options?: { httpsOnly?: boolean },
+) {
+  const candidate = typeof value === 'string' ? value.trim() || fallback : fallback
+
+  if (!candidate)
+    return null
+
+  try {
+    const url = new URL(candidate)
+    const allowedProtocols = options?.httpsOnly ? ['https:'] : ['http:', 'https:']
+
+    if (!allowedProtocols.includes(url.protocol) || url.username || url.password)
+      return fallback
+
+    return url.toString()
+  }
+  catch {
+    return fallback
+  }
+}
+
 function normalizeLocationType(value: string | null | undefined) {
   if (value === 'ONSITE' || value === 'HYBRID' || value === 'REMOTE')
     return value
@@ -239,7 +281,7 @@ function normalizeLocationType(value: string | null | undefined) {
 }
 
 function stripHtml(value: string | null | undefined) {
-  return (value || '')
+  return (typeof value === 'string' ? value : '')
     .replaceAll(/<br\s*\/?>/gi, '\n')
     .replaceAll(/<\/p>/gi, '\n\n')
     .replaceAll(/<[^>]+>/g, ' ')
@@ -299,55 +341,123 @@ function formatIdealistLocation(detail: IdealistListingDetail) {
 }
 
 function normalizeIdealistListing(detail: IdealistListingDetail): IdealistStoredListing {
-  const description = stripHtml(detail.description)
+  const description = stripHtml(detail.description).slice(0, 10_000)
   const summary = summarizeText(description || 'No summary provided.')
-  const title = detail.name?.trim() || 'Untitled opportunity'
-  const locationLabel = formatIdealistLocation(detail)
+  const title = (typeof detail.name === 'string' ? detail.name.trim() : '').slice(0, 200)
+    || 'Untitled opportunity'
+  const locationLabel = formatIdealistLocation(detail).slice(0, 300)
   const locationType = normalizeLocationType(detail.locationType)
+  const areasOfFocus = (Array.isArray(detail.areasOfFocus) ? detail.areasOfFocus : [])
+    .filter((value): value is string => typeof value === 'string' && Boolean(value.trim()))
+    .slice(0, 50)
+    .map(value => value.trim().slice(0, 100))
+  const functionTags = (Array.isArray(detail.functions) ? detail.functions : [])
+    .filter((value): value is string => typeof value === 'string' && Boolean(value.trim()))
+    .slice(0, 50)
+    .map(value => value.trim().slice(0, 100))
+  const opportunityUrl = normalizeExternalHttpUrl(
+    detail.url?.en,
+    `${idealistBaseUrl}/en/volunteer`,
+    { httpsOnly: true },
+  ) || `${idealistBaseUrl}/en/volunteer`
 
   return {
-    applyUrl: detail.applyUrl?.trim() || detail.url?.en?.trim() || `${idealistBaseUrl}/en/volunteer`,
-    areasOfFocus: (detail.areasOfFocus || []).filter(Boolean),
-    functionTags: (detail.functions || []).filter(Boolean),
-    id: detail.id,
-    imageUrl: detail.image?.medium || detail.image?.thumbnail || null,
+    applyUrl: normalizeExternalHttpUrl(detail.applyUrl, opportunityUrl, { httpsOnly: true }) || opportunityUrl,
+    areasOfFocus,
+    functionTags,
+    id: normalizeIdealistListingId(detail.id),
+    imageUrl: normalizeExternalHttpUrl(detail.image?.medium || detail.image?.thumbnail, null, { httpsOnly: true }),
     isRecurring: Boolean(detail.isRecurring),
-    latitude: detail.address?.latitude ?? null,
+    latitude: typeof detail.address?.latitude === 'number'
+      && Number.isFinite(detail.address.latitude)
+      && detail.address.latitude >= -90
+      && detail.address.latitude <= 90
+      ? detail.address.latitude
+      : null,
     locationLabel,
     locationSearchText: normalizeSearchText([locationLabel]),
     locationType,
-    longitude: detail.address?.longitude ?? null,
-    opportunityUrl: detail.url?.en?.trim() || `${idealistBaseUrl}/en/volunteer`,
-    organizationName: detail.org?.name?.trim() || 'Organization not specified',
-    organizationUrl: detail.org?.url?.en?.trim() || null,
+    longitude: typeof detail.address?.longitude === 'number'
+      && Number.isFinite(detail.address.longitude)
+      && detail.address.longitude >= -180
+      && detail.address.longitude <= 180
+      ? detail.address.longitude
+      : null,
+    opportunityUrl,
+    organizationName: (typeof detail.org?.name === 'string' ? detail.org.name.trim() : '').slice(0, 200)
+      || 'Organization not specified',
+    organizationUrl: normalizeExternalHttpUrl(detail.org?.url?.en, null, { httpsOnly: true }),
     searchText: normalizeSearchText([
       title,
       description,
       detail.org?.name,
       locationLabel,
-      ...(detail.areasOfFocus || []),
-      ...(detail.functions || []),
+      ...areasOfFocus,
+      ...functionTags,
     ]),
-    sourceUpdatedAt: detail.updated,
+    sourceUpdatedAt: typeof detail.updated === 'string' ? detail.updated : '',
     summary,
     title,
   }
 }
 
+async function readBoundedJson<T>(response: Response): Promise<T> {
+  const declaredLength = Number(response.headers.get('content-length') || '')
+
+  if (Number.isFinite(declaredLength) && declaredLength > maxProviderResponseBytes)
+    throw new Error('Idealist returned a response larger than the configured limit.')
+
+  if (!response.body)
+    throw new Error('Idealist returned an empty response body.')
+
+  const reader = response.body.getReader()
+  const chunks: Buffer[] = []
+  let receivedBytes = 0
+
+  while (true) {
+    const { done, value } = await reader.read()
+
+    if (done)
+      break
+
+    const chunk = Buffer.from(value)
+    receivedBytes += chunk.length
+
+    if (receivedBytes > maxProviderResponseBytes) {
+      await reader.cancel()
+      throw new Error('Idealist returned a response larger than the configured limit.')
+    }
+
+    chunks.push(chunk)
+  }
+
+  return JSON.parse(Buffer.concat(chunks).toString('utf8')) as T
+}
+
 async function fetchIdealistFeedPage(url: string) {
   const response = await fetch(url, {
     headers: createIdealistHeaders(),
+    signal: AbortSignal.timeout(15_000),
   })
 
   if (!response.ok)
     throw new Error(`Idealist feed request failed with ${response.status} ${response.statusText}`)
 
-  return await response.json() as IdealistListingFeedResponse
+  const data = await readBoundedJson<IdealistListingFeedResponse>(response)
+
+  if (!data || !Array.isArray(data.volops))
+    throw new Error('Idealist returned an invalid listing feed.')
+
+  return {
+    hasMore: Boolean(data.hasMore),
+    volops: data.volops.slice(0, maxFeedListingsPerPage),
+  }
 }
 
 async function fetchIdealistListingDetail(listingId: string) {
-  const response = await fetch(`${idealistBaseUrl}/api/v1/listings/volops/${listingId}`, {
+  const response = await fetch(`${idealistBaseUrl}/api/v1/listings/volops/${encodeURIComponent(normalizeIdealistListingId(listingId))}`, {
     headers: createIdealistHeaders(),
+    signal: AbortSignal.timeout(15_000),
   })
 
   if (response.status === 404)
@@ -356,7 +466,11 @@ async function fetchIdealistListingDetail(listingId: string) {
   if (!response.ok)
     throw new Error(`Idealist listing detail request failed with ${response.status} ${response.statusText}`)
 
-  const data = await response.json() as IdealistListingDetailResponse
+  const data = await readBoundedJson<IdealistListingDetailResponse>(response)
+
+  if (!data?.volop || typeof data.volop !== 'object')
+    throw new Error('Idealist returned an invalid listing detail.')
+
   return data.volop
 }
 
@@ -406,10 +520,17 @@ async function syncIdealistListings() {
           break
 
         for (const listing of listings) {
+          const listingId = normalizeIdealistListingId(listing.id)
+
           if (listing.isPublished)
-            seenIds.add(listing.id)
+            seenIds.add(listingId)
           else
-            unpublishedIds.add(listing.id)
+            unpublishedIds.add(listingId)
+
+          if (seenIds.size + unpublishedIds.size >= maxListingsPerSync) {
+            hasMore = false
+            break
+          }
         }
 
         since = listings[listings.length - 1]?.updated || since
@@ -542,8 +663,12 @@ function shouldSyncProvider(status: ServiceDirectoryProviderStatus, refresh: boo
   if (!status.configured)
     return false
 
-  if (refresh)
-    return true
+  if (refresh) {
+    const lastAttemptedAt = Date.parse(status.lastAttemptedAt || '')
+
+    return !Number.isFinite(lastAttemptedAt)
+      || Date.now() - lastAttemptedAt >= getIdealistMinimumRefreshMinutes() * 60 * 1000
+  }
 
   if (!status.lastSyncedAt || status.listingCount === 0)
     return true
@@ -579,19 +704,27 @@ export async function searchServiceDirectory(params: ServiceDirectorySearchParam
   const page = Math.max(params.page || 1, 1)
   const pageSize = Math.min(Math.max(params.pageSize || defaultPageSize, 1), maxPageSize)
   const radiusMiles = Math.min(Math.max(params.radiusMiles || defaultRadiusMiles, 1), maxRadiusMiles)
-  const lat = parseMaybeNumber(params.lat)
-  const lng = parseMaybeNumber(params.lng)
+  const parsedLat = parseMaybeNumber(params.lat)
+  const parsedLng = parseMaybeNumber(params.lng)
+  const lat = parsedLat != null && parsedLat >= -90 && parsedLat <= 90 ? parsedLat : null
+  const lng = parsedLng != null && parsedLng >= -180 && parsedLng <= 180 ? parsedLng : null
   const refresh = Boolean(params.refresh)
 
   let providerStatus = await getIdealistProviderStatus()
 
   if (shouldSyncProvider(providerStatus, refresh)) {
-    try {
-      await syncIdealistListings()
-    }
-    catch (error) {
+    const sync = syncIdealistListings().catch((error) => {
       console.error('Failed to sync Idealist listings:', error)
-    }
+    })
+    let syncWait: NodeJS.Timeout | undefined
+    await Promise.race([
+      sync,
+      new Promise<void>((resolveWait) => {
+        syncWait = setTimeout(resolveWait, foregroundSyncWaitMs)
+        syncWait.unref()
+      }),
+    ])
+    clearTimeout(syncWait)
 
     providerStatus = await getIdealistProviderStatus()
   }

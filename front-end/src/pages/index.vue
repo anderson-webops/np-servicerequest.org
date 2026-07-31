@@ -18,6 +18,7 @@ import {
   markAntiBotChallengeObserved,
   waitForAntiBotChallengeMinimumAge,
 } from '~/utils/antiBot'
+import { withApiQuery } from '~/utils/api'
 import { boardSortOptions, getBoardEndpoint, rememberBoardDeleteToken } from '~/utils/board'
 import {
   formatBoardDate,
@@ -26,6 +27,7 @@ import {
   getContactActionLabel,
   getRevealKey,
 } from '~/utils/boardUi'
+import { consumePendingManagementClaim } from '~/utils/managementLink'
 import { submissionKinds } from '~/utils/submissions'
 
 type BoardFilter = 'all' | SubmissionKind
@@ -217,29 +219,42 @@ async function loadBootstrap() {
 }
 
 async function loadBoardItems() {
-  const endpoint = new URL(
-    getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'items'),
-  )
-  endpoint.searchParams.set('kind', boardFilter.value)
-  endpoint.searchParams.set('page', String(boardPagination.value.page))
-  endpoint.searchParams.set('pageSize', String(boardPagination.value.pageSize))
-  endpoint.searchParams.set('sort', boardSort.value)
+  const searchParams = new URLSearchParams()
+  searchParams.set('kind', boardFilter.value)
+  searchParams.set('page', String(boardPagination.value.page))
+  searchParams.set('pageSize', String(boardPagination.value.pageSize))
+  searchParams.set('sort', boardSort.value)
 
   if (boardSearch.value)
-    endpoint.searchParams.set('query', boardSearch.value)
+    searchParams.set('query', boardSearch.value)
 
   if (boardOrigin.value) {
-    endpoint.searchParams.set('lat', String(boardOrigin.value.lat))
-    endpoint.searchParams.set('lng', String(boardOrigin.value.lng))
+    searchParams.set('lat', String(boardOrigin.value.lat))
+    searchParams.set('lng', String(boardOrigin.value.lng))
   }
+  const endpoint = withApiQuery(
+    getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'items'),
+    searchParams,
+  )
 
   boardPending.value = true
   boardError.value = null
 
   try {
-    const response = await $fetch<BoardItemsResponse>(endpoint.toString(), {
+    const response = await $fetch<BoardItemsResponse>(endpoint, {
       credentials: 'include',
     })
+
+    if (
+      !response
+      || !Array.isArray(response.items)
+      || !response.counts
+      || typeof response.counts !== 'object'
+      || !response.pagination
+      || typeof response.pagination !== 'object'
+    ) {
+      throw new TypeError('The board API returned an invalid response.')
+    }
 
     boardCounts.value = response.counts
     boardPagination.value = response.pagination
@@ -594,8 +609,9 @@ function setBoardSort(nextSort: BoardSortOrder) {
 onMounted(() => {
   hasHydrated.value = true
   syncBoardStateFromRoute()
-  const manageItem = getQueryValue(route.query.manageItem)
-  const manageToken = getQueryValue(route.query.manageToken)
+  const pendingManagementClaim = consumePendingManagementClaim()
+  const manageItem = pendingManagementClaim?.itemId || getQueryValue(route.query.manageItem)
+  const manageToken = pendingManagementClaim?.managementToken || getQueryValue(route.query.manageToken)
 
   if (manageItem && manageToken)
     void claimBoardManagementLink(manageItem, manageToken)

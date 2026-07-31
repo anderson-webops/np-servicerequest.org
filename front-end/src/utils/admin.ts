@@ -35,10 +35,6 @@ export interface AdminSubmissionRecord {
   id: string
   kind: SubmissionKind
   kindLabel: string
-  meta: {
-    ip?: string
-    userAgent?: string
-  }
   review: {
     notes: string
     reviewedAt: string | null
@@ -121,25 +117,7 @@ export function getAdminEndpoint(apiBaseUrl: string, path: string) {
   return getApiEndpoint(apiBaseUrl, `admin/${normalizedPath}`)
 }
 
-const adminKeyStorageKey = 'np_sr_admin_key'
-
-export function readStoredAdminKey() {
-  if (!import.meta.client)
-    return ''
-
-  return window.sessionStorage.getItem(adminKeyStorageKey) || ''
-}
-
-export function writeStoredAdminKey(adminKey: string) {
-  if (!import.meta.client)
-    return
-
-  window.sessionStorage.setItem(adminKeyStorageKey, adminKey)
-}
-
-export function clearStoredAdminKey() {
-  if (!import.meta.client)
-    return
-
-  window.sessionStorage.removeItem(adminKeyStorageKey)
+export interface AdminSessionResponse {
+  authenticated: boolean
+  ok: boolean
 }

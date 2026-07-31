@@ -5,6 +5,9 @@
 **/.nuxt
 **/*.tsbuildinfo
 .run
+.tmp
+playwright-report
+test-results
 
 # local env files
 **/.env

@@ -1,12 +1,12 @@
 {
 	"name": "np-servicerequest-org-monorepo",
 	"type": "module",
-	"version": "1.0.0",
+	"version": "1.2.35",
 	"private": true,
-	"packageManager": "npm@11.16.0",
+	"packageManager": "npm@12.0.2",
 	"engines": {
-		"node": ">=24.18.0 <25",
-		"npm": ">=11.16.0 <12"
+		"node": ">=24.18.1 <25",
+		"npm": ">=12.0.2 <13"
 	},
 	"description": "Monorepo for np-servicerequest.org",
 	"author": "Jacob Anderson",
@@ -17,33 +17,48 @@
 		"back-end"
 	],
 	"scripts": {
-		"build": "npm run -w front-end build && npm run -w back-end build",
+		"audit": "npm audit --workspaces --audit-level=low",
+		"audit:production": "npm audit --workspaces --omit=dev --audit-level=low",
+		"audit:signatures": "npm audit signatures",
+		"audit-fix": "npm audit fix --workspaces",
+		"build": "npm run -w front-end build && npm run -w back-end build && npm run release:metadata",
+		"build:netlify": "npm run -w front-end build && node scripts/write-netlify-headers.mjs",
 		"dev": "npm run -w front-end dev",
 		"server": "npm run -w back-end server",
 		"server:once": "npm run -w back-end server:once",
 		"serve": "npm run -w front-end serve",
 		"preview": "npm run -w front-end preview",
+		"release:metadata": "node scripts/write-release-metadata.mjs",
 		"postinstall": "simple-git-hooks && npm run -w front-end prepare",
 		"lint-server": "npm run -w back-end lint-fix && npm run -w back-end server",
 		"lint-serve": "npm run -w front-end lint-fix && npm run -w front-end serve",
-		"lint": "npm run -w front-end lint && npm run -w back-end lint",
+		"lint": "npm run lint:root && npm run -w front-end lint && npm run -w back-end lint",
+		"lint:root": "eslint \"scripts/**/*.mjs\" eslint.config.js playwright.config.ts",
 		"lint-fix": "npm run -w front-end lint-fix && npm run -w back-end lint-fix",
-		"test:e2e": "DISABLE_ANALYTICS=true npm run build && playwright test",
+    "test:e2e": "DISABLE_ANALYTICS=true NUXT_PUBLIC_API_BASE_URL=/api npm run build && playwright test && npm run build",
 		"typecheck": "npm run -w front-end typecheck && npm run -w back-end typecheck",
-		"clean": "rm -rf node_modules package-lock.json front-end/node_modules front-end/.nuxt front-end/.output back-end/node_modules back-end/dist",
+		"clean": "rm -rf node_modules front-end/node_modules front-end/.nuxt front-end/.output back-end/node_modules back-end/dist",
+		"roles:account": "node back-end/scripts/manage-account-role.mjs",
+		"sanitize:network-metadata": "node back-end/scripts/sanitize-network-metadata.mjs",
+		"test": "npm run -w back-end test",
 		"up": "taze major -I && npm run -w front-end up && npm run -w back-end up",
-		"a11y": "node scripts/a11y-smoke.mjs"
+		"a11y": "node scripts/a11y-smoke.mjs",
+		"verify:dependency-graph": "node scripts/verify-dependency-graph.mjs",
+		"verify:native-lock": "node scripts/verify-native-lock.mjs",
+		"verify:platform-install": "node scripts/verify-platform-install.mjs",
+		"verify:production": "node scripts/post-deploy-smoke.mjs"
 	},
 	"devDependencies": {
-		"@antfu/eslint-config": "^8.2.0",
-		"@playwright/test": "^1.59.1",
-		"axe-core": "^4.11.4",
+		"@antfu/eslint-config": "^9.2.0",
+		"@playwright/test": "^1.62.1",
+		"axe-core": "^4.12.1",
+		"commander": "15.0.0",
 		"eslint": "^10.8.0",
-		"eslint-plugin-format": "^1.0.2",
-		"lint-staged": "^16.4.0",
-		"puppeteer": "^24.43.1",
+		"eslint-plugin-format": "^2.0.1",
+		"lint-staged": "^17.2.0",
+		"puppeteer": "^25.4.0",
 		"simple-git-hooks": "^2.13.1",
-		"taze": "^19.11.0",
+		"taze": "^19.16.0",
 		"typescript": "^6.0.3"
 	},
 	"simple-git-hooks": {
@@ -55,6 +70,9 @@
 		]
 	},
 	"overrides": {
+		"@bomb.sh/tab": {
+			"cac": "7.0.0"
+		},
 		"esbuild": "^0.28.1",
 		"js-yaml": "4.3.0",
 		"launch-editor": {
@@ -66,16 +84,26 @@
 			"launch-editor": "2.14.1"
 		},
 		"vite": {
-			".": "^8.1.0",
+			".": "^8.2.0",
 			"esbuild": "^0.28.1"
 		},
 		"nitropack": "2.13.4",
 		"simple-git": "3.36.0",
 		"brace-expansion": "5.0.8",
 		"fast-uri": "3.1.4",
+		"glob": "13.0.6",
 		"postcss": "8.5.24",
+		"rolldown": "1.2.1",
 		"svgo": "4.0.2",
 		"tar": "7.5.22",
 		"valibot": "1.4.2"
+	},
+	"allowScripts": {
+		"esbuild@0.28.1": true,
+		"fsevents@2.3.2": true,
+		"fsevents@2.3.3": true,
+		"puppeteer@25.4.0": false,
+		"simple-git-hooks@2.13.1": true,
+		"unrs-resolver@1.12.2": true
 	}
 }

@@ -10,6 +10,7 @@ import { recordBoardActivity } from './activity.js'
 import { isEmailAddress, normalizeStructuredContact } from './contact.js'
 import { listJsonDirectory, readJsonFile, removePathIfExists, resolveDataPath, writeJsonFile } from './data.js'
 import { getDistanceMiles, inferKnownPlaceFromText } from './places.js'
+import { isSafeEqual } from './security.js'
 import { SubmissionValidationError } from './submissions.js'
 
 export const boardItemStatuses = [
@@ -65,6 +66,7 @@ export const boardInteractionStatuses = [
 type BoardInteractionStatus = (typeof boardInteractionStatuses)[number]
 
 type SubmissionReviewStatus = 'pending' | 'approved' | 'needs-follow-up' | 'rejected'
+const boardItemMutationQueues = new Map<string, Promise<void>>()
 
 interface BoardAuthor {
   accountId?: string
@@ -228,15 +230,48 @@ function getBoardInteractionDirectory() {
   return resolveDataPath('_board', 'interactions')
 }
 
+function assertBoardResourceId(value: string, label: string) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value))
+    throw new BoardValidationError(`The ${label} id is invalid.`)
+}
+
+async function withBoardItemMutationLock<T>(
+  itemId: string,
+  task: () => Promise<T>,
+) {
+  assertBoardResourceId(itemId, 'board item')
+  const previousMutation = boardItemMutationQueues.get(itemId) || Promise.resolve()
+  let releaseMutation = () => {}
+  const currentMutation = new Promise<void>((resolveMutation) => {
+    releaseMutation = resolveMutation
+  })
+  boardItemMutationQueues.set(itemId, currentMutation)
+
+  await previousMutation
+
+  try {
+    return await task()
+  }
+  finally {
+    releaseMutation()
+
+    if (boardItemMutationQueues.get(itemId) === currentMutation)
+      boardItemMutationQueues.delete(itemId)
+  }
+}
+
 function getItemFilePath(itemId: string) {
+  assertBoardResourceId(itemId, 'board item')
   return resolve(getBoardItemDirectory(), `${itemId}.json`)
 }
 
 function getInteractionDirectory(itemId: string) {
+  assertBoardResourceId(itemId, 'board item')
   return resolve(getBoardInteractionDirectory(), itemId)
 }
 
 function getInteractionFilePath(itemId: string, interactionId: string) {
+  assertBoardResourceId(interactionId, 'board response')
   return resolve(getInteractionDirectory(itemId), `${interactionId}.json`)
 }
 
@@ -675,7 +710,7 @@ function getBoardItemManagementAccess(input: {
   const ownsByDeleteToken = Boolean(
     normalizedDeleteToken
     && input.item.deleteTokenHash
-    && hashDeleteToken(normalizedDeleteToken) === input.item.deleteTokenHash,
+    && isSafeEqual(hashDeleteToken(normalizedDeleteToken), input.item.deleteTokenHash),
   )
 
   return {
@@ -838,7 +873,12 @@ export async function listBoardItems(options?: {
   const sort = options?.sort && boardItemSortOrders.includes(options.sort)
     ? options.sort
     : 'recent-activity'
-  const origin = Number.isFinite(options?.lat) && Number.isFinite(options?.lng)
+  const origin = Number.isFinite(options?.lat)
+    && Number.isFinite(options?.lng)
+    && Number(options?.lat) >= -90
+    && Number(options?.lat) <= 90
+    && Number(options?.lng) >= -180
+    && Number(options?.lng) <= 180
     ? {
         lat: Number(options?.lat),
         lng: Number(options?.lng),
@@ -1007,7 +1047,7 @@ export async function createBoardItemFromSubmission(input: {
   }
 }
 
-export async function createBoardInteraction(input: {
+async function createBoardInteractionUnlocked(input: {
   contact: string
   contactMethod: string
   contactNote: string
@@ -1094,7 +1134,16 @@ export async function createBoardInteraction(input: {
   }
 }
 
-export async function setBoardItemResolution(input: {
+export async function createBoardInteraction(
+  input: Parameters<typeof createBoardInteractionUnlocked>[0],
+) {
+  return withBoardItemMutationLock(
+    input.itemId,
+    () => createBoardInteractionUnlocked(input),
+  )
+}
+
+async function setBoardItemResolutionUnlocked(input: {
   deleteToken: string
   itemId: string
   resolutionStatus: string
@@ -1153,6 +1202,15 @@ export async function setBoardItemResolution(input: {
 
   const interactions = (await listStoredInteractions(item.id)).filter(isBoardInteractionVisibleToPublic)
   return toPublicItem(nextItem, interactions)
+}
+
+export async function setBoardItemResolution(
+  input: Parameters<typeof setBoardItemResolutionUnlocked>[0],
+) {
+  return withBoardItemMutationLock(
+    input.itemId,
+    () => setBoardItemResolutionUnlocked(input),
+  )
 }
 
 export async function revealBoardItemContact(itemId: string) {
@@ -1249,7 +1307,7 @@ export async function createBoardInteractionReport(input: {
   return entry.id
 }
 
-export async function claimBoardItemManagement(input: {
+async function claimBoardItemManagementUnlocked(input: {
   itemId: string
   managementToken: string
 }) {
@@ -1258,7 +1316,7 @@ export async function claimBoardItemManagement(input: {
   const ownsByManagementToken = Boolean(
     normalizedManagementToken
     && item.managementTokenHash
-    && hashDeleteToken(normalizedManagementToken) === item.managementTokenHash,
+    && isSafeEqual(hashDeleteToken(normalizedManagementToken), item.managementTokenHash),
   )
 
   if (!ownsByManagementToken)
@@ -1268,9 +1326,19 @@ export async function claimBoardItemManagement(input: {
   await writeStoredBoardItem({
     ...item,
     deleteTokenHash: hashDeleteToken(deleteToken),
+    managementTokenHash: undefined,
   })
 
   return deleteToken
+}
+
+export async function claimBoardItemManagement(
+  input: Parameters<typeof claimBoardItemManagementUnlocked>[0],
+) {
+  return withBoardItemMutationLock(
+    input.itemId,
+    () => claimBoardItemManagementUnlocked(input),
+  )
 }
 
 export async function syncBoardItemVisibilityFromSubmissionReview(input: {
@@ -1292,50 +1360,58 @@ export async function syncBoardItemVisibilityFromSubmissionReview(input: {
     }
   }
 
-  let nextItem = await ensureSubmissionLinkOnBoardItem(match.item, input.submissionId, input.kind)
-  let changed = nextItem.id !== match.item.id
-  const now = new Date().toISOString()
-  let nextStatus = nextItem.status
+  return withBoardItemMutationLock(match.item.id, async () => {
+    const currentItem = await getStoredBoardItem(match.item.id)
+    let changed = currentItem.sourceSubmission?.id !== input.submissionId
+      || currentItem.sourceSubmission?.kind !== input.kind
+    let nextItem = await ensureSubmissionLinkOnBoardItem(
+      currentItem,
+      input.submissionId,
+      input.kind,
+    )
+    const now = new Date().toISOString()
+    let nextStatus = nextItem.status
 
-  if (input.reviewStatus === 'rejected' && nextItem.status === 'visible')
-    nextStatus = 'hidden_by_admin'
-  else if (input.reviewStatus !== 'rejected' && nextItem.status === 'hidden_by_admin')
-    nextStatus = 'visible'
+    if (input.reviewStatus === 'rejected' && nextItem.status === 'visible')
+      nextStatus = 'hidden_by_admin'
+    else if (input.reviewStatus !== 'rejected' && nextItem.status === 'hidden_by_admin')
+      nextStatus = 'visible'
 
-  if (nextStatus !== nextItem.status) {
-    nextItem = {
-      ...nextItem,
-      status: nextStatus,
-      statusChangedAt: now,
+    if (nextStatus !== nextItem.status) {
+      nextItem = {
+        ...nextItem,
+        status: nextStatus,
+        statusChangedAt: now,
+      }
+      await writeStoredBoardItem(nextItem)
+      changed = true
+
+      await recordBoardActivity({
+        action: nextStatus === 'hidden_by_admin' ? 'board_item_hidden_by_admin' : 'board_item_restored_to_public',
+        actor: { kind: 'admin', label: input.actorLabel },
+        category: 'moderation',
+        createdAt: now,
+        detail: nextStatus === 'hidden_by_admin'
+          ? 'Hidden from the public board because the submission was rejected.'
+          : 'Restored to the public board after a review status change.',
+        itemId: nextItem.id,
+        kind: nextItem.kind,
+        submissionId: input.submissionId,
+        title: nextItem.title,
+        visibilityState: nextStatus,
+      })
     }
-    await writeStoredBoardItem(nextItem)
-    changed = true
 
-    await recordBoardActivity({
-      action: nextStatus === 'hidden_by_admin' ? 'board_item_hidden_by_admin' : 'board_item_restored_to_public',
-      actor: { kind: 'admin', label: input.actorLabel },
-      category: 'moderation',
-      createdAt: now,
-      detail: nextStatus === 'hidden_by_admin'
-        ? 'Hidden from the public board because the submission was rejected.'
-        : 'Restored to the public board after a review status change.',
+    return {
+      changed,
       itemId: nextItem.id,
-      kind: nextItem.kind,
-      submissionId: input.submissionId,
-      title: nextItem.title,
-      visibilityState: nextStatus,
-    })
-  }
-
-  return {
-    changed,
-    itemId: nextItem.id,
-    matchedBy: match.matchedBy,
-    publicState: nextItem.status,
-  }
+      matchedBy: match.matchedBy,
+      publicState: nextItem.status,
+    }
+  })
 }
 
-export async function deleteBoardItem(input: {
+async function deleteBoardItemUnlocked(input: {
   deleteToken: string
   itemId: string
   viewer: ViewerAccount | null
@@ -1374,7 +1450,16 @@ export async function deleteBoardItem(input: {
   }
 }
 
-export async function deleteBoardInteraction(input: {
+export async function deleteBoardItem(
+  input: Parameters<typeof deleteBoardItemUnlocked>[0],
+) {
+  return withBoardItemMutationLock(
+    input.itemId,
+    () => deleteBoardItemUnlocked(input),
+  )
+}
+
+async function deleteBoardInteractionUnlocked(input: {
   interactionId: string
   itemId: string
   viewer: ViewerAccount | null
@@ -1419,7 +1504,18 @@ export async function deleteBoardInteraction(input: {
   })
 }
 
+export async function deleteBoardInteraction(
+  input: Parameters<typeof deleteBoardInteractionUnlocked>[0],
+) {
+  return withBoardItemMutationLock(
+    input.itemId,
+    () => deleteBoardInteractionUnlocked(input),
+  )
+}
+
 export async function purgeBoardItemArtifacts(itemId: string) {
-  await removePathIfExists(getItemFilePath(itemId))
-  await removePathIfExists(getInteractionDirectory(itemId))
+  await withBoardItemMutationLock(itemId, async () => {
+    await removePathIfExists(getItemFilePath(itemId))
+    await removePathIfExists(getInteractionDirectory(itemId))
+  })
 }

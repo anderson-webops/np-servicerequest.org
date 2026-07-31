@@ -1,6 +1,9 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { randomBytes } from 'node:crypto'
+import { writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { env } from 'node:process'
+
+import { ensurePrivateDirectory } from './data.js'
 
 let hasWarnedAboutEmailConfig = false
 
@@ -13,13 +16,30 @@ function isProductionEnvironment() {
 }
 
 function getEmailSettings() {
+  const configuredPublicUrl = env.BOARD_PUBLIC_WEB_URL || 'https://np-servicerequest.org'
+  const publicWebUrl = new URL(configuredPublicUrl)
+
+  if (!['http:', 'https:'].includes(publicWebUrl.protocol))
+    throw new Error('BOARD_PUBLIC_WEB_URL must use http or https.')
+
+  if (publicWebUrl.username || publicWebUrl.password)
+    throw new Error('BOARD_PUBLIC_WEB_URL must not contain credentials.')
+
+  if (isProductionEnvironment() && publicWebUrl.protocol !== 'https:')
+    throw new Error('BOARD_PUBLIC_WEB_URL must use https in production.')
+
+  const port = Number(env.SMTP_PORT || 587)
+
+  if (!Number.isInteger(port) || port < 1 || port > 65_535)
+    throw new Error('SMTP_PORT must be an integer from 1 through 65535.')
+
   return {
     from: env.BOARD_NOTIFICATION_EMAIL_FROM || env.SMTP_USER || 'no-reply@np-servicerequest.local',
     host: env.SMTP_HOST,
     managementEnabled: env.ENABLE_BOARD_MANAGEMENT_EMAILS == null ? true : parseBooleanFlag(env.ENABLE_BOARD_MANAGEMENT_EMAILS),
     pass: env.SMTP_PASS,
-    publicWebUrl: env.BOARD_PUBLIC_WEB_URL || 'https://np-servicerequest.org',
-    port: Number(env.SMTP_PORT || 587),
+    publicWebUrl: publicWebUrl.toString(),
+    port,
     notificationsEnabled: parseBooleanFlag(env.ENABLE_BOARD_EMAIL_NOTIFICATIONS),
     replyNotificationsEnabled: env.ENABLE_BOARD_REPLY_NOTIFICATION_EMAILS == null ? true : parseBooleanFlag(env.ENABLE_BOARD_REPLY_NOTIFICATION_EMAILS),
     secure: parseBooleanFlag(env.SMTP_SECURE),
@@ -41,14 +61,18 @@ async function deliverMessage(input: { subject: string, text: string, to: string
   if (captureDirectory) {
     const filePath = resolve(
       captureDirectory,
-      `${new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-')}-${Math.random().toString(16).slice(2)}.json`,
+      `${new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-')}-${randomBytes(12).toString('hex')}.json`,
     )
 
-    await mkdir(captureDirectory, { recursive: true })
+    await ensurePrivateDirectory(captureDirectory)
     await writeFile(filePath, `${JSON.stringify({
       ...input,
+      subject: sanitizeEmailSubject(input.subject),
       createdAt: new Date().toISOString(),
-    }, null, 2)}\n`, 'utf8')
+    }, null, 2)}\n`, {
+      encoding: 'utf8',
+      mode: 0o600,
+    })
     return
   }
 
@@ -69,15 +93,28 @@ async function deliverMessage(input: { subject: string, text: string, to: string
     },
     host: settings.host,
     port: settings.port,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    requireTLS: !settings.secure && settings.port !== 465,
     secure: settings.secure || settings.port === 465,
+    socketTimeout: 15_000,
+    tls: {
+      minVersion: 'TLSv1.2',
+      rejectUnauthorized: true,
+      servername: settings.host,
+    },
   })
 
   await transporter.sendMail({
     from: settings.from,
-    subject: input.subject,
+    subject: sanitizeEmailSubject(input.subject),
     text: input.text,
     to: input.to,
   })
+}
+
+function sanitizeEmailSubject(value: string) {
+  return value.replaceAll(/[\r\n]+/g, ' ').replaceAll(/\s+/g, ' ').trim().slice(0, 200)
 }
 
 export async function sendBoardItemNotificationEmail(input: {
@@ -202,8 +239,10 @@ export async function sendBoardItemManagementLinkEmail(input: {
     return
 
   const manageUrl = new URL(`/posts/${encodeURIComponent(input.itemId)}`, settings.publicWebUrl)
-  manageUrl.searchParams.set('manageItem', input.itemId)
-  manageUrl.searchParams.set('manageToken', input.managementToken)
+  manageUrl.hash = new URLSearchParams({
+    manageItem: input.itemId,
+    manageToken: input.managementToken,
+  }).toString()
 
   const body = [
     'You posted a request on np-servicerequest.org.',
