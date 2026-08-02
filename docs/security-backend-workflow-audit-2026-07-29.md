@@ -148,7 +148,10 @@ error-free.
    characters, administrator keys of at least 32 characters, and an exact
    trusted-proxy hop count only when the deployment topology requires it.
 4. Deploy one container writer with a read-only root and the data directory as
-   its only persistent writable volume.
+   its only persistent writable volume. Include
+   `deploy/nginx/np-servicerequest.location.conf` in the public TLS server and
+   replace any separate static-root or `/api` locations. The outer edge must
+   preserve the Node runtime's generated hash-based CSP and framing denial.
 5. Confirm the version and revision from both `/api/health` and `/release.json`.
 6. Exercise registration, login/logout, account demotion, administrator
    login/logout, moderation, management-link recovery, and notification

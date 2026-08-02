@@ -36,6 +36,7 @@ for (const identity of [health, release]) {
 
 const csp = homeResponse.headers.get('content-security-policy') || ''
 assert.match(csp, /default-src 'self'/)
+assert.match(csp, /frame-ancestors 'none'/)
 assert.doesNotMatch(csp, /unsafe-eval/)
 const scriptSourceDirective = csp
   .split(';')
@@ -45,6 +46,7 @@ assert.match(scriptSourceDirective, /'sha256-/)
 assert.doesNotMatch(scriptSourceDirective, /'unsafe-inline'/)
 assert.match(homeResponse.headers.get('strict-transport-security') || '', /max-age=/)
 assert.equal(homeResponse.headers.get('x-content-type-options'), 'nosniff')
+assert.equal(homeResponse.headers.get('x-frame-options'), 'DENY')
 
 const disallowedOriginResponse = await fetchWithTimeout('/api/board/bootstrap', {
   headers: {
