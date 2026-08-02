@@ -61,7 +61,7 @@
 		"rollup": "4.62.4",
 		"simple-git-hooks": "^2.13.1",
 		"taze": "^19.16.0",
-		"typescript": "^6.0.3"
+		"typescript": "^7.0.2"
 	},
 	"simple-git-hooks": {
 		"pre-commit": "test -x ./node_modules/.bin/lint-staged || { echo 'lint-staged is not installed. Run npm install.'; exit 1; }; ./node_modules/.bin/lint-staged"
