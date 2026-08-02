@@ -20,4 +20,11 @@ export default antfu(
       'vitest/no-import-node-test': 'off',
     },
   },
+  {
+    files: ['scripts/*.test.mjs'],
+    rules: {
+      'vitest/consistent-test-it': 'off',
+      'vitest/no-import-node-test': 'off',
+    },
+  },
 )

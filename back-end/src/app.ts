@@ -68,6 +68,7 @@ import {
   validateAntiBotPayload,
 } from './security.js'
 import { searchServiceDirectory } from './service-directory.js'
+import { resolveReleaseIdentity } from './release-identity.js'
 import {
   AccountValidationError,
   attachBoardItemToSubmission,
@@ -267,6 +268,7 @@ export function createApp(options?: { staticDirectory?: string }) {
   const staticDirectory = options?.staticDirectory
     ? resolve(options.staticDirectory)
     : undefined
+  const releaseIdentity = resolveReleaseIdentity(staticDirectory)
   const inlineScriptHashes = getInlineScriptHashes(staticDirectory)
 
   app.disable('x-powered-by')
@@ -352,9 +354,9 @@ export function createApp(options?: { staticDirectory?: string }) {
   app.get('/api/health', (_request, response) => {
     response.json({
       ok: true,
-      revision: process.env.SOURCE_REVISION || 'development',
+      revision: releaseIdentity.revision,
       startedAt,
-      version: (process.env.NP_RELEASE_VERSION || 'development').replace(/^v/, ''),
+      version: releaseIdentity.version,
     })
   })
 
