@@ -1,7 +1,7 @@
 {
 	"name": "np-servicerequest-org-monorepo",
 	"type": "module",
-	"version": "1.2.40",
+	"version": "1.2.41",
 	"private": true,
 	"packageManager": "npm@12.0.2",
 	"engines": {
