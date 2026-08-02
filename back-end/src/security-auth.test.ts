@@ -1,6 +1,7 @@
 import type { Server } from 'node:http'
 import assert from 'node:assert/strict'
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
+import { scrypt } from 'node:crypto'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -15,6 +16,18 @@ let server: Server | null = null
 
 function sleep(ms: number) {
   return new Promise(resolveSleep => setTimeout(resolveSleep, ms))
+}
+
+function deriveLegacyPassword(password: string, salt: string) {
+  return new Promise<Buffer>((resolvePassword, reject) => {
+    scrypt(password, salt, 64, (error, derivedKey) => {
+      if (error) {
+        reject(error)
+        return
+      }
+      resolvePassword(derivedKey)
+    })
+  })
 }
 
 async function fetchJson(path: string, init?: RequestInit) {
@@ -152,6 +165,7 @@ test('self-registration cannot promote an allowlisted email and passwords are st
   assert.equal((body.viewer as { isAdmin: boolean }).isAdmin, false)
   assert.match(response.headers.get('set-cookie') || '', /HttpOnly/)
   assert.match(response.headers.get('set-cookie') || '', /SameSite=Strict/)
+  const memberCookie = (response.headers.get('set-cookie') || '').split(';')[0]
 
   const accountDirectory = resolve(dataDirectory, '_board', 'accounts')
   const accountFiles = await readdir(accountDirectory)
@@ -177,6 +191,68 @@ test('self-registration cannot promote an allowlisted email and passwords are st
     method: 'POST',
   })
   assert.equal(failedLogin.status, 401)
+
+  await writeFile(resolve(accountDirectory, accountFiles[0]), `${JSON.stringify({
+    ...account,
+    role: 'admin',
+    roleVersion: 1,
+    updatedAt: new Date().toISOString(),
+  }, null, 2)}\n`)
+  const { body: staleSessionBody, response: staleSessionResponse } = await fetchJson('/api/board/bootstrap', {
+    headers: {
+      cookie: memberCookie,
+      origin: allowedOrigin,
+    },
+  })
+  assert.equal(staleSessionResponse.status, 200)
+  assert.equal(staleSessionBody.viewer, null)
+
+  const legacySalt = 'legacy-password-upgrade-test-salt'
+  const legacyHash = await deriveLegacyPassword(password, legacySalt)
+  const legacyAccount = {
+    ...account,
+    passwordAlgorithm: 'scrypt-v1',
+    passwordHash: legacyHash.toString('hex'),
+    passwordSalt: legacySalt,
+    role: 'admin',
+    roleVersion: 1,
+    updatedAt: new Date().toISOString(),
+  }
+  await writeFile(resolve(accountDirectory, accountFiles[0]), `${JSON.stringify(legacyAccount, null, 2)}\n`)
+
+  const upgradeChallenge = await getAgedAntiBotChallenge()
+  const accountId = accountFiles[0].replace(/\.json$/u, '')
+  const accountLock = resolve(dataDirectory, '_board', 'account-locks', `${accountId}.lock`)
+  await mkdir(accountLock, { recursive: true })
+  const loginWhileRoleChanges = fetchJson('/api/board/account/login', {
+    body: JSON.stringify({
+      challengeIssuedAt: String(upgradeChallenge.issuedAt),
+      challengeToken: upgradeChallenge.token,
+      email,
+      password,
+    }),
+    headers: {
+      origin: allowedOrigin,
+      'sec-fetch-site': 'same-origin',
+    },
+    method: 'POST',
+  })
+  await sleep(100)
+  await writeFile(resolve(accountDirectory, accountFiles[0]), `${JSON.stringify({
+    ...legacyAccount,
+    role: 'member',
+    roleVersion: 2,
+    updatedAt: new Date().toISOString(),
+  }, null, 2)}\n`)
+  await rm(accountLock, { recursive: true })
+
+  const { body: upgradedLoginBody, response: upgradedLoginResponse } = await loginWhileRoleChanges
+  assert.equal(upgradedLoginResponse.status, 200)
+  assert.equal((upgradedLoginBody.viewer as { isAdmin: boolean }).isAdmin, false)
+  const upgradedAccount = JSON.parse(await readFile(resolve(accountDirectory, accountFiles[0]), 'utf8'))
+  assert.equal(upgradedAccount.passwordAlgorithm, 'scrypt-v2')
+  assert.equal(upgradedAccount.role, 'member')
+  assert.equal(upgradedAccount.roleVersion, 2)
 })
 
 test('admin keys are exchanged for revocable HttpOnly sessions and are not accepted from browser headers', async () => {

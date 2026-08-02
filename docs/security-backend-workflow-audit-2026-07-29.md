@@ -1,5 +1,12 @@
 # Security and backend workflow audit — 2026-07-29
 
+> Follow-up, 2026-08-02: the application controls described below remain
+> relevant, but the production-container path and email-selected role workflow
+> have been retired. The current direct systemd/Nginx deployment, account-UUID
+> role transition, role-epoch session invalidation, and validation evidence are
+> recorded in `security-backend-workflow-audit-2026-08-02.md`. Container
+> references below are retained only as dated evidence of the earlier release.
+
 ## Scope and method
 
 This review covered registration, login, session lifecycle, public and

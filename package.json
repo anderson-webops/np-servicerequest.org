@@ -1,7 +1,7 @@
 {
 	"name": "np-servicerequest-org-monorepo",
 	"type": "module",
-	"version": "1.2.39",
+	"version": "1.2.40",
 	"private": true,
 	"packageManager": "npm@12.0.2",
 	"engines": {
@@ -46,7 +46,8 @@
 		"verify:dependency-graph": "node scripts/verify-dependency-graph.mjs",
 		"verify:native-lock": "node scripts/verify-native-lock.mjs",
 		"verify:platform-install": "node scripts/verify-platform-install.mjs",
-		"verify:production": "node scripts/post-deploy-smoke.mjs"
+		"verify:production": "node scripts/post-deploy-smoke.mjs",
+		"smoke:backend-runtime": "node scripts/backend-runtime-smoke.mjs"
 	},
 	"devDependencies": {
 		"@antfu/eslint-config": "^9.2.0",
@@ -57,6 +58,7 @@
 		"eslint-plugin-format": "^2.0.1",
 		"lint-staged": "^17.2.0",
 		"puppeteer": "^25.4.0",
+		"rollup": "4.62.4",
 		"simple-git-hooks": "^2.13.1",
 		"taze": "^19.16.0",
 		"typescript": "^6.0.3"
@@ -94,6 +96,7 @@
 		"glob": "13.0.6",
 		"postcss": "8.5.24",
 		"rolldown": "1.2.1",
+		"rollup": "4.62.4",
 		"svgo": "4.0.2",
 		"tar": "7.5.22",
 		"valibot": "1.4.2"

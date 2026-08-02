@@ -9,67 +9,96 @@ production data in an issue or pull request.
 
 ## Identity and authorization
 
-Public registration creates a `member` account. An email address never grants
-administrator rights by itself. Account promotion and demotion are explicit
-operator actions:
+Public registration always creates a `member` account. Email addresses are
+user-supplied and are not proof of identity. The signed-in account page exposes
+the account UUID that an intended owner can provide to an operator through a
+separate trusted channel.
+
+Preview a promotion without changing data:
 
 ```bash
 npm run roles:account -- \
-  --data-dir /absolute/path/to/data \
-  --email person@example.com \
+  --data-dir /var/lib/np-servicerequest/data \
+  --account-id <confirmed-account-uuid> \
   --role admin
 ```
 
-The command is a dry run unless `--apply` is supplied. Use `--role member` to
-demote an account. Every applied change writes an audit record without placing
-the raw email address in the audit log. Demotion takes effect on the next
-authorized request.
+After reviewing the displayed UUID, name, creation time, claimed email, and
+current role, apply the exact transition:
+
+```bash
+npm run roles:account -- \
+  --data-dir /var/lib/np-servicerequest/data \
+  --account-id <confirmed-account-uuid> \
+  --role admin \
+  --apply \
+  --confirm-account-id <confirmed-account-uuid> \
+  --from-role member \
+  --from-role-version <dry-run-role-epoch>
+```
+
+Use `--role member --from-role admin` with the displayed epoch to demote. The
+role and credential upgrade paths share an exclusive per-account mutation lock,
+and apply requires both the reviewed role and epoch. Applied role changes
+increment the account role epoch, revoke its existing sessions, and write an
+audit record containing the account UUID but no email address or email hash.
+The intended owner must sign in again after a role change. Run this command as
+the `np-servicerequest` service account or another operator that has
+deliberately been granted access to the private data directory.
+If a killed process leaves an account lock behind, first verify that no login or
+role command is active; only then remove the exact UUID-named lock directory
+beneath `_board/account-locks`.
 
 The moderation console uses a separate administrator key. The browser exchanges
 that key once for an eight-hour, server-side session held in an `HttpOnly`,
 `Secure`, `SameSite=Strict` cookie. The key must not be placed in browser
-storage, URLs, source code, or logs. Configure a unique random key of at least
-32 characters in production. Key rotation invalidates sessions created from a
-different configured key set.
+storage, URLs, source code, or logs. Configure a unique random key from 32
+through 512 characters in production. Key rotation invalidates sessions created
+from a different configured key set. Removing account-admin status does not
+revoke a separately held administrator key; rotate or remove that key as part
+of full operator offboarding.
 
 ## Production data
 
-Set `SUBMISSIONS_DATA_DIR` to a persistent, private volume. Run exactly one
-application writer against a given file-backed data directory. The current
-storage design is not a distributed database and must not be shared by multiple
-replicas.
+Production refuses to start without an absolute durable data path. The checked
+systemd unit fixes it to `/var/lib/np-servicerequest/data`, owned privately by
+the unprivileged service account. Run exactly one application writer against a
+given directory. The file-backed store is not a distributed database and must
+not be shared by multiple replicas.
 
-Before first deployment of this release, inspect and then sanitize legacy
-network metadata:
+Before the first direct-host deployment, back up the existing data and inspect
+the legacy network-metadata sanitizer in dry-run mode:
 
 ```bash
-npm run sanitize:network-metadata -- --data-dir /absolute/path/to/data
-npm run sanitize:network-metadata -- --data-dir /absolute/path/to/data --apply
+npm run sanitize:network-metadata -- --data-dir /var/lib/np-servicerequest/data
+npm run sanitize:network-metadata -- --data-dir /var/lib/np-servicerequest/data --apply
 ```
 
-Back up the data directory before any migration. The application no longer
-stores raw client IP addresses or user-agent strings in submission records.
+The application no longer stores raw client IP addresses or user-agent strings
+in submission records. Backups still contain contact details, password hashes,
+sessions, moderation records, and management capabilities and require the same
+private handling as the live directory.
 
 ## Deployment requirements
 
-- Keep the exact Node and npm versions declared by this repository.
-- Install from the committed lockfile with optional dependencies enabled.
-- Run the full dependency, lint, type, test, build, accessibility, browser, and
-  container gates before release.
-- Deploy the generated container as a non-root user with a read-only root
-  filesystem and a writable private data volume.
-- Keep TLS termination in front of the application and configure
-  `BOARD_ALLOWED_ORIGINS` with exact HTTPS origins.
-- Configure a unique `ANTI_BOT_SECRET` of at least 32 characters in production.
-- Leave `TRUST_PROXY_HOPS` unset unless a trusted reverse proxy is always in
-  front of the application; when one is present, configure the exact hop count.
-- Serve the generated content-security policy. Executable inline scripts are
-  authorized by build-specific hashes; `script-src 'unsafe-inline'` must not be
-  added.
-- Treat Netlify output as a static preview; it does not provide the durable API
-  or data volume required by production.
-- Verify `/api/health` and `/release.json` after promotion so the running
-  version and full source revision match the intended release.
+- Use Node `24.18.1` and npm `12.0.2` and install from the committed root
+  lockfile with optional dependencies enabled.
+- Run the dependency, signature, native-platform, lint, type, test, build,
+  accessibility, browser, and direct-runtime gates before promotion.
+- Do not reintroduce a production Docker path. Use the checked systemd unit,
+  host Nginx configuration, atomic release symlink, and automatic rollback.
+- Keep the Node listener on `127.0.0.1:3006`; the checked unit fixes the public
+  listener escape hatch off and trusts exactly one host-local Nginx hop.
+- Configure exact credential-free HTTPS origins, an anti-bot secret from 32
+  through 512 characters, and at least one administrator key from 32 through
+  512 characters. Production fails closed when these are missing or malformed.
+- Preserve the generated hash-based content-security policy. Do not add
+  `script-src 'unsafe-inline'` or replace CSP at the outer Nginx edge.
+- Treat Netlify output as a static preview only; it has no durable API or data
+  directory.
+- Require `/api/readyz`, `/api/health`, and `/release.json` to report the same
+  version and full source revision over both IPv4 and IPv6 after promotion.
 
 Do not manually patch packages or copy native modules onto a production host.
-Any dependency fix must be represented in the manifest and committed lockfile.
+Every dependency fix must be represented in the manifests and committed
+lockfile. Source release completion and live promotion remain separate states.

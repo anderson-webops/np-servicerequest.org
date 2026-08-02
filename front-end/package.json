@@ -27,7 +27,7 @@
     "vue": "^3.5.40"
   },
   "devDependencies": {
-    "@iconify-json/carbon": "^1.2.24",
+    "@iconify-json/carbon": "^1.2.25",
     "@iconify-json/twemoji": "^1.2.5",
     "@nuxt/eslint-config": "^1.16.0",
     "@nuxtjs/color-mode": "^4.0.1",
@@ -36,8 +36,9 @@
     "@unocss/nuxt": "^66.7.5",
     "@vueuse/nuxt": "^14.4.0",
     "nuxt": "^4.5.1",
+    "rollup": "^4.62.4",
     "unocss": "^66.7.5",
-    "vue-tsc": "^3.3.8"
+    "vue-tsc": "^3.3.9"
   },
   "optionalDependencies": {
     "@esbuild/linux-arm64": "0.28.1",
@@ -54,6 +55,10 @@
     "@rolldown/binding-linux-arm64-musl": "1.2.1",
     "@rolldown/binding-linux-x64-gnu": "1.2.1",
     "@rolldown/binding-linux-x64-musl": "1.2.1",
+    "@rollup/rollup-linux-arm64-gnu": "4.62.4",
+    "@rollup/rollup-linux-arm64-musl": "4.62.4",
+    "@rollup/rollup-linux-x64-gnu": "4.62.4",
+    "@rollup/rollup-linux-x64-musl": "4.62.4",
     "@unrs/resolver-binding-linux-arm64-gnu": "1.12.2",
     "@unrs/resolver-binding-linux-arm64-musl": "1.12.2",
     "@unrs/resolver-binding-linux-x64-gnu": "1.12.2",

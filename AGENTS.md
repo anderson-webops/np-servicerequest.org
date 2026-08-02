@@ -2,12 +2,12 @@
 
 ## Project Structure & Module Organization
 
-- `front-end/` contains the Nuxt 4 application. UI lives in `app/components`, layouts in `app/layouts`, routes in
-  `app/pages`, composables in `app/composables`, and app-level config under `app/config` and `app/constants`.
+- `front-end/` contains the Nuxt 4 application. UI lives in `src/components`, layouts in `src/layouts`, routes in
+  `src/pages`, composables in `src/composables`, and app-level config under `src/config` and `src/constants`.
 - `back-end/` contains the standalone Express API. Keep route wiring and middleware in `src/`, and emit compiled output
   to `dist/`.
-- Root files (`package.json`, `tsconfig.base.json`, `eslint.config.js`, `Dockerfile`, `netlify.toml`) define the shared
-  monorepo toolchain and deployment defaults.
+- Root files (`package.json`, `tsconfig.base.json`, `eslint.config.js`, `netlify.toml`) define the shared monorepo
+  toolchain and preview defaults. `deploy/systemd` and `deploy/nginx` define production.
 
 ## Build, Test, and Development Commands
 
@@ -31,8 +31,21 @@
 
 - Run `npm run lint`, `npm run typecheck`, and `npm run build` before pushing changes.
 - When changing API behavior, verify both the front-end call site and the Express route behavior together.
+- For security or deployment releases, also run both audits, signature and native-platform checks, accessibility,
+  Playwright, and `npm run smoke:backend-runtime` against a production-only install.
 - Keep the template lineage intact: this repo is meant to stay compatible with the monorepo template it was created
   from.
+
+## Production Deployment
+
+- Production is a direct, unprivileged Node/systemd service behind host Nginx. Do not reintroduce Docker.
+- Keep the listener on loopback, the durable single-writer data directory outside release checkouts, and the fixed
+  systemd security policy intact.
+- Preserve the atomic `current` symlink, exact IPv4/IPv6 identity checks, readiness check, and automatic rollback in
+  `deploy/systemd`.
+- Account promotion and demotion must use a separately confirmed account UUID, the dry-run-first command, current-role
+  and role-epoch preconditions, the shared account-mutation lock, session revocation, and a non-PII audit record. Never
+  select a privileged account by claimed email address.
 
 ## Repository Lineage
 

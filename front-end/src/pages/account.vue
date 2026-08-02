@@ -429,6 +429,7 @@ watch(
             </p>
             <strong>{{ viewer.displayName }}</strong>
             <small>{{ viewer.email }}</small>
+            <small>Account ID for role support: <code>{{ viewer.id }}</code></small>
             <small v-if="viewer.isAdmin" class="account-panel__admin">
               Admin tools active
             </small>

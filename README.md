@@ -8,7 +8,7 @@ This repo is based on the local `vitesse-nuxt` monorepo template, which itself w
 - `back-end`: separate Express API package
 - root `package.json`: npm workspace entrypoint
 - root `tsconfig.base.json`: shared TypeScript settings
-- root `Dockerfile`: production API and generated front-end image
+- `deploy/systemd` and `deploy/nginx`: direct production service, release, rollback, and edge contracts
 - root `netlify.toml`: static front-end preview configuration
 
 ## Scripts
@@ -27,6 +27,7 @@ Useful root commands:
 - `npm run typecheck`: run front-end and back-end typechecks
 - `npm run lint`: lint both workspaces
 - `npm run test:e2e`: build the site and run the Playwright browser suite
+- `npm run smoke:backend-runtime`: exercise the built production-only Node runtime locally
 
 ## Front-End
 
@@ -63,6 +64,7 @@ different API host; use a full API base such as
 The API lives in `back-end` and exposes:
 
 - `GET /api/health`
+- `GET /api/readyz`
 - `GET /api/pageview`
 - `GET /api/service-directory/search`
 - `GET /api/board/bootstrap`
@@ -143,10 +145,13 @@ Posts can also opt into owner reply emails on a per-post basis without turning o
 
 ### Account Roles
 
-Public registration always creates a member account. Email addresses do not
-grant administrator rights. Operators can preview and explicitly apply account
-promotion or demotion with `npm run roles:account`; see
-[`SECURITY.md`](SECURITY.md) for the required command and safeguards.
+Public registration always creates a member account. Email addresses are not
+verified identity and cannot select an account for promotion. A signed-in user
+can provide the account UUID shown on the account page through a separate
+trusted channel. Operators then preview and explicitly apply promotion or
+demotion with `npm run roles:account`; the role epoch changes, existing sessions
+are revoked, and a non-PII audit record is written. See
+[`SECURITY.md`](SECURITY.md) for the exact workflow.
 Administrators can delete any board post or reply directly from the live board.
 
 ### Board Resolution States
@@ -183,6 +188,15 @@ The board currently layers several bot-friction measures:
 - signed anti-bot challenge tokens with minimum/maximum age checks
 - route-specific IP rate limits for submissions, replies, account actions, and contact reveals
 - deliberate contact reveal endpoints so emails/phones are not embedded in the board markup
+
+## Production deployment
+
+Production runs directly as the confined `np-servicerequest` systemd service
+behind host Nginx. Node listens only on `127.0.0.1:3006`; durable single-writer
+data remains at `/var/lib/np-servicerequest/data`, outside atomic release
+checkouts. The repository has no production Docker path. See
+[`DEPLOYMENT.md`](DEPLOYMENT.md) for host setup, data migration, preparation,
+promotion, automatic rollback, and dual-stack verification.
 
 ## Git Remotes
 

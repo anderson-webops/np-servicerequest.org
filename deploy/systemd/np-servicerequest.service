@@ -1,0 +1,49 @@
+[Unit]
+Description=np-servicerequest.org API and static origin
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=np-servicerequest
+Group=np-servicerequest
+WorkingDirectory=/srv/np-servicerequest.org/current
+EnvironmentFile=/etc/np-servicerequest/service.env
+ExecStartPre=/usr/bin/test -f /srv/np-servicerequest.org/current/back-end/dist/server.js
+ExecStartPre=/usr/bin/test -f /srv/np-servicerequest.org/current/front-end/.output/public/release.json
+ExecStart=/usr/bin/env NODE_ENV=production HOST=127.0.0.1 PORT=3006 ALLOW_PUBLIC_LISTENER=false ALLOW_EPHEMERAL_DATA_DIR=false TRUST_PROXY_HOPS=1 STATIC_SITE_DIR=/srv/np-servicerequest.org/current/front-end/.output/public SUBMISSIONS_DATA_DIR=/var/lib/np-servicerequest/data /usr/bin/node back-end/dist/server.js
+Restart=on-failure
+RestartSec=5s
+SyslogIdentifier=np-servicerequest
+TimeoutStartSec=30s
+TimeoutStopSec=30s
+UMask=0077
+AmbientCapabilities=
+CapabilityBoundingSet=
+LockPersonality=true
+NoExecPaths=/var/lib/np-servicerequest
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateMounts=true
+PrivateTmp=true
+ProcSubset=pid
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectProc=invisible
+ProtectSystem=strict
+RemoveIPC=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+StateDirectory=np-servicerequest
+StateDirectoryMode=0700
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

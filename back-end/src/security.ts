@@ -4,8 +4,8 @@ import { env } from 'node:process'
 
 const configuredAntiBotSecret = env.ANTI_BOT_SECRET?.trim() || ''
 
-if (env.NODE_ENV === 'production' && configuredAntiBotSecret.length < 32)
-  throw new Error('ANTI_BOT_SECRET must contain at least 32 characters in production.')
+if (env.NODE_ENV === 'production' && (configuredAntiBotSecret.length < 32 || configuredAntiBotSecret.length > 512))
+  throw new Error('ANTI_BOT_SECRET must contain from 32 through 512 characters in production.')
 
 const antiBotSecret = configuredAntiBotSecret || randomBytes(32).toString('hex')
 const antiBotMinAgeMs = 1200
@@ -236,6 +236,28 @@ function getAllowedOrigins() {
       ]
 
   return new Set(configuredOrigins.length ? configuredOrigins : defaults)
+}
+
+export function assertValidRequestOriginConfiguration() {
+  for (const origin of getAllowedOrigins()) {
+    let parsed: URL
+
+    try {
+      parsed = new URL(origin)
+    }
+    catch {
+      throw new Error(`Invalid allowed request origin: ${origin}`)
+    }
+
+    if (
+      parsed.protocol !== 'https:'
+      || parsed.username
+      || parsed.password
+      || parsed.origin !== origin
+    ) {
+      throw new Error('Production request origins must be exact credential-free HTTPS origins.')
+    }
+  }
 }
 
 export function isAllowedRequestOrigin(origin: string | undefined) {

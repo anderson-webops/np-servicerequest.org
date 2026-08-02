@@ -201,6 +201,19 @@ function isValidAdminReviewStatus(value: string): value is AdminReviewStatus {
   return adminReviewStatuses.includes(value as AdminReviewStatus)
 }
 
+export function assertValidAdminConfiguration() {
+  const configuredAdminKeys = getConfiguredAdminKeys()
+
+  if (!configuredAdminKeys.length)
+    throw new AdminConfigurationError('Admin review is not configured on this server.')
+
+  if (configuredAdminKeys.some(key => key.length > 512))
+    throw new AdminConfigurationError('Admin review keys must not exceed 512 characters.')
+
+  if (env.NODE_ENV === 'production' && configuredAdminKeys.some(key => key.length < 32))
+    throw new AdminConfigurationError('Admin review requires keys from 32 through 512 characters in production.')
+}
+
 const adminSessionDurationSeconds = 60 * 60 * 8
 const adminSessionDirectory = resolveDataPath('_board', 'admin-sessions')
 export const adminSessionCookieName = env.NODE_ENV === 'production'
@@ -235,10 +248,8 @@ function isMatchingAdminKey(candidate: string, configured: string) {
 }
 
 function getAdminKeySetFingerprint() {
+  assertValidAdminConfiguration()
   const configuredAdminKeys = getConfiguredAdminKeys()
-
-  if (!configuredAdminKeys.length)
-    throw new AdminConfigurationError('Admin review is not configured on this server.')
 
   return createHash('sha256')
     .update(`np-servicerequest-admin-session-v1\0${configuredAdminKeys.sort().join('\0')}`)
@@ -577,18 +588,13 @@ function buildReviewLogDetail(status: AdminReviewStatus, boardState: SubmissionB
 }
 
 export function assertValidAdminKey(rawAdminKey: string) {
+  assertValidAdminConfiguration()
   const configuredAdminKeys = getConfiguredAdminKeys()
-
-  if (!configuredAdminKeys.length)
-    throw new AdminConfigurationError('Admin review is not configured on this server.')
 
   const normalizedAdminKey = rawAdminKey.trim()
 
   if (!normalizedAdminKey)
     throw new AdminAuthorizationError('Enter a valid admin key to continue.')
-
-  if (env.NODE_ENV === 'production' && configuredAdminKeys.some(key => key.length < 32))
-    throw new AdminConfigurationError('Admin review requires keys of at least 32 characters.')
 
   if (!configuredAdminKeys.some(configuredAdminKey => isMatchingAdminKey(normalizedAdminKey, configuredAdminKey)))
     throw new AdminAuthorizationError('That admin key was not accepted.')

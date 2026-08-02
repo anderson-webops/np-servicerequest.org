@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
-import { chmod, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { access, chmod, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, resolve, sep } from 'node:path'
 import { env, pid } from 'node:process'
@@ -23,6 +24,12 @@ export function resolveDataPath(...segments: string[]) {
 export async function ensurePrivateDirectory(directory: string) {
   await mkdir(directory, { mode: 0o700, recursive: true })
   await chmod(directory, 0o700)
+}
+
+export async function assertDataDirectoryReady() {
+  const dataRoot = getDataRoot()
+  await ensurePrivateDirectory(dataRoot)
+  await access(dataRoot, constants.R_OK | constants.W_OK | constants.X_OK)
 }
 
 export async function writeJsonFile(filePath: string, data: unknown) {

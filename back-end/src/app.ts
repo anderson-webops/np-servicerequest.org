@@ -20,6 +20,7 @@ import {
   adminReviewStatuses,
   AdminSubmissionNotFoundError,
   AdminSubmissionValidationError,
+  assertValidAdminConfiguration,
   assertValidAdminSession,
   assertValidAdminKey,
   clearAdminSessionCookie,
@@ -48,6 +49,7 @@ import {
   setBoardItemResolution,
 } from './board.js'
 import { normalizeStructuredContact } from './contact.js'
+import { assertDataDirectoryReady } from './data.js'
 import {
   sendBoardInteractionNotificationEmail,
   sendBoardItemManagementLinkEmail,
@@ -56,6 +58,7 @@ import {
 } from './notifications.js'
 import {
   assertAllowedUnsafeRequest,
+  assertValidRequestOriginConfiguration,
   BotProtectionError,
   clearSessionCookie,
   consumeRateLimit,
@@ -263,6 +266,21 @@ async function assertAdminRequest(request: express.Request) {
   }
 }
 
+function hasHiddenPathSegment(pathname: string) {
+  let decodedPath: string
+
+  try {
+    decodedPath = decodeURIComponent(pathname)
+  }
+  catch {
+    return true
+  }
+
+  return decodedPath
+    .split('/')
+    .some(segment => segment.startsWith('.') && segment !== '.')
+}
+
 export function createApp(options?: { staticDirectory?: string }) {
   const app = express()
   const staticDirectory = options?.staticDirectory
@@ -270,6 +288,11 @@ export function createApp(options?: { staticDirectory?: string }) {
     : undefined
   const releaseIdentity = resolveReleaseIdentity(staticDirectory)
   const inlineScriptHashes = getInlineScriptHashes(staticDirectory)
+
+  if (process.env.NODE_ENV === 'production') {
+    assertValidAdminConfiguration()
+    assertValidRequestOriginConfiguration()
+  }
 
   app.disable('x-powered-by')
   if (process.env.NODE_ENV === 'production' && process.env.TRUST_PROXY_HOPS) {
@@ -310,6 +333,9 @@ export function createApp(options?: { staticDirectory?: string }) {
       },
     },
     crossOriginEmbedderPolicy: false,
+    frameguard: {
+      action: 'deny',
+    },
     referrerPolicy: {
       policy: 'strict-origin-when-cross-origin',
     },
@@ -358,6 +384,27 @@ export function createApp(options?: { staticDirectory?: string }) {
       startedAt,
       version: releaseIdentity.version,
     })
+  })
+
+  app.get('/api/readyz', async (_request, response) => {
+    try {
+      await assertDataDirectoryReady()
+      response.json({
+        dependencies: [{ name: 'submissions-data', status: 'ready' }],
+        ok: true,
+        revision: releaseIdentity.revision,
+        status: 'ready',
+        version: releaseIdentity.version,
+      })
+    }
+    catch (error) {
+      console.error('Readiness check failed:', error instanceof Error ? error.name : 'unknown error')
+      response.status(503).json({
+        dependencies: [{ name: 'submissions-data', status: 'unavailable' }],
+        ok: false,
+        status: 'unavailable',
+      })
+    }
   })
 
   app.get('/api/pageview', (request, response) => {
@@ -1081,6 +1128,14 @@ export function createApp(options?: { staticDirectory?: string }) {
   })
 
   if (staticDirectory) {
+    app.use((request, response, next) => {
+      if (hasHiddenPathSegment(request.path)) {
+        response.status(404).type('text/plain').send('Not found.')
+        return
+      }
+
+      next()
+    })
     app.use(express.static(staticDirectory, {
       index: 'index.html',
       setHeaders(response, filePath) {

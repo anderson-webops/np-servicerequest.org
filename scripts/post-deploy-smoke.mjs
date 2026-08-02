@@ -5,6 +5,7 @@ const baseUrl = new URL(process.env.PRODUCTION_BASE_URL || 'https://np-servicere
 const expectedVersion = process.env.EXPECTED_VERSION?.replace(/^v/, '') || ''
 const expectedRevision = process.env.EXPECTED_REVISION || ''
 const verifyAdminKey = process.env.VERIFY_ADMIN_KEY || ''
+const requestOrigin = process.env.PRODUCTION_REQUEST_ORIGIN || baseUrl.origin
 
 assert.match(expectedVersion, /^\d+\.\d+\.\d+$/, 'EXPECTED_VERSION is required.')
 assert.match(expectedRevision, /^[0-9a-f]{40}$/, 'EXPECTED_REVISION must be a full Git revision.')
@@ -17,22 +18,27 @@ async function fetchWithTimeout(path, init) {
   })
 }
 
-const [homeResponse, healthResponse, releaseResponse] = await Promise.all([
+const [homeResponse, healthResponse, readinessResponse, releaseResponse] = await Promise.all([
   fetchWithTimeout('/'),
   fetchWithTimeout('/api/health'),
+  fetchWithTimeout('/api/readyz'),
   fetchWithTimeout('/release.json'),
 ])
 
 assert.equal(homeResponse.status, 200)
 assert.equal(healthResponse.status, 200)
+assert.equal(readinessResponse.status, 200)
 assert.equal(releaseResponse.status, 200)
 
 const health = await healthResponse.json()
+const readiness = await readinessResponse.json()
 const release = await releaseResponse.json()
-for (const identity of [health, release]) {
+for (const identity of [health, readiness, release]) {
   assert.equal(identity.version, expectedVersion)
   assert.equal(identity.revision, expectedRevision)
 }
+assert.equal(readiness.status, 'ready')
+assert.deepEqual(readiness.dependencies, [{ name: 'submissions-data', status: 'ready' }])
 
 const csp = homeResponse.headers.get('content-security-policy') || ''
 assert.match(csp, /default-src 'self'/)
@@ -73,6 +79,11 @@ const pathStyleResponse = await fetchWithTimeout(
   '/posts/00000000-0000-4000-8000-000000000000',
 )
 assert.equal(pathStyleResponse.status, 200)
+for (const hiddenPath of ['/.env', '/%2eenv', '/.git/config', '/%2egit/config']) {
+  const hiddenPathResponse = await fetchWithTimeout(hiddenPath)
+  assert.equal(hiddenPathResponse.status, 404)
+  assert.doesNotMatch(await hiddenPathResponse.text(), /ANTI_BOT|BOARD_ADMIN|SMTP_/u)
+}
 
 if (verifyAdminKey) {
   assert.ok(verifyAdminKey.length >= 32, 'VERIFY_ADMIN_KEY must contain at least 32 characters.')
@@ -83,7 +94,7 @@ if (verifyAdminKey) {
     }),
     headers: {
       'content-type': 'application/json',
-      'origin': baseUrl.origin,
+      'origin': requestOrigin,
       'sec-fetch-site': 'same-origin',
     },
     method: 'POST',
@@ -107,7 +118,7 @@ if (verifyAdminKey) {
   const logoutResponse = await fetchWithTimeout('/api/admin/session', {
     headers: {
       'cookie': adminCookie,
-      'origin': baseUrl.origin,
+      'origin': requestOrigin,
       'sec-fetch-site': 'same-origin',
     },
     method: 'DELETE',

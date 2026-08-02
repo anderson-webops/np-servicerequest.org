@@ -1,20 +1,26 @@
+import "dotenv/config";
+
 import process, { env, exit } from "node:process";
 import { resolve } from "node:path";
 
 import { createApp } from "./app.js";
-import "dotenv/config";
+import { resolveRuntimeConfiguration } from "./runtime-config.js";
 
 async function main() {
+	const runtime = resolveRuntimeConfiguration(env);
 	const app = createApp({
-		staticDirectory: env.STATIC_SITE_DIR
-			? resolve(env.STATIC_SITE_DIR)
+		staticDirectory: runtime.staticDirectory
+			? resolve(runtime.staticDirectory)
 			: undefined
 	});
-	const port = Number(env.PORT || 3006);
 
-	const server = app.listen(port, () => {
-		console.log(`Server listening on port ${port}!`);
+	const server = app.listen(runtime.port, runtime.host, () => {
+		console.log(`Server listening on ${runtime.host}:${runtime.port}.`);
 	});
+	server.headersTimeout = 10_000;
+	server.keepAliveTimeout = 5_000;
+	server.maxRequestsPerSocket = 1_000;
+	server.requestTimeout = 30_000;
 
 	let isShuttingDown = false;
 

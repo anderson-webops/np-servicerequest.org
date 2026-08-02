@@ -8,6 +8,7 @@
 .tmp
 playwright-report
 test-results
+.np-servicerequest-release-prepared.json
 
 # local env files
 **/.env

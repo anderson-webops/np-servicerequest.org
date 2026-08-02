@@ -1,0 +1,86 @@
+name: Validate direct production release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+concurrency:
+  group: np-service-request-production-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: 24.18.1
+  NPM_VERSION: 12.0.2
+  PUPPETEER_SKIP_DOWNLOAD: "true"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Use the repository npm version
+        run: npm install --global "npm@${NPM_VERSION}"
+
+      - name: Verify annotated source release
+        id: release
+        shell: bash
+        run: |
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          test "${GITHUB_REF_NAME}" = "v${PACKAGE_VERSION}"
+          test "$(git cat-file -t "refs/tags/${GITHUB_REF_NAME}")" = "tag"
+          test "$(git rev-parse "refs/tags/${GITHUB_REF_NAME}^{}")" = "$(git rev-parse HEAD)"
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$(git rev-parse refs/remotes/origin/main)"
+          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "version=${PACKAGE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "source_epoch=$(git show -s --format=%ct HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Run direct release gates
+        env:
+          NP_RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          SOURCE_DATE_EPOCH: ${{ steps.release.outputs.source_epoch }}
+          SOURCE_REVISION: ${{ steps.release.outputs.revision }}
+        run: |
+          test "$(node --version)" = "v${NODE_VERSION}"
+          test "$(npm --version)" = "${NPM_VERSION}"
+          npm ci --include=optional --strict-allow-scripts
+          npm run audit
+          npm run audit:production
+          npm run audit:signatures
+          npm run verify:dependency-graph
+          npm run verify:native-lock
+          npm run verify:platform-install
+          npm run lint
+          npm run typecheck
+          npm test
+          npm run build
+          npm run a11y
+          npm run test:e2e
+          npm ci --omit=dev --include=optional --ignore-scripts
+          npm run audit:production
+          npm run smoke:backend-runtime
+          git diff --check
+
+      - name: Record direct deployment identity
+        run: |
+          {
+            echo "### NP Service Request direct release"
+            echo
+            echo "- Release: \`${GITHUB_REF_NAME}\`"
+            echo "- Revision: \`${{ steps.release.outputs.revision }}\`"
+            echo "- Deployment: atomic host systemd/Nginx promotion"
+          } >> "$GITHUB_STEP_SUMMARY"

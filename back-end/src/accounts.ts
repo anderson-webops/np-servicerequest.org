@@ -1,18 +1,60 @@
 import { Buffer } from 'node:buffer'
 import { randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto'
+import { mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
-import { listJsonDirectory, readJsonFile, removeFileIfExists, resolveDataPath, writeJsonFile } from './data.js'
+import {
+  ensurePrivateDirectory,
+  listJsonDirectory,
+  readJsonFile,
+  removeFileIfExists,
+  removePathIfExists,
+  resolveDataPath,
+  writeJsonFile,
+} from './data.js'
 import { createSessionExpiry, hashSessionToken, readCookieValue, sessionCookieName } from './security.js'
 import { AccountValidationError } from './submissions.js'
 
 const accountDirectory = resolveDataPath('_board', 'accounts')
+const accountLockDirectory = resolveDataPath('_board', 'account-locks')
 const sessionDirectory = resolveDataPath('_board', 'sessions')
 const sessionAbsoluteDurationMs = 1000 * 60 * 60 * 24 * 7
 const sessionIdleDurationMs = 1000 * 60 * 60 * 12
 const sessionTouchIntervalMs = 1000 * 60 * 5
 const currentPasswordAlgorithm = 'scrypt-v2'
 let accountRegistrationQueue = Promise.resolve()
+
+async function wait(milliseconds: number) {
+  await new Promise(resolveWait => setTimeout(resolveWait, milliseconds))
+}
+
+async function withAccountMutationLock<T>(accountId: string, task: () => Promise<T>) {
+  getAccountFilePath(accountId)
+  const lockPath = resolve(accountLockDirectory, `${accountId}.lock`)
+  const deadline = Date.now() + 10_000
+  await ensurePrivateDirectory(accountLockDirectory)
+
+  while (true) {
+    try {
+      await mkdir(lockPath, { mode: 0o700 })
+      break
+    }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST')
+        throw error
+      if (Date.now() >= deadline)
+        throw new Error('The account is temporarily locked for a security-sensitive update.')
+      await wait(50)
+    }
+  }
+
+  try {
+    return await task()
+  }
+  finally {
+    await removePathIfExists(lockPath)
+  }
+}
 
 interface StoredAccount {
   id: string
@@ -24,6 +66,7 @@ interface StoredAccount {
   passwordHash: string
   passwordSalt: string
   role?: 'admin' | 'member'
+  roleVersion?: number
   updatedAt: string
 }
 
@@ -31,6 +74,7 @@ interface StoredSession {
   createdAt: string
   expiresAt: string
   lastSeenAt?: string
+  roleVersion?: number
   tokenHash: string
   userId: string
 }
@@ -90,6 +134,7 @@ function validateEmail(email: string) {
     !email
     || email.length > 320
     || /\s/.test(email)
+    || /[\u0000-\u001f\u007f-\u009f]/u.test(email)
     || !/^[^@]+@[^@]+\.[^@]+$/.test(email)
   ) {
     throw new AccountValidationError('A valid email address is required.')
@@ -176,6 +221,7 @@ async function createSession(account: StoredAccount): Promise<AccountSessionResu
     createdAt: now,
     expiresAt: createSessionExpiry(),
     lastSeenAt: now,
+    roleVersion: Number.isSafeInteger(account.roleVersion) ? account.roleVersion : 0,
     tokenHash,
     userId: account.id,
   }
@@ -242,6 +288,14 @@ export async function getViewerFromCookie(cookieHeader: string | undefined) {
     return null
   }
 
+  const accountRoleVersion = Number.isSafeInteger(account.roleVersion) ? account.roleVersion : 0
+  const sessionRoleVersion = Number.isSafeInteger(session.roleVersion) ? session.roleVersion : 0
+
+  if (sessionRoleVersion !== accountRoleVersion) {
+    await removeFileIfExists(getSessionFilePath(tokenHash))
+    return null
+  }
+
   if (Date.now() - lastSeenAt >= sessionTouchIntervalMs) {
     await writeJsonFile(getSessionFilePath(tokenHash), {
       ...session,
@@ -290,6 +344,7 @@ export async function registerBoardAccount(input: { displayName: string, email: 
       passwordHash: passwordHash.toString('hex'),
       passwordSalt,
       role: 'member',
+      roleVersion: 0,
       updatedAt: createdAt,
     }
 
@@ -313,17 +368,37 @@ export async function loginBoardAccount(input: { email: string, password: string
   if (!account || !isMatchingPasswordHash(expectedHash, account.passwordHash))
     throw new AccountAuthenticationError('That email/password combination was not recognized.')
 
+  let accountForSession = account
+
   if (passwordAlgorithm !== currentPasswordAlgorithm) {
-    const nextSalt = randomBytes(16).toString('hex')
-    const nextHash = await derivePassword(password, nextSalt, currentPasswordAlgorithm)
-    await writeJsonFile(getAccountFilePath(account.id), {
-      ...account,
-      passwordAlgorithm: currentPasswordAlgorithm,
-      passwordHash: nextHash.toString('hex'),
-      passwordSalt: nextSalt,
-      updatedAt: new Date().toISOString(),
+    accountForSession = await withAccountMutationLock(account.id, async () => {
+      const latestAccount = await getAccountById(account.id)
+
+      if (!latestAccount)
+        throw new AccountAuthenticationError('That email/password combination was not recognized.')
+
+      const latestAlgorithm = latestAccount.passwordAlgorithm || currentPasswordAlgorithm
+      const latestHash = await derivePassword(password, latestAccount.passwordSalt, latestAlgorithm)
+
+      if (!isMatchingPasswordHash(latestHash, latestAccount.passwordHash))
+        throw new AccountAuthenticationError('That email/password combination was not recognized.')
+
+      if (latestAlgorithm === currentPasswordAlgorithm)
+        return latestAccount
+
+      const nextSalt = randomBytes(16).toString('hex')
+      const nextHash = await derivePassword(password, nextSalt, currentPasswordAlgorithm)
+      const upgradedAccount: StoredAccount = {
+        ...latestAccount,
+        passwordAlgorithm: currentPasswordAlgorithm,
+        passwordHash: nextHash.toString('hex'),
+        passwordSalt: nextSalt,
+        updatedAt: new Date().toISOString(),
+      }
+      await writeJsonFile(getAccountFilePath(account.id), upgradedAccount)
+      return upgradedAccount
     })
   }
 
-  return createSession(account)
+  return createSession(accountForSession)
 }
