@@ -1,7 +1,7 @@
 {
 	"name": "np-servicerequest-org-monorepo",
 	"type": "module",
-	"version": "1.2.38",
+	"version": "1.2.39",
 	"private": true,
 	"packageManager": "npm@12.0.2",
 	"engines": {
@@ -35,7 +35,7 @@
 		"lint": "npm run lint:root && npm run -w front-end lint && npm run -w back-end lint",
 		"lint:root": "eslint \"scripts/**/*.mjs\" eslint.config.js playwright.config.ts",
 		"lint-fix": "npm run -w front-end lint-fix && npm run -w back-end lint-fix",
-    "test:e2e": "DISABLE_ANALYTICS=true NUXT_PUBLIC_API_BASE_URL=/api npm run build && playwright test && npm run build",
+		"test:e2e": "DISABLE_ANALYTICS=true NUXT_PUBLIC_API_BASE_URL=/api npm run build && playwright test && npm run build",
 		"typecheck": "npm run -w front-end typecheck && npm run -w back-end typecheck",
 		"clean": "rm -rf node_modules front-end/node_modules front-end/.nuxt front-end/.output back-end/node_modules back-end/dist",
 		"roles:account": "node back-end/scripts/manage-account-role.mjs",
