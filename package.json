@@ -50,14 +50,14 @@
 		"smoke:backend-runtime": "node scripts/backend-runtime-smoke.mjs"
 	},
 	"devDependencies": {
-		"@antfu/eslint-config": "^9.2.0",
+		"@antfu/eslint-config": "^9.3.0",
 		"@playwright/test": "^1.62.1",
-		"axe-core": "^4.12.1",
+		"axe-core": "^4.13.0",
 		"commander": "15.0.0",
 		"eslint": "^10.8.0",
 		"eslint-plugin-format": "^2.0.1",
-		"lint-staged": "^17.2.0",
-		"puppeteer": "^25.4.0",
+		"lint-staged": "^17.3.0",
+		"puppeteer": "^25.5.0",
 		"rollup": "4.62.4",
 		"simple-git-hooks": "^2.13.1",
 		"taze": "^19.16.0",
