@@ -24,7 +24,7 @@
   "dependencies": {
     "@vueuse/core": "^14.4.0",
     "pinia": "^4.0.2",
-    "vue": "^3.5.40"
+    "vue": "^3.5.41"
   },
   "devDependencies": {
     "@iconify-json/carbon": "^1.2.25",
