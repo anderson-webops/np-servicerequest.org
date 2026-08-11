@@ -281,13 +281,19 @@ function hasHiddenPathSegment(pathname: string) {
     .some(segment => segment.startsWith('.') && segment !== '.')
 }
 
-export function createApp(options?: { staticDirectory?: string }) {
+interface AppOptions {
+  readinessCheck?: () => Promise<void>
+  staticDirectory?: string
+}
+
+export function createApp(options?: AppOptions) {
   const app = express()
   const staticDirectory = options?.staticDirectory
     ? resolve(options.staticDirectory)
     : undefined
   const releaseIdentity = resolveReleaseIdentity(staticDirectory)
   const inlineScriptHashes = getInlineScriptHashes(staticDirectory)
+  const readinessCheck = options?.readinessCheck ?? assertDataDirectoryReady
 
   if (process.env.NODE_ENV === 'production') {
     assertValidAdminConfiguration()
@@ -347,6 +353,31 @@ export function createApp(options?: { staticDirectory?: string }) {
     )
     next()
   })
+
+  const sendProbe = (request: express.Request, response: express.Response, ok: boolean) => {
+    response.setHeader('Cache-Control', 'no-store')
+    const probe = response.status(ok ? 200 : 503)
+    return request.method === 'HEAD' ? probe.end() : probe.json({ ok })
+  }
+  const healthHandler: express.RequestHandler = (request, response) => {
+    sendProbe(request, response, true)
+  }
+  const readinessHandler: express.RequestHandler = async (request, response) => {
+    try {
+      await readinessCheck()
+      sendProbe(request, response, true)
+    }
+    catch (error) {
+      console.error('Readiness check failed:', error instanceof Error ? error.name : 'unknown error')
+      sendProbe(request, response, false)
+    }
+  }
+
+  app.head('/healthz', healthHandler)
+  app.get('/healthz', healthHandler)
+  app.head('/readyz', readinessHandler)
+  app.get('/readyz', readinessHandler)
+
   app.use(cors({
     allowedHeaders: ['content-type', 'x-admin-key'],
     credentials: true,
@@ -388,7 +419,7 @@ export function createApp(options?: { staticDirectory?: string }) {
 
   app.get('/api/readyz', async (_request, response) => {
     try {
-      await assertDataDirectoryReady()
+      await readinessCheck()
       response.json({
         dependencies: [{ name: 'submissions-data', status: 'ready' }],
         ok: true,

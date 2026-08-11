@@ -75,6 +75,10 @@ The API lives in `back-end` and exposes:
 - `POST /api/submissions/item-lending`
 - `POST /api/board/items/:itemId/claim-management`
 - `POST /api/board/items/:itemId/interactions`
+
+Minimal unauthenticated `GET`/`HEAD /healthz` and `GET`/`HEAD /readyz` monitor
+probes are documented in [`HEALTHCHECKS.md`](HEALTHCHECKS.md). Release identity
+remains separate from those probes.
 - `POST /api/board/items/:itemId/contact`
 - `POST /api/board/items/:itemId/report`
 - `POST /api/board/items/:itemId/resolution`
