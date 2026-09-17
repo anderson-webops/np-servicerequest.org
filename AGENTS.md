@@ -38,6 +38,15 @@
   backend in either production path.
 - Treat template breakage as high impact: small config changes can affect every downstream repo created from this
   template.
+- For direct runtime changes, run the required-path/hash regressions in `npm test`
+  and the exact Linux ARM64 archive workflow in `docs/runtime-artifact-contract.md`.
+  A source build, workspace install or lockfile native entry alone is not artifact
+  acceptance. Verify the copied runtime against the original trusted archive.
+- Preserve the static frontend and minimal independent API. Carry the bounded
+  rate store and repeated-signal drain forward without replacing downstream
+  authentication, quotas, provider cleanup, dependency readiness or persistent
+  state rules. Adding a dependency or service requires extending the artifact
+  contract and isolated acceptance fixtures. Do not combine client services.
 
 ## Template Workflow
 

@@ -40,7 +40,8 @@ npm run a11y
 
 The starter API is deliberately public and read-only:
 
-- `GET /api/health` returns `{ "ok": true }` with no-store caching.
+- `GET`/`HEAD /healthz` and `/api/healthz` provide minimal liveness; `/api/health` remains compatible.
+- `GET`/`HEAD /readyz` and `/api/readyz` return `200` when ready or `503` when unavailable/stopping. GET returns only `{ "ok": true }` or `{ "ok": false }`; HEAD has no body. Probes set `Cache-Control: no-store` and never create cookies, redirects, sessions or diagnostics.
 - `HEAD` and `OPTIONS` are permitted.
 - Other methods return `405`, and unknown routes return JSON `404` responses.
 
@@ -63,6 +64,10 @@ sudo PUBLIC_HOST=site.example deploy/systemd/promote-release.sh /srv/vitesse-nux
 ```
 
 See `deploy/README.md` for the exact rollout and rollback contract. The direct API never binds a public interface.
+See `docs/runtime-artifact-contract.md` for the independent Linux ARM64 artifact,
+hash verification and isolated runtime acceptance. Existing installed paths and
+ports remain the operator's contract; adopting this template does not authorize
+replacing a live host topology.
 
 ## Netlify deployment
 
