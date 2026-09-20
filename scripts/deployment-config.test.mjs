@@ -29,6 +29,7 @@ test('production is a confined direct Node service without Docker', async () => 
   assert.doesNotMatch(ci, /docker|container:/i)
   assert.doesNotMatch(dependabot, /package-ecosystem:\s*docker/u)
   assert.doesNotMatch(release, /docker|ghcr\.io/i)
+  assert.ok(release.indexOf('npx --no-install playwright install --with-deps chromium') < release.indexOf('npm run test:e2e'))
   assert.match(service, /User=np-servicerequest/u)
   assert.match(service, /HOST=127\.0\.0\.1/u)
   assert.match(service, /PORT=3016/u)

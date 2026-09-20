@@ -77,7 +77,7 @@ jobs:
       - name: Install dependencies and Chromium
         run: |
           npm ci --include=optional --strict-allow-scripts
-          npx playwright install --with-deps chromium
+          npx --no-install playwright install --with-deps chromium
 
       - name: Browser workflow tests
         run: npm run test:e2e

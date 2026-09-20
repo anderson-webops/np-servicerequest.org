@@ -60,6 +60,7 @@ jobs:
           test "$(node --version)" = "v${NODE_VERSION}"
           test "$(npm --version)" = "${NPM_VERSION}"
           npm ci --include=optional --strict-allow-scripts
+          npx --no-install playwright install --with-deps chromium
           npm run audit
           npm run audit:production
           npm run audit:signatures
