@@ -23,7 +23,6 @@ node scripts/write-release-metadata.mjs
 cp package.json package-lock.json "$stage/"
 cp front-end/.output/public/release.json "$stage/.np-servicerequest-release-prepared.json"
 cp back-end/package.json "$stage/back-end/"
-cp front-end/package.json "$stage/front-end/"
 cp -R front-end/.output/public "$stage/front-end/.output/"
 python3 -B - "$root" "$stage" <<'PY'
 import json
@@ -48,6 +47,8 @@ npm ci --prefix "$stage" --workspace back-end --omit=dev --omit=optional --ignor
 npm audit --prefix "$stage" --workspace back-end --omit=dev --omit=optional --audit-level=low
 npm audit signatures --prefix "$stage"
 npm ls --prefix "$stage" --workspace back-end --omit=dev --omit=optional --all > "$output/dependency-tree.txt"
+# Keep frontend-only native build bindings out of the backend runtime install.
+cp front-end/package.json "$stage/front-end/"
 # This reviewed JS-only runtime has no executable dependency bins. The verifier
 # rejects any other symlinks; it never follows links into a source checkout.
 rm -f -- "$stage/node_modules/back-end" "$stage/node_modules/front-end"
