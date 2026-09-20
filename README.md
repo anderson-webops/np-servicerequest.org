@@ -98,7 +98,8 @@ Listing endpoints now support server-side filtering and pagination:
 - `GET /api/admin/submissions?review=all|pending|approved|needs-follow-up|rejected&kind=all|service-request|item-request|item-lending&submissionsPage=1&submissionsPageSize=20&activityCategory=all|posts|replies|moderation|deletions|reports&activityPage=1&activityPageSize=40`
 - `GET /api/service-directory/search?provider=idealist&query=food%20pantry&lat=33.749&lng=-84.388&radiusMiles=40&page=1&pageSize=12`
 
-Default port: `3006`
+Local-development default port: `3006`. The reviewed production listener remains
+`127.0.0.1:3016` so it does not collide with other installed services.
 
 Form submissions are written under `SUBMISSIONS_DATA_DIR` when it is set. When it is not set, the back-end falls back to an OS temp directory under `np-servicerequest/submissions`, which is suitable for local development but not durable production storage.
 
@@ -196,7 +197,7 @@ The board currently layers several bot-friction measures:
 ## Production deployment
 
 Production runs directly as the confined `np-servicerequest` systemd service
-behind host Nginx. Node listens only on `127.0.0.1:3006`; durable single-writer
+behind host Nginx. Node listens only on `127.0.0.1:3016`; durable single-writer
 data remains at `/var/lib/np-servicerequest/data`, outside atomic release
 checkouts. The repository has no production Docker path. See
 [`DEPLOYMENT.md`](DEPLOYMENT.md) for host setup, data migration, preparation,

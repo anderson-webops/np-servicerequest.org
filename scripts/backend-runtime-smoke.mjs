@@ -9,7 +9,12 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const repositoryRoot = process.argv[2]
+  ? path.resolve(process.argv[2])
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const postDeploySmokePath = process.argv[3]
+  ? path.resolve(process.argv[3])
+  : path.join(repositoryRoot, 'scripts', 'post-deploy-smoke.mjs')
 const staticDirectory = path.join(repositoryRoot, 'front-end', '.output', 'public')
 const serverPath = path.join(repositoryRoot, 'back-end', 'dist', 'server.js')
 const release = JSON.parse(await readFile(path.join(staticDirectory, 'release.json'), 'utf8'))
@@ -56,6 +61,9 @@ async function stopChild(child) {
     return
 
   child.kill('SIGTERM')
+  await new Promise(resolveWait => setTimeout(resolveWait, 20))
+  if (child.exitCode == null)
+    child.kill('SIGTERM')
   await Promise.race([
     new Promise(resolveExit => child.once('exit', resolveExit)),
     new Promise(resolveTimeout => setTimeout(resolveTimeout, 5_000)),
@@ -98,7 +106,7 @@ child.stderr.on('data', chunk => diagnostics.push(chunk.toString()))
 
 try {
   await waitForServer(baseUrl, child, diagnostics)
-  const result = await execFileAsync(process.execPath, ['scripts/post-deploy-smoke.mjs'], {
+  const result = await execFileAsync(process.execPath, [postDeploySmokePath], {
     cwd: repositoryRoot,
     env: {
       ...process.env,

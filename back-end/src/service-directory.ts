@@ -286,9 +286,9 @@ function stripHtml(value: string | null | undefined) {
     .replaceAll(/<\/p>/gi, '\n\n')
     .replaceAll(/<[^>]+>/g, ' ')
     .replaceAll(/&nbsp;/gi, ' ')
-    .replaceAll(/&amp;/gi, '&')
     .replaceAll(/&quot;/gi, '"')
     .replaceAll(/&#39;/g, '\'')
+    .replaceAll(/&amp;/gi, '&')
     .replaceAll(/\s+/g, ' ')
     .trim()
 }

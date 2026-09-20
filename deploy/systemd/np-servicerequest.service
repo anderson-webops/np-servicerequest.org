@@ -11,12 +11,14 @@ WorkingDirectory=/srv/np-servicerequest.org/current
 EnvironmentFile=/etc/np-servicerequest/service.env
 ExecStartPre=/usr/bin/test -f /srv/np-servicerequest.org/current/back-end/dist/server.js
 ExecStartPre=/usr/bin/test -f /srv/np-servicerequest.org/current/front-end/.output/public/release.json
-ExecStart=/usr/bin/env NODE_ENV=production HOST=127.0.0.1 PORT=3006 ALLOW_PUBLIC_LISTENER=false ALLOW_EPHEMERAL_DATA_DIR=false TRUST_PROXY_HOPS=1 STATIC_SITE_DIR=/srv/np-servicerequest.org/current/front-end/.output/public SUBMISSIONS_DATA_DIR=/var/lib/np-servicerequest/data /usr/bin/node back-end/dist/server.js
+ExecStartPre=/usr/bin/test -f /srv/np-servicerequest.org/current/runtime-manifest.json
+ExecStart=/usr/bin/env NODE_ENV=production HOST=127.0.0.1 PORT=3016 ALLOW_PUBLIC_LISTENER=false ALLOW_EPHEMERAL_DATA_DIR=false TRUST_PROXY_HOPS=1 STATIC_SITE_DIR=/srv/np-servicerequest.org/current/front-end/.output/public SUBMISSIONS_DATA_DIR=/var/lib/np-servicerequest/data /opt/node-24.18.1/bin/node back-end/dist/server.js
 Restart=on-failure
 RestartSec=5s
 SyslogIdentifier=np-servicerequest
 TimeoutStartSec=30s
 TimeoutStopSec=30s
+TasksMax=64
 UMask=0077
 AmbientCapabilities=
 CapabilityBoundingSet=

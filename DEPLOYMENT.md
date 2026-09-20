@@ -13,9 +13,11 @@ preview and cannot operate the durable API.
 
 ## One-time host setup
 
-1. Install Node `24.18.1` at `/usr/bin/node` and create an unprivileged
-   `np-servicerequest` user and group.
-2. Install the checked unit and fail-closed environment template:
+1. Install the isolated Node `24.18.1` runtime at
+   `/opt/node-24.18.1/bin/node`. Do not replace the host-wide `/usr/bin/node`.
+2. From a separately reviewed, root-owned copy of the release helpers, install
+   the protected helper, checked unit, and initial fail-closed environment
+   template:
 
    ```bash
    sudo deploy/systemd/install-service.sh
@@ -26,9 +28,9 @@ preview and cannot operate the durable API.
    `0600`.
 4. Install `deploy/nginx/np-servicerequest.conf.example` as the host virtual
    server, add the host-managed certificate paths, and validate Nginx.
-5. Ensure `/srv/np-servicerequest.org/releases` is writable by the deployment
-   user. systemd creates `/var/lib/np-servicerequest` with mode `0700` for the
-   service account.
+5. Preserve the installer's root-owned `releases` directory and unprivileged
+   `builds` directory. systemd creates `/var/lib/np-servicerequest` with mode
+   `0700` for the service account.
 
 The unit fixes the listener, proxy trust, active static path, and data path so
 environment-file changes cannot make Node public or move durable data into a
@@ -47,28 +49,35 @@ review and backup. No source release automatically rewrites production data.
 
 ## Prepare a release
 
-Create a complete clean checkout beneath the release root as the unprivileged
-deployment user, then run:
+Create a complete clean checkout beneath `/srv/np-servicerequest.org/builds` as
+the unprivileged build user. The exact release tag must be annotated and must
+peel to fetched `origin/main`. Then run:
 
 ```bash
 deploy/systemd/prepare-release.sh \
-  /srv/np-servicerequest.org/releases/<release>
+  /srv/np-servicerequest.org/builds/<release>
 ```
 
 Preparation requires the exact Node/npm toolchain and runs clean dependency and
 signature audits, dependency-graph and Linux native checks, lint, type checking,
 all backend/repository tests, the build, accessibility checks, full Playwright
-flows, a production-only install/audit, and the direct runtime smoke. It binds
-the generated release metadata and preparation marker to the exact commit and
-package version.
+flows, promotion fault tests, a production-only install/audit, direct runtime
+smoke, and exact Linux ARM64 artifact packaging. It binds release metadata and
+the preparation marker to the exact commit and package version. Review the
+archive, SHA-256, manifest, and acceptance receipt before privileged staging.
 
 ## Promote or roll back
 
-Promote a prepared checkout as root:
+Unpack the reviewed archive into a new immutable release directory with the
+protected verifier. Promote that staged tree as root using the independently
+reviewed archive path, digest, and source commit:
 
 ```bash
 sudo deploy/systemd/promote-release.sh \
-  /srv/np-servicerequest.org/releases/<release>
+  /srv/np-servicerequest.org/releases/<release> \
+  /reviewed/np-servicerequest-org-v<version>-<commit>-linux-arm64.tar.gz \
+  <published-sha256> \
+  <full-source-commit>
 ```
 
 Promotion atomically switches the `current` symlink, validates and restarts the

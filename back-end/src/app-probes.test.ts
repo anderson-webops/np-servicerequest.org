@@ -4,8 +4,8 @@ import { after, before, describe, it } from 'node:test'
 
 import { createApp } from './app.js'
 
-async function startApp(readinessCheck: () => Promise<void>) {
-  const server = createApp({ readinessCheck }).listen(0, '127.0.0.1')
+async function startApp(readinessCheck: () => Promise<void>, isStopping = () => false) {
+  const server = createApp({ isStopping, readinessCheck }).listen(0, '127.0.0.1')
   await new Promise<void>((resolve, reject) => {
     server.once('listening', resolve)
     server.once('error', reject)
@@ -65,6 +65,29 @@ describe('monitor probes', () => {
     }
     finally {
       await closeServer(failed.server)
+    }
+  })
+
+  it('keeps liveness minimal while stopping fails readiness and new work', async () => {
+    let stopping = false
+    const draining = await startApp(async () => undefined, () => stopping)
+
+    try {
+      stopping = true
+      const health = await fetch(`${draining.baseUrl}/healthz`)
+      assert.equal(health.status, 200)
+      assert.deepEqual(await health.json(), { ok: true })
+
+      const readiness = await fetch(`${draining.baseUrl}/readyz`)
+      assert.equal(readiness.status, 503)
+      assert.deepEqual(await readiness.json(), { ok: false })
+
+      const application = await fetch(`${draining.baseUrl}/api/pageview`)
+      assert.equal(application.status, 503)
+      assert.equal(application.headers.get('retry-after'), '5')
+    }
+    finally {
+      await closeServer(draining.server)
     }
   })
 })

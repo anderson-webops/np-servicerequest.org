@@ -45,9 +45,11 @@ jobs:
           test "$(git rev-parse "refs/tags/${GITHUB_REF_NAME}^{}")" = "$(git rev-parse HEAD)"
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           test "$(git rev-parse HEAD)" = "$(git rev-parse refs/remotes/origin/main)"
-          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          echo "version=${PACKAGE_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "source_epoch=$(git show -s --format=%ct HEAD)" >> "$GITHUB_OUTPUT"
+          {
+            echo "revision=$(git rev-parse HEAD)"
+            echo "version=${PACKAGE_VERSION}"
+            echo "source_epoch=$(git show -s --format=%ct HEAD)"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Run direct release gates
         env:

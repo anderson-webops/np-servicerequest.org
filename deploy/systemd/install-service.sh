@@ -1,61 +1,82 @@
 #!/usr/bin/env bash
+# Bootstrap from a separately reviewed, root-owned checkout. Never from a build tree.
 set -euo pipefail
-
-PATH=/usr/sbin:/usr/bin:/sbin:/bin
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
-
-script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-unit_dest="${UNIT_DEST:-/etc/systemd/system/np-servicerequest.service}"
-env_dest="${ENV_DEST:-/etc/np-servicerequest/service.env}"
-dry_run=false
-force_env=false
-
-usage() {
-	cat <<'USAGE'
-Install the direct np-servicerequest.org service without starting it.
-
-Usage: install-service.sh [--dry-run] [--force-env]
-
-  --dry-run    Print commands without changing the host.
-  --force-env  Replace the target env file with the fail-closed example.
-USAGE
-}
-
-while [[ $# -gt 0 ]]; do
-	case "$1" in
-		--dry-run) dry_run=true ;;
-		--force-env) force_env=true ;;
-		-h|--help) usage; exit 0 ;;
-		*) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
-	esac
-	shift
+unset NODE_OPTIONS NODE_PATH PYTHONPATH PYTHONHOME
+umask 077
+if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+  echo 'Run the reviewed administrative installer as root.' >&2; exit 1
+fi
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+source_root="$(cd -- "$script_dir/../.." && pwd -P)"
+node_bin_dir="${NODE_BIN_DIR:-/opt/node-24.18.1/bin}"
+/usr/bin/python3 -I "$script_dir/trusted-paths.py" --tree "$script_dir" \
+  "$source_root/scripts/runtime-artifact.py" "$source_root/deploy/runtime-artifact.json" \
+  "$source_root/package.json" "$node_bin_dir/node"
+if [[ "$("$node_bin_dir/node" --version)" != v24.18.1 ]]; then
+  echo 'NODE_BIN_DIR must select Node24.18.1 without replacing the host-wide runtime.' >&2; exit 1
+fi
+version="$("$node_bin_dir/node" -p 'require(process.argv[1]).version' "$source_root/package.json")"
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+helper_parent=/usr/local/libexec/np-servicerequest-release
+if [[ -e "$helper_parent" || -L "$helper_parent" ]]; then
+  /usr/bin/python3 -I "$script_dir/trusted-paths.py" "$helper_parent"
+fi
+helper_root="$helper_parent/$version"
+if [[ -e "$helper_root" || -L "$helper_root" ]]; then
+  echo "Reviewed helper version already exists: $helper_root. Do not overwrite it." >&2; exit 1
+fi
+unit=/etc/systemd/system/np-servicerequest.service
+env_file=/etc/np-servicerequest/service.env
+if [[ ! -e "$unit" && "$node_bin_dir" != /opt/node-24.18.1/bin ]]; then
+  echo 'Review the unit ExecStart for this alternate runtime before installing the service.' >&2; exit 1
+fi
+base=/srv/np-servicerequest.org
+# Existing installations require an explicit ownership/topology migration review.
+for directory in "$base" "$base/releases"; do
+  if [[ -e "$directory" || -L "$directory" ]]; then
+    /usr/bin/python3 -I "$script_dir/trusted-paths.py" "$directory"
+  fi
 done
-
-run() {
-	if [[ "$dry_run" == true ]]; then
-		printf ' %q' "$@"
-		printf '\n'
-		return 0
-	fi
-	"$@"
+if ! getent group np-servicerequest >/dev/null; then groupadd --system np-servicerequest; fi
+if ! id np-servicerequest >/dev/null 2>&1; then
+  useradd --system --gid np-servicerequest --home-dir "$base" --shell /usr/sbin/nologin np-servicerequest
+fi
+service_uid="$(id -u np-servicerequest)"
+service_gid="$(id -g np-servicerequest)"
+ensure_directory() {
+  local path="$1" owner="$2" group="$3" mode="$4"
+  if [[ ! -e "$path" ]]; then
+    install -d -o "$owner" -g "$group" -m "$mode" "$path"
+    return
+  fi
+  if [[ -L "$path" || ! -d "$path" ]]; then
+    echo "Expected a real runtime directory: $path" >&2; exit 1
+  fi
+  if [[ "$(stat -c '%u:%g:%a' "$path")" != "$owner:$group:$mode" ]]; then
+    echo "Existing runtime directory metadata needs operator review; left unchanged: $path" >&2; exit 1
+  fi
 }
-
-if [[ "$dry_run" == false ]]; then
-	if [[ ! -x /usr/bin/node || "$(/usr/bin/node --version)" != "v24.18.1" ]]; then
-		echo "The systemd runtime requires Node 24.18.1 at /usr/bin/node." >&2
-		exit 1
+ensure_directory "$base" 0 "$service_gid" 750
+ensure_directory "$base/releases" 0 "$service_gid" 750
+# Only create immediate children of the protected parent. The unprivileged
+# preparation step creates its cache; root never follows paths inside shared/.
+for directory in "$base/builds" "$base/shared"; do
+  ensure_directory "$directory" "$service_uid" "$service_gid" 700
+done
+mkdir -p -- "$helper_parent"
+/usr/bin/python3 -I "$script_dir/trusted-paths.py" "$helper_parent"
+install -d -o root -g root -m 0755 "$helper_root" "$helper_root/scripts" "$helper_root/deploy" "$helper_root/deploy/systemd"
+install -o root -g root -m 0755 "$script_dir/promote-release.sh" "$script_dir/trusted-paths.py" "$helper_root/deploy/systemd/"
+install -o root -g root -m 0755 "$source_root/scripts/runtime-artifact.py" "$helper_root/scripts/"
+install -o root -g root -m 0644 "$source_root/deploy/runtime-artifact.json" "$helper_root/deploy/"
+if [[ ! -e "$unit" ]]; then
+	install -o root -g root -m 0644 "$script_dir/np-servicerequest.service" "$unit"
+	if [[ ! -e "$env_file" ]]; then
+		install -D -o root -g root -m 0600 "$script_dir/np-servicerequest.env.example" "$env_file"
 	fi
-	if ! id np-servicerequest >/dev/null 2>&1; then
-		echo "Create the unprivileged np-servicerequest service account before installing the unit." >&2
-		exit 1
-	fi
+	systemctl daemon-reload
+	systemctl enable np-servicerequest.service
 fi
-
-run install -D -m 0644 "$script_dir/np-servicerequest.service" "$unit_dest"
-if [[ "$force_env" == true || ! -e "$env_dest" ]]; then
-	run install -D -m 0600 "$script_dir/np-servicerequest.env.example" "$env_dest"
-else
-	echo "Keeping existing $env_dest. Use --force-env only when replacing it intentionally."
-fi
-run systemctl daemon-reload
-echo "Review $env_dest, install the Nginx virtual server, then prepare and promote a release."
+echo "Installed protected helpers at $helper_root. Existing units and services were not changed or restarted."

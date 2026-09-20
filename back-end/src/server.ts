@@ -8,10 +8,12 @@ import { resolveRuntimeConfiguration } from "./runtime-config.js";
 
 async function main() {
 	const runtime = resolveRuntimeConfiguration(env);
+	let isShuttingDown = false;
 	const app = createApp({
+		isStopping: () => isShuttingDown,
 		staticDirectory: runtime.staticDirectory
-			? resolve(runtime.staticDirectory)
-			: undefined
+				? resolve(runtime.staticDirectory)
+				: undefined
 	});
 
 	const server = app.listen(runtime.port, runtime.host, () => {
@@ -19,10 +21,9 @@ async function main() {
 	});
 	server.headersTimeout = 10_000;
 	server.keepAliveTimeout = 5_000;
+	server.maxConnections = 256;
 	server.maxRequestsPerSocket = 1_000;
 	server.requestTimeout = 30_000;
-
-	let isShuttingDown = false;
 
 	const shutdown = async (signal: NodeJS.Signals) => {
 		if (isShuttingDown) {
@@ -64,10 +65,10 @@ async function main() {
 		}
 	};
 
-	process.once("SIGINT", () => {
+	process.on("SIGINT", () => {
 		void shutdown("SIGINT");
 	});
-	process.once("SIGTERM", () => {
+	process.on("SIGTERM", () => {
 		void shutdown("SIGTERM");
 	});
 }

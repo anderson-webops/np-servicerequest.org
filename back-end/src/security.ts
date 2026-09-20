@@ -20,6 +20,7 @@ interface RequestBucket {
 }
 
 const requestBuckets = new Map<string, RequestBucket>()
+const overflowBuckets = new Map<string, RequestBucket>()
 let lastRateLimitPruneAt = 0
 
 export const sessionCookieName = env.NODE_ENV === 'production'
@@ -118,10 +119,42 @@ export function validateAntiBotPayload(payload: unknown, action = 'board') {
 }
 
 export function consumeRateLimit(key: string, options: { limit: number, windowMs: number }) {
+  if (!Number.isSafeInteger(options.limit) || options.limit < 1 || !Number.isSafeInteger(options.windowMs) || options.windowMs < 1)
+    throw new TypeError('Rate-limit options must be positive safe integers.')
+
   const now = Date.now()
   const windowStart = now - options.windowMs
   pruneRateLimitBuckets(now)
-  const timestamps = (requestBuckets.get(key)?.timestamps || []).filter(timestamp => timestamp >= windowStart)
+  let bucket = requestBuckets.get(key)
+
+  if (bucket && bucket.windowMs !== options.windowMs)
+    throw new Error('A rate-limit key cannot change its configured window.')
+
+  if (!bucket) {
+    if (requestBuckets.size < rateLimitBucketLimit) {
+      bucket = {
+        lastSeenAt: now,
+        timestamps: [],
+        windowMs: options.windowMs,
+      }
+      requestBuckets.set(key, bucket)
+    }
+    else {
+      const policyKey = `${options.limit}:${options.windowMs}`
+      bucket = overflowBuckets.get(policyKey)
+
+      if (!bucket) {
+        bucket = {
+          lastSeenAt: now,
+          timestamps: [],
+          windowMs: options.windowMs,
+        }
+        overflowBuckets.set(policyKey, bucket)
+      }
+    }
+  }
+
+  const timestamps = bucket.timestamps.filter(timestamp => timestamp >= windowStart)
 
   if (timestamps.length >= options.limit) {
     const retryAfterMs = options.windowMs - (now - timestamps[0])
@@ -129,11 +162,8 @@ export function consumeRateLimit(key: string, options: { limit: number, windowMs
   }
 
   timestamps.push(now)
-  requestBuckets.set(key, {
-    lastSeenAt: now,
-    timestamps,
-    windowMs: options.windowMs,
-  })
+  bucket.lastSeenAt = now
+  bucket.timestamps = timestamps
 }
 
 function pruneRateLimitBuckets(now: number) {
@@ -147,14 +177,16 @@ function pruneRateLimitBuckets(now: number) {
       requestBuckets.delete(key)
   }
 
-  while (requestBuckets.size >= rateLimitBucketLimit) {
-    const oldestKey = requestBuckets.keys().next().value
-
-    if (typeof oldestKey !== 'string')
-      break
-
-    requestBuckets.delete(oldestKey)
+  for (const [key, bucket] of overflowBuckets) {
+    if (bucket.lastSeenAt < now - bucket.windowMs)
+      overflowBuckets.delete(key)
   }
+}
+
+export function resetRateLimitStateForTests() {
+  requestBuckets.clear()
+  overflowBuckets.clear()
+  lastRateLimitPruneAt = 0
 }
 
 export function hashSessionToken(token: string) {

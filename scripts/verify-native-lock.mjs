@@ -11,6 +11,15 @@ const packages = lock.packages || {}
 const expected = Object.entries(frontendManifest.optionalDependencies || {}).filter(([dependency]) =>
   dependency.includes('linux-'),
 )
+const parentPackages = new Map([
+  ['@esbuild/', 'node_modules/esbuild'],
+  ['@oxc-parser/binding-', 'node_modules/oxc-parser'],
+  ['@oxfmt/binding-', 'node_modules/oxfmt'],
+  ['@rolldown/binding-', 'node_modules/rolldown'],
+  ['@rollup/rollup-', 'node_modules/rollup'],
+  ['@unrs/resolver-binding-', 'node_modules/unrs-resolver'],
+  ['lightningcss-', 'node_modules/lightningcss'],
+])
 
 assert.ok(lock.lockfileVersion >= 3, 'package-lock.json must use lockfile version 3 or newer.')
 assert.deepEqual(packages['']?.workspaces, ['front-end', 'back-end'], 'The lockfile must contain both workspaces.')
@@ -29,6 +38,14 @@ for (const [dependency, expectedVersion] of expected) {
 
   if (!match || match[1].version !== expectedVersion)
     missing.push(`${dependency}@${expectedVersion}`)
+
+  const parentPath = [...parentPackages]
+    .find(([prefix]) => dependency.startsWith(prefix))?.[1]
+  if (!parentPath || packages[parentPath]?.version !== expectedVersion) {
+    missing.push(
+      `${dependency}@${expectedVersion} does not match ${parentPath || 'a reviewed parent package'}`,
+    )
+  }
 }
 
 assert.deepEqual(missing, [], `Missing or mismatched deploy-target native packages: ${missing.join(', ')}`)

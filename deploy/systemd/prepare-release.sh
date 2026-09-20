@@ -2,7 +2,7 @@
 set -euo pipefail
 
 system_path=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-node_bin_dir="${NODE_BIN_DIR:-/usr/bin}"
+node_bin_dir="${NODE_BIN_DIR:-/opt/node-24.18.1/bin}"
 if [[ "$node_bin_dir" != /* ]] || [[ ! -x "$node_bin_dir/node" ]] || [[ ! -x "$node_bin_dir/npm" ]]; then
 	echo "NODE_BIN_DIR must be an absolute directory containing executable node and npm binaries." >&2
 	exit 1
@@ -10,12 +10,16 @@ fi
 node_bin_dir_real="$(cd -- "$node_bin_dir" && pwd -P)"
 PATH="$node_bin_dir_real:$system_path"
 export PATH
+unset NODE_OPTIONS NODE_PATH PYTHONPATH PYTHONHOME
+export NUXT_TELEMETRY_DISABLED=1
 export PUPPETEER_SKIP_DOWNLOAD=true
+export SKIP_INSTALL_SIMPLE_GIT_HOOKS=1
+umask 077
 
-release_root="${RELEASE_ROOT:-/srv/np-servicerequest.org/releases}"
+release_root="${BUILD_ROOT:-${RELEASE_ROOT:-/srv/np-servicerequest.org/builds}}"
 
 if [[ $# -ne 1 ]]; then
-	echo "Usage: prepare-release.sh /srv/np-servicerequest.org/releases/<release>" >&2
+	echo "Usage: prepare-release.sh /srv/np-servicerequest.org/builds/<release>" >&2
 	exit 2
 fi
 if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
@@ -38,21 +42,62 @@ if [[ ! -f "$candidate/package-lock.json" ]] || ! git -C "$candidate" rev-parse 
 	echo "Candidate must be a complete Git checkout with the committed root lockfile." >&2
 	exit 1
 fi
+
+exclude_file="$(git -C "$candidate" rev-parse --git-path info/exclude)"
+if ! grep -Fqx '/.ai-work/' "$exclude_file"; then
+	printf '\n/.ai-work/\n' >> "$exclude_file"
+fi
 if [[ -n "$(git -C "$candidate" status --porcelain)" ]]; then
 	echo "Candidate checkout must be clean before preparation." >&2
 	exit 1
 fi
+
+for environment_directory in "$candidate" "$candidate/front-end" "$candidate/back-end"; do
+	while IFS= read -r -d '' environment_file; do
+		if [[ "$(basename -- "$environment_file")" != ".env.example" ]]; then
+			echo "Release preparation refuses source-local environment files: $environment_file" >&2
+			exit 1
+		fi
+	done < <(find "$environment_directory" -maxdepth 1 \( -name '.env' -o -name '.env.*' \) -print0)
+done
 if [[ "$(node --version)" != "v24.18.1" || "$(npm --version)" != "12.0.2" ]]; then
 	echo "Preparation requires Node 24.18.1 and npm 12.0.2." >&2
 	exit 1
 fi
 
-export SOURCE_REVISION="$(git -C "$candidate" rev-parse HEAD)"
-export SOURCE_DATE_EPOCH="$(git -C "$candidate" show -s --format=%ct HEAD)"
-export NP_RELEASE_VERSION="$(node -e '
+case "$(git -C "$candidate" remote get-url origin)" in
+	git@github.com:anderson-webops/np-servicerequest.org.git|https://github.com/anderson-webops/np-servicerequest.org.git|https://github.com/anderson-webops/np-servicerequest.org) ;;
+	*) echo 'origin must be the canonical NP Service Request repository.' >&2; exit 1 ;;
+esac
+git -C "$candidate" fetch --quiet origin main --tags
+git -C "$candidate" config --local --unset-all http.https://github.com/.extraheader 2>/dev/null || true
+export SOURCE_REVISION
+SOURCE_REVISION="$(git -C "$candidate" rev-parse HEAD)"
+export SOURCE_DATE_EPOCH
+SOURCE_DATE_EPOCH="$(git -C "$candidate" show -s --format=%ct HEAD)"
+export NP_RELEASE_VERSION
+NP_RELEASE_VERSION="$(node -e '
 const fs = require("node:fs")
 process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).version)
 ' "$candidate/package.json")"
+release_tag="v$NP_RELEASE_VERSION"
+if [[ "$(git -C "$candidate" cat-file -t "refs/tags/$release_tag" 2>/dev/null || true)" != "tag" ]]; then
+	echo "$release_tag must exist as an annotated release tag before preparation." >&2
+	exit 1
+fi
+if [[ "$(git -C "$candidate" rev-parse "$release_tag^{}")" != "$SOURCE_REVISION" ]]; then
+	echo "$release_tag must peel to the exact candidate revision." >&2
+	exit 1
+fi
+if [[ "$(git -C "$candidate" rev-parse origin/main)" != "$SOURCE_REVISION" ]]; then
+	echo 'The release candidate must be the exact fetched origin/main revision.' >&2
+	exit 1
+fi
+
+npm_cache="${NPM_CONFIG_CACHE:-$(dirname "$release_root_real")/shared/npm-cache}"
+mkdir -p "$npm_cache"
+NPM_CONFIG_CACHE="$(cd -- "$npm_cache" && pwd -P)"
+export NPM_CONFIG_CACHE
 unset NODE_ENV
 
 cd -- "$candidate"
@@ -69,6 +114,7 @@ npm test
 npm run build
 npm run a11y
 npm run test:e2e
+npm run test:promotion
 
 node - <<'NODE'
 import { copyFileSync, readFileSync } from 'node:fs'
@@ -82,4 +128,7 @@ NODE
 npm ci --omit=dev --include=optional --ignore-scripts
 npm run audit:production
 npm run smoke:backend-runtime
-echo "Prepared direct runtime release $candidate at $SOURCE_REVISION."
+artifact_output="$candidate/.ai-work/runs/host-artifact-$NP_RELEASE_VERSION"
+mkdir -p "$artifact_output"
+npm run package:runtime -- "$artifact_output"
+echo "Prepared exact NP Service Request source and runtime artifact under $artifact_output at $SOURCE_REVISION."

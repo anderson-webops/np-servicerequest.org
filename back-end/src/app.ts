@@ -99,10 +99,7 @@ function getInlineScriptHashes(staticDirectory: string | undefined) {
   for (const htmlFile of htmlFiles) {
     const html = readFileSync(htmlFile, 'utf8')
 
-    for (const match of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/gi)) {
-      const attributes = match[1]
-      const contents = match[2]
-
+    for (const { attributes, contents } of findScriptElements(html)) {
       if (
         /\bsrc\s*=/i.test(attributes)
         || /\btype\s*=\s*["']application\/json["']/i.test(attributes)
@@ -119,6 +116,72 @@ function getInlineScriptHashes(staticDirectory: string | undefined) {
     throw new Error('The generated site does not expose the expected inline script hashes.')
 
   return [...hashes]
+}
+
+function findTagEnd(html: string, start: number) {
+  let quote = ''
+
+  for (let index = start; index < html.length; index += 1) {
+    const character = html[index]
+
+    if (quote) {
+      if (character === quote)
+        quote = ''
+      continue
+    }
+
+    if (character === '"' || character === '\'') {
+      quote = character
+      continue
+    }
+
+    if (character === '>')
+      return index
+  }
+
+  return -1
+}
+
+function findScriptElements(html: string) {
+  const lowerHtml = html.toLowerCase()
+  const scripts: Array<{ attributes: string, contents: string }> = []
+  let cursor = 0
+
+  while (cursor < html.length) {
+    const openingStart = lowerHtml.indexOf('<script', cursor)
+
+    if (openingStart < 0)
+      break
+
+    const nameEnd = openingStart + '<script'.length
+    if (!/[\s/>]/u.test(html[nameEnd] || '')) {
+      cursor = nameEnd
+      continue
+    }
+
+    const openingEnd = findTagEnd(html, nameEnd)
+    if (openingEnd < 0)
+      break
+
+    let closingStart = lowerHtml.indexOf('</script', openingEnd + 1)
+    while (closingStart >= 0 && !/[\s>]/u.test(html[closingStart + '</script'.length] || ''))
+      closingStart = lowerHtml.indexOf('</script', closingStart + '</script'.length)
+
+    if (closingStart < 0)
+      break
+
+    const closingEnd = findTagEnd(html, closingStart + '</script'.length)
+    if (closingEnd < 0)
+      break
+
+    scripts.push({
+      attributes: html.slice(nameEnd, openingEnd),
+      contents: html.slice(openingEnd + 1, closingStart),
+    })
+    cursor = closingEnd + 1
+  }
+
+  return scripts
 }
 
 function listHtmlFiles(directory: string): string[] {
@@ -282,6 +345,7 @@ function hasHiddenPathSegment(pathname: string) {
 }
 
 interface AppOptions {
+  isStopping?: () => boolean
   readinessCheck?: () => Promise<void>
   staticDirectory?: string
 }
@@ -294,6 +358,7 @@ export function createApp(options?: AppOptions) {
   const releaseIdentity = resolveReleaseIdentity(staticDirectory)
   const inlineScriptHashes = getInlineScriptHashes(staticDirectory)
   const readinessCheck = options?.readinessCheck ?? assertDataDirectoryReady
+  const isStopping = options?.isStopping ?? (() => false)
 
   if (process.env.NODE_ENV === 'production') {
     assertValidAdminConfiguration()
@@ -364,6 +429,8 @@ export function createApp(options?: AppOptions) {
   }
   const readinessHandler: express.RequestHandler = async (request, response) => {
     try {
+      if (isStopping())
+        throw new Error('Service is stopping.')
       await readinessCheck()
       sendProbe(request, response, true)
     }
@@ -377,6 +444,17 @@ export function createApp(options?: AppOptions) {
   app.get('/healthz', healthHandler)
   app.head('/readyz', readinessHandler)
   app.get('/readyz', readinessHandler)
+
+  app.use((_request, response, next) => {
+    if (isStopping()) {
+      response.setHeader('Cache-Control', 'no-store')
+      response.setHeader('Retry-After', '5')
+      response.status(503).json({ message: 'Service is stopping.' })
+      return
+    }
+
+    next()
+  })
 
   app.use(cors({
     allowedHeaders: ['content-type', 'x-admin-key'],

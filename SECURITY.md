@@ -87,7 +87,7 @@ private handling as the live directory.
   accessibility, browser, and direct-runtime gates before promotion.
 - Do not reintroduce a production Docker path. Use the checked systemd unit,
   host Nginx configuration, atomic release symlink, and automatic rollback.
-- Keep the Node listener on `127.0.0.1:3006`; the checked unit fixes the public
+- Keep the Node listener on `127.0.0.1:3016`; the checked unit fixes the public
   listener escape hatch off and trusts exactly one host-local Nginx hop.
 - Configure exact credential-free HTTPS origins, an anti-bot secret from 32
   through 512 characters, and at least one administrator key from 32 through

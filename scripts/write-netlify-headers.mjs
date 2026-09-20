@@ -22,14 +22,76 @@ async function listHtmlFiles(directory) {
   return files.flat()
 }
 
+function findTagEnd(html, start) {
+  let quote = ''
+
+  for (let index = start; index < html.length; index += 1) {
+    const character = html[index]
+
+    if (quote) {
+      if (character === quote)
+        quote = ''
+      continue
+    }
+
+    if (character === '"' || character === '\'') {
+      quote = character
+      continue
+    }
+
+    if (character === '>')
+      return index
+  }
+
+  return -1
+}
+
+function findScriptElements(html) {
+  const lowerHtml = html.toLowerCase()
+  const scripts = []
+  let cursor = 0
+
+  while (cursor < html.length) {
+    const openingStart = lowerHtml.indexOf('<script', cursor)
+    if (openingStart < 0)
+      break
+
+    const nameEnd = openingStart + '<script'.length
+    if (!/[\s/>]/u.test(html[nameEnd] || '')) {
+      cursor = nameEnd
+      continue
+    }
+
+    const openingEnd = findTagEnd(html, nameEnd)
+    if (openingEnd < 0)
+      break
+
+    let closingStart = lowerHtml.indexOf('</script', openingEnd + 1)
+    while (closingStart >= 0 && !/[\s>]/u.test(html[closingStart + '</script'.length] || ''))
+      closingStart = lowerHtml.indexOf('</script', closingStart + '</script'.length)
+
+    if (closingStart < 0)
+      break
+
+    const closingEnd = findTagEnd(html, closingStart + '</script'.length)
+    if (closingEnd < 0)
+      break
+
+    scripts.push({
+      attributes: html.slice(nameEnd, openingEnd),
+      contents: html.slice(openingEnd + 1, closingStart),
+    })
+    cursor = closingEnd + 1
+  }
+
+  return scripts
+}
+
 const scriptHashes = new Set()
 for (const htmlFile of await listHtmlFiles(outputDirectory)) {
   const html = await readFile(htmlFile, 'utf8')
 
-  for (const match of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/gi)) {
-    const attributes = match[1]
-    const contents = match[2]
-
+  for (const { attributes, contents } of findScriptElements(html)) {
     if (
       /\bsrc\s*=/i.test(attributes)
       || /\btype\s*=\s*["']application\/json["']/i.test(attributes)

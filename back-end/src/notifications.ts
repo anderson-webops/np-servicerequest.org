@@ -1,9 +1,7 @@
 import { randomBytes } from 'node:crypto'
-import { writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { chmod, mkdir, writeFile } from 'node:fs/promises'
+import { isAbsolute, resolve } from 'node:path'
 import { env } from 'node:process'
-
-import { ensurePrivateDirectory } from './data.js'
 
 let hasWarnedAboutEmailConfig = false
 
@@ -59,12 +57,18 @@ async function deliverMessage(input: { subject: string, text: string, to: string
   const captureDirectory = env.BOARD_EMAIL_CAPTURE_DIR?.trim()
 
   if (captureDirectory) {
+    if (isProductionEnvironment())
+      throw new Error('BOARD_EMAIL_CAPTURE_DIR is available only to synthetic non-production tests.')
+    if (!isAbsolute(captureDirectory))
+      throw new Error('BOARD_EMAIL_CAPTURE_DIR must be an absolute path.')
+
     const filePath = resolve(
       captureDirectory,
       `${new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-')}-${randomBytes(12).toString('hex')}.json`,
     )
 
-    await ensurePrivateDirectory(captureDirectory)
+    await mkdir(captureDirectory, { mode: 0o700, recursive: true })
+    await chmod(captureDirectory, 0o700)
     await writeFile(filePath, `${JSON.stringify({
       ...input,
       subject: sanitizeEmailSubject(input.subject),
@@ -94,6 +98,8 @@ async function deliverMessage(input: { subject: string, text: string, to: string
     host: settings.host,
     port: settings.port,
     connectionTimeout: 10_000,
+    disableFileAccess: true,
+    disableUrlAccess: true,
     greetingTimeout: 10_000,
     requireTLS: !settings.secure && settings.port !== 465,
     secure: settings.secure || settings.port === 465,
@@ -106,6 +112,8 @@ async function deliverMessage(input: { subject: string, text: string, to: string
   })
 
   await transporter.sendMail({
+    disableFileAccess: true,
+    disableUrlAccess: true,
     from: settings.from,
     subject: sanitizeEmailSubject(input.subject),
     text: input.text,

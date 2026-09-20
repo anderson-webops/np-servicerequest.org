@@ -21,19 +21,19 @@ test('analytics sends to the requested dedicated and central instances', async (
     read('README.md'),
   ])
 
-  assert.match(constants, new RegExp(`dedicatedAnalyticsDomain = '${canonicalDedicatedDomain}'`))
-  assert.match(constants, new RegExp(`dedicatedAnalyticsWebsiteId = '${dedicatedWebsiteId}'`))
-  assert.match(constants, new RegExp(`centralAnalyticsDomain = '${centralDomain.replaceAll('.', '[.]')}'`))
-  assert.match(constants, new RegExp(`centralAnalyticsWebsiteId = '${centralWebsiteId}'`))
-  assert.match(api, new RegExp(`https://${canonicalDedicatedDomain.replaceAll('.', '[.]')}`))
-  assert.match(api, new RegExp(`https://${centralDomain.replaceAll('.', '[.]')}`))
-  assert.match(netlifyHeaders, new RegExp(`https://${canonicalDedicatedDomain.replaceAll('.', '[.]')}`))
-  assert.match(netlifyHeaders, new RegExp(`https://${centralDomain.replaceAll('.', '[.]')}`))
-  assert.match(readme, new RegExp(canonicalDedicatedDomain.replaceAll('.', '[.]')))
+  assert.ok(constants.includes(`dedicatedAnalyticsDomain = '${canonicalDedicatedDomain}'`))
+  assert.ok(constants.includes(`dedicatedAnalyticsWebsiteId = '${dedicatedWebsiteId}'`))
+  assert.ok(constants.includes(`centralAnalyticsDomain = '${centralDomain}'`))
+  assert.ok(constants.includes(`centralAnalyticsWebsiteId = '${centralWebsiteId}'`))
+  assert.ok(api.includes(`https://${canonicalDedicatedDomain}`))
+  assert.ok(api.includes(`https://${centralDomain}`))
+  assert.ok(netlifyHeaders.includes(`https://${canonicalDedicatedDomain}`))
+  assert.ok(netlifyHeaders.includes(`https://${centralDomain}`))
+  assert.ok(readme.includes(canonicalDedicatedDomain))
 
   for (const contents of [constants, api, netlifyHeaders, readme]) {
     for (const retiredDedicatedDomain of retiredDedicatedDomains) {
-      assert.doesNotMatch(contents, new RegExp(retiredDedicatedDomain.replaceAll('.', '[.]')))
+      assert.equal(contents.includes(retiredDedicatedDomain), false)
     }
   }
 })

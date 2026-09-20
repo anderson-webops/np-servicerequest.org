@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "entrypoints": [
+    "back-end/dist/server.js"
+  ],
+  "required": [
+    "package.json",
+    "package-lock.json",
+    "back-end/package.json",
+    "front-end/package.json",
+    ".np-servicerequest-release-prepared.json",
+    "back-end/dist/accounts.js",
+    "back-end/dist/activity.js",
+    "back-end/dist/admin.js",
+    "back-end/dist/app.js",
+    "back-end/dist/board.js",
+    "back-end/dist/contact.js",
+    "back-end/dist/data.js",
+    "back-end/dist/notifications.js",
+    "back-end/dist/places.js",
+    "back-end/dist/release-identity.js",
+    "back-end/dist/runtime-config.js",
+    "back-end/dist/security.js",
+    "back-end/dist/server.js",
+    "back-end/dist/service-directory.js",
+    "back-end/dist/submissions.js",
+    "node_modules/express/package.json",
+    "front-end/.output/public/index.html",
+    "front-end/.output/public/200.html",
+    "front-end/.output/public/404.html",
+    "front-end/.output/public/release.json"
+  ],
+  "runtime": {
+    "os": "linux",
+    "arch": "arm64",
+    "node": "24.18.1",
+    "npmBuildOnly": "12.0.2"
+  },
+  "modulesOutsideDist": [],
+  "generatedClients": [],
+  "nativeBindings": [],
+  "staticAssets": [
+    "front-end/.output/public"
+  ],
+  "dependencyRoots": [
+    "back-end"
+  ],
+  "writableState": [
+    {
+      "name": "board, account, session, moderation, and provider-cache records",
+      "location": "/var/lib/np-servicerequest/data outside immutable releases",
+      "rollback": "preserve the single-writer directory unchanged through promotion and rollback; no automatic migration"
+    },
+    {
+      "name": "logs",
+      "location": "existing service journal",
+      "rollback": "preserve journal"
+    }
+  ],
+  "privateConfiguration": "The root-owned host environment, SMTP credentials, anti-bot secret, and administrator keys stay external. No credentials, capture spool, database, or user records belong in the artifact.",
+  "topology": "Generated Nuxt files and one compiled Express service share the existing NP Service Request origin. Preserve the installed service user, /srv and /var/lib paths, loopback port 3016, IPv4/IPv6 edge, and single-writer state contract. Netlify remains a static preview only."
+}
