@@ -29,7 +29,7 @@ test('analytics sends to the requested dedicated and central instances', async (
   assert.ok(api.includes(`https://${centralDomain}`))
   assert.ok(netlifyHeaders.includes(`https://${canonicalDedicatedDomain}`))
   assert.ok(netlifyHeaders.includes(`https://${centralDomain}`))
-  assert.ok(readme.includes(canonicalDedicatedDomain))
+  assert.match(readme, /`analytics\.np-servicerequest\.org` instance/u)
 
   for (const contents of [constants, api, netlifyHeaders, readme]) {
     for (const retiredDedicatedDomain of retiredDedicatedDomains) {

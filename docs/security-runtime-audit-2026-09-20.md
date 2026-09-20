@@ -25,6 +25,10 @@ read production secrets, modify production state, change DNS, or deploy a releas
 - Liveness stays minimal during shutdown, readiness fails closed, new work gets a
   bounded `503` response, repeated signals are safe, and the server caps active
   connections at 256.
+- The immutable `200.html` route fallback is loaded once during process startup
+  and served from memory, so arbitrary unknown paths cannot trigger repeated
+  filesystem reads. Missing fallback content now fails startup, and a regression
+  test proves requests no longer depend on the release file after initialization.
 - Production keeps the reviewed host contract: Node 24.18.1 from
   `/opt/node-24.18.1/bin`, loopback port 3016, direct systemd/Nginx operation,
   and durable single-writer state outside immutable releases.

@@ -357,6 +357,9 @@ export function createApp(options?: AppOptions) {
     : undefined
   const releaseIdentity = resolveReleaseIdentity(staticDirectory)
   const inlineScriptHashes = getInlineScriptHashes(staticDirectory)
+  const staticFallbackHtml = staticDirectory
+    ? readFileSync(resolve(staticDirectory, '200.html'), 'utf8')
+    : undefined
   const readinessCheck = options?.readinessCheck ?? assertDataDirectoryReady
   const isStopping = options?.isStopping ?? (() => false)
 
@@ -1236,7 +1239,7 @@ export function createApp(options?: AppOptions) {
     })
   })
 
-  if (staticDirectory) {
+  if (staticDirectory && staticFallbackHtml !== undefined) {
     app.use((request, response, next) => {
       if (hasHiddenPathSegment(request.path)) {
         response.status(404).type('text/plain').send('Not found.')
@@ -1268,12 +1271,14 @@ export function createApp(options?: AppOptions) {
       }
 
       response.setHeader('Cache-Control', 'no-store')
-      response.sendFile('200.html', {
-        root: staticDirectory,
-      }, (error) => {
-        if (error)
-          next(error)
-      })
+      response.type('html')
+
+      if (request.method === 'HEAD') {
+        response.end()
+        return
+      }
+
+      response.send(staticFallbackHtml)
     })
   }
 
