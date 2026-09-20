@@ -7,6 +7,7 @@ const paths = {
   ci: new URL('../.github/workflows/ci.yml', import.meta.url),
   dependabot: new URL('../.github/dependabot.yml', import.meta.url),
   nginx: new URL('../deploy/nginx/np-servicerequest.conf.example', import.meta.url),
+  packageRuntime: new URL('./package-runtime.sh', import.meta.url),
   prepare: new URL('../deploy/systemd/prepare-release.sh', import.meta.url),
   promote: new URL('../deploy/systemd/promote-release.sh', import.meta.url),
   release: new URL('../.github/workflows/release-source.yml', import.meta.url),
@@ -41,8 +42,9 @@ test('production is a confined direct Node service without Docker', async () => 
 })
 
 test('direct promotion is atomic, dual-stack, identity-bound, and reversible', async () => {
-  const [nginx, prepare, promote] = await Promise.all([
+  const [nginx, packageRuntime, prepare, promote] = await Promise.all([
     readFile(paths.nginx, 'utf8'),
+    readFile(paths.packageRuntime, 'utf8'),
     readFile(paths.prepare, 'utf8'),
     readFile(paths.promote, 'utf8'),
   ])
@@ -70,6 +72,7 @@ test('direct promotion is atomic, dual-stack, identity-bound, and reversible', a
   assert.match(prepare, /package:runtime/u)
   assert.match(prepare, /origin\/main/u)
   assert.match(prepare, /--unset-all http\.https:\/\/github\.com\/\.extraheader/u)
+  assert.match(packageRuntime, /cp front-end\/\.output\/public\/release\.json "\$stage\/\.np-servicerequest-release-prepared\.json"/u)
   assert.match(promote, /\.np-servicerequest-release-prepared\.json/u)
   assert.match(promote, /NP_RESOLVE_IPV4/u)
   assert.match(promote, /NP_RESOLVE_IPV6/u)

@@ -20,7 +20,8 @@ SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)
 export NP_RELEASE_VERSION
 NP_RELEASE_VERSION=$(node -p 'require("./package.json").version')
 node scripts/write-release-metadata.mjs
-cp package.json package-lock.json .np-servicerequest-release-prepared.json "$stage/"
+cp package.json package-lock.json "$stage/"
+cp front-end/.output/public/release.json "$stage/.np-servicerequest-release-prepared.json"
 cp back-end/package.json "$stage/back-end/"
 cp front-end/package.json "$stage/front-end/"
 cp -R front-end/.output/public "$stage/front-end/.output/"
