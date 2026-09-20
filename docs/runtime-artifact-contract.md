@@ -10,7 +10,7 @@ adds features. Logs stay in the existing service journal. No migrations are need
 Keep protected configuration and any downstream database, email spool, cache or
 uploads outside immutable releases. Preserve durable state on both promotion and
 rollback. Preserve the exact installed service users, paths and loopback ports;
-the `/srv/vitesse-nuxt-template` and `/usr/bin/node` source adapter defaults are
+the `/srv/vitesse-nuxt-template` and `/opt/node-24.18.1/bin/node` source adapter defaults are
 examples for a separately reviewed installation, not instructions to overwrite a
 working host. Never change DNS, IPv4/IPv6, certificates or edge configuration to
 make artifact acceptance pass.
@@ -62,10 +62,11 @@ evidence. Download and compare published files before claiming delivery.
 
 ## Operator acceptance and rollback
 
-After any deployment copier, run the verifier from the reviewed source revision:
+After any deployment copier, use the root-installed verifier and independently
+reviewed archive hash/commit. Never execute a verifier from a build-owned tree:
 
 ```sh
-python3 -B scripts/runtime-artifact.py verify /reviewed/staged/runtime \
+/usr/bin/python3 -I /usr/local/libexec/vitesse-release/<version>/scripts/runtime-artifact.py verify /reviewed/staged/runtime \
   --archive /trusted/release.tar.gz --sha256 <published-sha256> \
   --commit <published-full-source-commit>
 ```
@@ -90,3 +91,17 @@ changes, readiness dependencies, error semantics, writable state and topology.
 Static or redirect-only descendants need no artificial API service. Compare both
 their workspace and independent deployment locks, and validate their own exact
 artifacts. Reuse this implementation without replacing client isolation.
+
+The [administrative runbook](../deploy/README.md) defines protected bootstrap,
+archive/candidate ownership, exact identity, interruption recovery and the
+separate unprivileged build account. Run `npm run test:promotion` for changes to
+that boundary; source-string checks are not a substitute for the fault tests.
+The [2026-09-20 review](protected-promotion-review-2026-09-20.md) records the
+confirmed pre-fix path, reproductions, correction, validation, and limits.
+
+The additional `scripts/test-bootstrap-in-vm.py --disposable-vm` regression is
+for an explicitly staged fresh disposable Linux VM only. Its root-owned marker
+and absent-installation gates refuse a normal host. It exercises real installer
+permissions, immutable helpers, preserved units, a hostile cache symlink and
+mutable-adjacent-unit rejection without starting the service. Never stage its
+marker on production; the ordinary namespace tests remain unprivileged.

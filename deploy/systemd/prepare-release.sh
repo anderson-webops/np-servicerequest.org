@@ -2,7 +2,7 @@
 set -euo pipefail
 
 system_path=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-node_bin_dir="${NODE_BIN_DIR:-/usr/bin}"
+node_bin_dir="${NODE_BIN_DIR:-/opt/node-24.18.1/bin}"
 if [[ "$node_bin_dir" != /* ]] || [[ ! -x "$node_bin_dir/node" ]] || [[ ! -x "$node_bin_dir/npm" ]]; then
 	echo "NODE_BIN_DIR must be an absolute directory containing executable node and npm binaries." >&2
 	exit 1
@@ -14,10 +14,10 @@ export NUXT_TELEMETRY_DISABLED=1
 export PUPPETEER_SKIP_DOWNLOAD=true
 export SKIP_INSTALL_SIMPLE_GIT_HOOKS=1
 
-release_root="${RELEASE_ROOT:-/srv/vitesse-nuxt-template/releases}"
+release_root="${BUILD_ROOT:-${RELEASE_ROOT:-/srv/vitesse-nuxt-template/builds}}"
 
 if [[ $# -ne 1 ]]; then
-	echo "Usage: prepare-release.sh /srv/vitesse-nuxt-template/releases/<release>" >&2
+	echo "Usage: prepare-release.sh /srv/vitesse-nuxt-template/builds/<release>" >&2
 	exit 2
 fi
 if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
@@ -50,7 +50,7 @@ for environment_directory in "$candidate" "$candidate/front-end" "$candidate/bac
 			echo "Release preparation refuses source-local environment files: $environment_file" >&2
 			exit 1
 		fi
-	done < <(find "$environment_directory" -maxdepth 1 -type f \( -name '.env' -o -name '.env.*' \) -print0)
+	done < <(find "$environment_directory" -maxdepth 1 \( -name '.env' -o -name '.env.*' \) -print0)
 done
 
 if [[ "$(node --version)" != "v24.18.1" || "$(npm --version)" != "12.0.2" ]]; then
@@ -58,12 +58,17 @@ if [[ "$(node --version)" != "v24.18.1" || "$(npm --version)" != "12.0.2" ]]; th
 	exit 1
 fi
 
+case "$(git -C "$candidate" remote get-url origin)" in
+  git@github.com:anderson-webops/vitesse-nuxt-template.git|https://github.com/anderson-webops/vitesse-nuxt-template.git|https://github.com/anderson-webops/vitesse-nuxt-template) ;;
+  *) echo 'origin must be the canonical Vitesse repository.' >&2; exit 1;;
+esac
 git -C "$candidate" fetch --quiet origin main --tags
 git -C "$candidate" config --local --unset-all http.https://github.com/.extraheader 2>/dev/null || true
-export VITESSE_COMMIT_SHA="$(git -C "$candidate" rev-parse HEAD)"
-export VITESSE_VERSION="$(node -p "require('$candidate/package.json').version")"
+VITESSE_COMMIT_SHA="$(git -C "$candidate" rev-parse HEAD)"
+VITESSE_VERSION="$(node -p 'require(process.argv[1]).version' "$candidate/package.json")"
 export VITESSE_RELEASE="v$VITESSE_VERSION"
-export VITESSE_DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+VITESSE_DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+export VITESSE_COMMIT_SHA VITESSE_VERSION VITESSE_DEPLOYED_AT
 release_tag="$VITESSE_RELEASE"
 
 if [[ "$(git -C "$candidate" cat-file -t "refs/tags/$release_tag" 2>/dev/null || true)" != "tag" ]]; then
@@ -81,7 +86,8 @@ fi
 
 npm_cache="${NPM_CONFIG_CACHE:-$(dirname "$release_root_real")/shared/npm-cache}"
 mkdir -p "$npm_cache"
-export NPM_CONFIG_CACHE="$(cd -- "$npm_cache" && pwd -P)"
+NPM_CONFIG_CACHE="$(cd -- "$npm_cache" && pwd -P)"
+export NPM_CONFIG_CACHE
 
 unset NODE_ENV
 cd -- "$candidate"

@@ -1,7 +1,7 @@
 {
 	"name": "vitesse-nuxt-monorepo",
 	"type": "module",
-	"version": "2.1.1",
+	"version": "2.1.2",
 	"private": true,
 	"packageManager": "npm@12.0.2",
 	"engines": {
@@ -43,6 +43,8 @@
 		"check:deploy-output": "node scripts/check-deploy-output.mjs",
 		"verify:production-install": "node scripts/verify-production-install.mjs",
 		"test:direct-runtime": "node scripts/direct-runtime-smoke.mjs",
+		"test:promotion": "bash scripts/test-promotion-recovery.sh",
+		"package:runtime": "bash scripts/package-runtime.sh",
 		"validate": "npm run check:native-bindings && npm run lint && npm run typecheck && npm run test && npm run build && npm run check:deploy-output && npm run check:api-install"
 	},
 	"dependencies": {
@@ -64,7 +66,7 @@
 	},
 	"allowScripts": {
 		"simple-git-hooks": false,
-		"esbuild@0.28.1": true,
+		"esbuild@0.28.2": true,
 		"fsevents@2.3.3": true,
 		"unrs-resolver@1.12.2": true
 	},
@@ -72,6 +74,7 @@
 		"pre-commit": "npm run lint"
 	},
 	"overrides": {
+		"devalue": "5.9.4",
 		"nanoid@^3": "3.3.18",
 		"qs": "6.16.0",
 		"glob": "13.0.6",
