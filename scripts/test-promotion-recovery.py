@@ -49,10 +49,12 @@ if name == 'curl':
         output.write_text('{}')
     elif url.endswith('/release.json'):
         output.write_bytes((current/'front-end/.output/public/release.json').read_bytes())
-    elif url.endswith(('/api/health','/readyz','/status','/dependencies-ready')):output.write_text('{"ok":true}')
-    else:
+    elif url.endswith(('/api/health','/healthz','/readyz','/status','/dependencies-ready')):output.write_text('{"ok":true}')
+    elif url.endswith('/'):
         output.write_text('Synthetic NP Service Request page')
         pathlib.Path(args[args.index('--dump-header')+1]).write_text("Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-fixture'; frame-ancestors 'none'\nX-Content-Type-Options: nosniff\nX-Frame-Options: DENY\n")
+    else:
+        print(f'Unexpected synthetic curl target: {url}',file=sys.stderr);sys.exit(2)
     with (root/'probes').open('a') as f:f.write(' '.join(args)+'\n')
     sys.exit(0)
 raise SystemExit('Unexpected fixture command')
