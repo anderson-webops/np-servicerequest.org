@@ -45,6 +45,7 @@ for name in contract["required"]:
     shutil.copy2(origin, destination)
 PY
 npm ci --prefix "$stage" --workspace back-end --omit=dev --include=optional --ignore-scripts --no-fund --no-audit
+npm prune --prefix "$stage" --workspace back-end --omit=dev --include=optional --ignore-scripts --no-fund --no-audit
 npm audit --prefix "$stage" --workspace back-end --omit=dev --audit-level=low
 npm audit signatures --prefix "$stage"
 npm ls --prefix "$stage" --workspace back-end --omit=dev --all > "$output/dependency-tree.txt"

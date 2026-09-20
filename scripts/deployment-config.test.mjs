@@ -73,6 +73,7 @@ test('direct promotion is atomic, dual-stack, identity-bound, and reversible', a
   assert.match(prepare, /origin\/main/u)
   assert.match(prepare, /--unset-all http\.https:\/\/github\.com\/\.extraheader/u)
   assert.match(packageRuntime, /cp front-end\/\.output\/public\/release\.json "\$stage\/\.np-servicerequest-release-prepared\.json"/u)
+  assert.match(packageRuntime, /npm prune --prefix "\$stage" --workspace back-end --omit=dev --include=optional --ignore-scripts/u)
   assert.match(promote, /\.np-servicerequest-release-prepared\.json/u)
   assert.match(promote, /NP_RESOLVE_IPV4/u)
   assert.match(promote, /NP_RESOLVE_IPV6/u)
