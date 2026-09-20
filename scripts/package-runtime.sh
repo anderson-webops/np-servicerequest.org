@@ -44,11 +44,10 @@ for name in contract["required"]:
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(origin, destination)
 PY
-npm ci --prefix "$stage" --workspace back-end --omit=dev --include=optional --ignore-scripts --no-fund --no-audit
-npm prune --prefix "$stage" --workspace back-end --omit=dev --include=optional --ignore-scripts --no-fund --no-audit
-npm audit --prefix "$stage" --workspace back-end --omit=dev --audit-level=low
+npm ci --prefix "$stage" --workspace back-end --omit=dev --omit=optional --ignore-scripts --no-fund --no-audit
+npm audit --prefix "$stage" --workspace back-end --omit=dev --omit=optional --audit-level=low
 npm audit signatures --prefix "$stage"
-npm ls --prefix "$stage" --workspace back-end --omit=dev --all > "$output/dependency-tree.txt"
+npm ls --prefix "$stage" --workspace back-end --omit=dev --omit=optional --all > "$output/dependency-tree.txt"
 # This reviewed JS-only runtime has no executable dependency bins. The verifier
 # rejects any other symlinks; it never follows links into a source checkout.
 rm -f -- "$stage/node_modules/back-end" "$stage/node_modules/front-end"
