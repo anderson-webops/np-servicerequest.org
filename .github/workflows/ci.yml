@@ -107,6 +107,8 @@ jobs:
           npm run build
 
       - name: Rehearse promotion and exact artifact packaging
+        env:
+          PROMOTION_TEST_PRIVILEGED_BWRAP: "1"
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends bubblewrap
