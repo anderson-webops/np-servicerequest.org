@@ -7,7 +7,7 @@ test "$(id -u)" -ne 0
 test "$(node --version)" = v24.18.1
 bwrap_command=(/usr/bin/bwrap)
 source_root="$root"
-if [[ "${PROMOTION_TEST_PRIVILEGED_BWRAP:-}" == 1 ]]; then
+if [[ "${NP_TEST_PRIVILEGED_BWRAP:-}" == 1 ]]; then
   bwrap_command=(sudo -n /usr/bin/bwrap)
   test -z "$(find "$root/deploy" "$root/scripts" -type l -print -quit)"
   source_root="$(mktemp -d /tmp/np-promotion-source.XXXXXXXX)"
