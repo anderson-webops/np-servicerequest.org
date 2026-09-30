@@ -15,12 +15,14 @@ preview and cannot operate the durable API.
 
 1. Install the isolated Node `24.18.1` runtime at
    `/opt/node-24.18.1/bin/node`. Do not replace the host-wide `/usr/bin/node`.
-2. From a separately reviewed, root-owned copy of the release helpers, install
-   the protected helper, checked unit, and initial fail-closed environment
-   template:
+2. Stage a separately reviewed copy of the release helpers beneath a root-owned,
+   non-writable-to-build-users path. From that copy, install the protected
+   helper, checked unit, and initial fail-closed environment template. Replace
+   the placeholder below with the absolute path to that reviewed copy, never a
+   path inside `builds` or a candidate checkout:
 
    ```bash
-   sudo deploy/systemd/install-service.sh
+   sudo /<reviewed-root-owned-source>/deploy/systemd/install-service.sh
    ```
 
 3. Replace the blank anti-bot and administrator secrets in
@@ -70,10 +72,14 @@ archive, SHA-256, manifest, and acceptance receipt before privileged staging.
 
 Unpack the reviewed archive into a new immutable release directory with the
 protected verifier. Promote that staged tree as root using the independently
-reviewed archive path, digest, and source commit:
+reviewed archive path, digest, source commit, and the exact installed helper
+version printed by the reviewed installer. The executable must be the absolute,
+root-owned helper path, never a script inside `builds` or the release checkout.
+If that helper version is absent, stop and install it from a separately reviewed
+root-owned source copy; do not fall back to the checkout:
 
 ```bash
-sudo deploy/systemd/promote-release.sh \
+sudo /usr/local/libexec/np-servicerequest-release/<installed-helper-version>/deploy/systemd/promote-release.sh \
   /srv/np-servicerequest.org/releases/<release> \
   /reviewed/np-servicerequest-org-v<version>-<commit>-linux-arm64.tar.gz \
   <published-sha256> \

@@ -6,6 +6,8 @@ import test from 'node:test'
 const paths = {
   ci: new URL('../.github/workflows/ci.yml', import.meta.url),
   dependabot: new URL('../.github/dependabot.yml', import.meta.url),
+  deployment: new URL('../DEPLOYMENT.md', import.meta.url),
+  install: new URL('../deploy/systemd/install-service.sh', import.meta.url),
   nginx: new URL('../deploy/nginx/np-servicerequest.conf.example', import.meta.url),
   packageRuntime: new URL('./package-runtime.sh', import.meta.url),
   prepare: new URL('../deploy/systemd/prepare-release.sh', import.meta.url),
@@ -90,4 +92,17 @@ test('direct promotion is atomic, dual-stack, identity-bound, and reversible', a
   assert.match(promote, /script-src\[\^;\]\*sha256-/u)
   assert.match(promote, /script-src\[\^;\]\*unsafe-inline/u)
   assert.doesNotMatch(promote, /Content-Security-Policy:\.\*unsafe-inline/u)
+})
+
+test('privileged deployment commands select protected helpers outside build checkouts', async () => {
+  const [deployment, install] = await Promise.all([
+    readFile(paths.deployment, 'utf8'),
+    readFile(paths.install, 'utf8'),
+  ])
+
+  assert.match(deployment, /sudo \/<reviewed-root-owned-source>\/deploy\/systemd\/install-service\.sh/u)
+  assert.match(deployment, /sudo \/usr\/local\/libexec\/np-servicerequest-release\/<installed-helper-version>\/deploy\/systemd\/promote-release\.sh/u)
+  assert.doesNotMatch(deployment, /sudo (?:\.\/)?deploy\/systemd\/(?:install-service|promote-release)\.sh/u)
+  assert.match(install, /helper_parent=\/usr\/local\/libexec\/np-servicerequest-release/u)
+  assert.match(install, /install -o root -g root -m 0755 "\$script_dir\/promote-release\.sh" "\$script_dir\/trusted-paths\.py" "\$helper_root\/deploy\/systemd\/"/u)
 })
