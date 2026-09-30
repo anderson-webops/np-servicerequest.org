@@ -84,7 +84,7 @@ jobs:
 
   native-arm64:
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 25
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -105,6 +105,16 @@ jobs:
           npm run typecheck
           npm test
           npm run build
+
+      - name: Rehearse promotion and exact artifact packaging
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends bubblewrap
+          npm run test:promotion
+          printf '\n/.ai-work/\n' >> "$(git rev-parse --git-path info/exclude)"
+          git check-ignore -q .ai-work/
+          mkdir -p .ai-work/runs/ci-artifact
+          npm run package:runtime -- "$PWD/.ai-work/runs/ci-artifact"
 
   direct-runtime:
     runs-on: ubuntu-latest

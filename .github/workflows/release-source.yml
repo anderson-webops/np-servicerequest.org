@@ -85,5 +85,147 @@ jobs:
             echo
             echo "- Release: \`${GITHUB_REF_NAME}\`"
             echo "- Revision: \`${{ steps.release.outputs.revision }}\`"
-            echo "- Deployment: atomic host systemd/Nginx promotion"
+            echo "- Artifact validation: required before publication"
+            echo "- Deployment: separate host-controlled atomic systemd/Nginx promotion"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  package-arm64:
+    needs: validate
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Use the repository npm version
+        run: npm install --global "npm@${NPM_VERSION}"
+
+      - name: Verify source and build exact ARM64 archive
+        env:
+          SKIP_INSTALL_SIMPLE_GIT_HOOKS: "1"
+        run: |
+          set -euo pipefail
+          SOURCE_REVISION="$(git rev-parse HEAD)"
+          export SOURCE_REVISION
+          test "$(node --version)" = "v${NODE_VERSION}"
+          test "$(npm --version)" = "${NPM_VERSION}"
+          test "${GITHUB_REF_NAME}" = "v$(node -p "require('./package.json').version")"
+          test "$(git cat-file -t "refs/tags/${GITHUB_REF_NAME}")" = tag
+          test "$(git rev-parse "refs/tags/${GITHUB_REF_NAME}^{}")" = "${SOURCE_REVISION}"
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse refs/remotes/origin/main)" = "${SOURCE_REVISION}"
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends bubblewrap
+          npm ci --include=optional --strict-allow-scripts
+          npm run audit
+          npm run audit:production
+          npm run audit:signatures
+          npm run verify:dependency-graph
+          npm run verify:native-lock
+          npm run verify:platform-install
+          npm run typecheck
+          npm test
+          npm run build
+          npm run test:promotion
+          printf '\n/.ai-work/\n' >> "$(git rev-parse --git-path info/exclude)"
+          git check-ignore -q .ai-work/
+          mkdir -p .ai-work/runs/ci-release
+          npm run package:runtime -- "$PWD/.ai-work/runs/ci-release"
+          mkdir -p .ai-work/runs/ci-release-assets
+          cp .ai-work/runs/ci-release/*.tar.gz \
+            .ai-work/runs/ci-release/{SHA256SUMS,acceptance.json,dependency-tree.txt,pack.json,runtime-manifest.json} \
+            .ai-work/runs/ci-release-assets/
+          test "$(find .ai-work/runs/ci-release-assets -maxdepth 1 -type f | wc -l)" -eq 6
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: verified-linux-arm64-release
+          path: .ai-work/runs/ci-release-assets/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    needs: [validate, package-arm64]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: verified-linux-arm64-release
+          path: release-assets
+
+      - name: Verify downloaded bytes and source contract
+        id: artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF_NAME}" = "v$(node -p "require('./package.json').version")"
+          test "$(git cat-file -t "refs/tags/${GITHUB_REF_NAME}")" = tag
+          test "$(git rev-parse "refs/tags/${GITHUB_REF_NAME}^{}")" = "$(git rev-parse HEAD)"
+          python3 -B - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+
+          assets = Path('release-assets')
+          source_commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          version = json.loads(Path('package.json').read_text())['version']
+          archive_name = f'np-servicerequest-org-v{version}-{source_commit[:12]}-linux-arm64.tar.gz'
+          expected = {archive_name, 'SHA256SUMS', 'acceptance.json', 'dependency-tree.txt', 'pack.json', 'runtime-manifest.json'}
+          if {path.name for path in assets.iterdir()} != expected:
+              raise SystemExit('Release assets differ from the reviewed inventory')
+          archive = assets / archive_name
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          pack = json.loads((assets / 'pack.json').read_text())
+          acceptance = json.loads((assets / 'acceptance.json').read_text())
+          manifest = json.loads((assets / 'runtime-manifest.json').read_text())
+          for record in (pack, acceptance):
+              if record['archive'] != archive_name or record['sha256'] != digest or record['commit'] != source_commit:
+                  raise SystemExit('Release receipt does not match the exact archive and source')
+          if acceptance['bytes'] != archive.stat().st_size or acceptance['files'] != pack['files']:
+              raise SystemExit('Release acceptance record does not match the archive')
+          if manifest['commit'] != source_commit or manifest['contract'] != json.loads(Path('deploy/runtime-artifact.json').read_text()):
+              raise SystemExit('Release manifest does not match the source contract')
+          for name, expected_digest in acceptance['harnessSha256'].items():
+              if hashlib.sha256(Path(name).read_bytes()).hexdigest() != expected_digest:
+                  raise SystemExit(f'Release harness mismatch: {name}')
+          with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
+              output.write(f'archive={archive_name}\n')
+              output.write(f'sha256={digest}\n')
+          PY
+          (cd release-assets && sha256sum --check SHA256SUMS)
+          mkdir -p "$RUNNER_TEMP/np-release-unpacked"
+          source_revision="$(git rev-parse HEAD)"
+          archive_name="np-servicerequest-org-${GITHUB_REF_NAME}-${source_revision:0:12}-linux-arm64.tar.gz"
+          archive_sha="$(sha256sum "release-assets/$archive_name" | cut -d' ' -f1)"
+          python3 -B scripts/runtime-artifact.py unpack "$RUNNER_TEMP/np-release-unpacked" \
+            --archive "release-assets/$archive_name" \
+            --sha256 "$archive_sha" --commit "$source_revision"
+
+      - name: Publish validated release without activating production
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "${GITHUB_REF_NAME}" \
+            "release-assets/${{ steps.artifact.outputs.archive }}" \
+            release-assets/{SHA256SUMS,acceptance.json,dependency-tree.txt,pack.json,runtime-manifest.json} \
+            --verify-tag --fail-on-no-commits \
+            --title "NP Service Request ${GITHUB_REF_NAME}" \
+            --notes "Exact Linux ARM64 artifact and acceptance receipt validated for $(git rev-parse HEAD). Source publication does not activate production. The host adapter must verify its protected helper, runtime, and rollback contract before promotion."

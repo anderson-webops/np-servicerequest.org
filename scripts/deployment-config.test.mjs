@@ -106,3 +106,20 @@ test('privileged deployment commands select protected helpers outside build chec
   assert.match(install, /helper_parent=\/usr\/local\/libexec\/np-servicerequest-release/u)
   assert.match(install, /install -o root -g root -m 0755 "\$script_dir\/promote-release\.sh" "\$script_dir\/trusted-paths\.py" "\$helper_root\/deploy\/systemd\/"/u)
 })
+
+test('source release requires an exact ARM64 artifact before publication', async () => {
+  const [ci, release] = await Promise.all([
+    readFile(paths.ci, 'utf8'),
+    readFile(paths.release, 'utf8'),
+  ])
+
+  assert.match(ci, /npm run test:promotion/u)
+  assert.match(ci, /npm run package:runtime/u)
+  assert.match(release, /package-arm64:[\s\S]*runs-on: ubuntu-24\.04-arm/u)
+  assert.match(release, /publish:[\s\S]*needs: \[validate, package-arm64\]/u)
+  assert.match(release, /npm run package:runtime/u)
+  assert.match(release, /sha256sum --check SHA256SUMS/u)
+  assert.match(release, /runtime-artifact\.py unpack/u)
+  assert.match(release, /gh release create/u)
+  assert.doesNotMatch(release, /--clobber|--force/u)
+})

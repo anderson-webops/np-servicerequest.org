@@ -68,6 +68,20 @@ smoke, and exact Linux ARM64 artifact packaging. It binds release metadata and
 the preparation marker to the exact commit and package version. Review the
 archive, SHA-256, manifest, and acceptance receipt before privileged staging.
 
+## Source publication and host compatibility
+
+The release workflow does not publish a GitHub release when validation or
+Linux ARM64 artifact acceptance fails. It publishes the exact archive,
+checksum, manifest, dependency tree, and acceptance receipt only after both
+gates pass. A pushed tag with a pending or failed workflow is not deployable.
+
+The host adapter must compare those published bytes and the embedded runtime
+contract with its installed protected helper, Node runtime, loopback listener,
+durable-data layout, and retained rollback target before promotion. Missing
+host capabilities require a reviewed adapter update; an invalid artifact must
+remain blocked. Retry only classified temporary infrastructure failures.
+Activation and rollback status belong to the host adapter, not to source CI.
+
 ## Promote or roll back
 
 Unpack the reviewed archive into a new immutable release directory with the
