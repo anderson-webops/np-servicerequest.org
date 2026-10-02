@@ -174,11 +174,13 @@ async function runProviderSearch(options?: {
     if (options?.refresh)
       searchParams.set('refresh', 'true')
 
+    const baseEndpoint = getServiceDirectoryEndpoint(runtimeConfig.public.apiBaseUrl)
+    const hasPrivateOrigin = searchParams.has('lat')
     const response = await $fetch<ServiceDirectorySearchResponse>(
-      withApiQuery(
-        getServiceDirectoryEndpoint(runtimeConfig.public.apiBaseUrl),
-        searchParams,
-      ),
+      hasPrivateOrigin ? baseEndpoint : withApiQuery(baseEndpoint, searchParams),
+      hasPrivateOrigin
+        ? { body: Object.fromEntries(searchParams), method: 'POST' }
+        : {},
     )
 
     if (

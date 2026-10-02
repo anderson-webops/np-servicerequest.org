@@ -10,7 +10,33 @@ import {
 
 const isDev = process.env.NODE_ENV === 'development'
 const analyticsDisabled = process.env.DISABLE_ANALYTICS === 'true'
-const managementLinkScrubber = `(()=>{try{const u=new URL(window.location.href);const h=new URLSearchParams(u.hash.slice(1));const i=h.get("manageItem")||u.searchParams.get("manageItem");const t=h.get("manageToken")||u.searchParams.get("manageToken");if(i&&t){sessionStorage.setItem("np_sr_pending_management_claim",JSON.stringify({issuedAt:Date.now(),itemId:i,managementToken:t}));h.delete("manageItem");h.delete("manageToken");u.searchParams.delete("manageItem");u.searchParams.delete("manageToken");const hs=h.toString();history.replaceState(null,"",u.pathname+u.search+(hs?"#"+hs:""))}}catch{}})();`
+const privateLinkScrubber = `(()=>{try{
+const u=new URL(window.location.href);
+const h=new URLSearchParams(u.hash.slice(1));
+let changed=false;
+let hash=u.hash;
+const i=h.get("manageItem")||u.searchParams.get("manageItem");
+const t=h.get("manageToken")||u.searchParams.get("manageToken");
+if(i&&t){
+  try{
+    sessionStorage.setItem("np_sr_pending_management_claim",JSON.stringify({issuedAt:Date.now(),itemId:i,managementToken:t}));
+    if(h.has("manageItem")||h.has("manageToken")){
+      h.delete("manageItem");h.delete("manageToken");
+      hash=h.toString()?"#"+h.toString():"";
+    }
+    u.searchParams.delete("manageItem");u.searchParams.delete("manageToken");
+    changed=true;
+  }catch{}
+}
+if(u.pathname==="/"||u.pathname==="/index.html"){
+  if(u.searchParams.has("lat")||u.searchParams.has("lng")){
+    u.searchParams.delete("lat");u.searchParams.delete("lng");changed=true;
+  }
+}
+if(changed){
+  history.replaceState(history.state,"",u.pathname+u.search+hash);
+}
+}catch{}})();`
 
 export default defineNuxtConfig({
   modules: [
@@ -41,7 +67,7 @@ export default defineNuxtConfig({
       ],
       script: [
         {
-          innerHTML: managementLinkScrubber,
+          innerHTML: privateLinkScrubber,
           tagPosition: 'bodyClose',
         },
         ...(isDev || analyticsDisabled

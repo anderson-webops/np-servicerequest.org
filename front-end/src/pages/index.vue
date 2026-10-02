@@ -31,6 +31,8 @@ import { consumePendingManagementClaim } from '~/utils/managementLink'
 import { submissionKinds } from '~/utils/submissions'
 
 type BoardFilter = 'all' | SubmissionKind
+const boardOriginStorageKey = 'np_sr_board_origin'
+const boardOriginMaxAgeMs = 30 * 60 * 1000
 
 definePageMeta({
   layout: 'home',
@@ -148,15 +150,6 @@ function parsePositivePage(value: string) {
   return parsedValue
 }
 
-function parseMaybeCoordinate(value: string) {
-  const parsedValue = Number.parseFloat(value)
-
-  if (!Number.isFinite(parsedValue))
-    return null
-
-  return parsedValue
-}
-
 function normalizeBoardSearch(value: string) {
   return value.trim().slice(0, 120)
 }
@@ -232,16 +225,20 @@ async function loadBoardItems() {
     searchParams.set('lat', String(boardOrigin.value.lat))
     searchParams.set('lng', String(boardOrigin.value.lng))
   }
-  const endpoint = withApiQuery(
-    getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'items'),
-    searchParams,
-  )
+  const hasPrivateOrigin = searchParams.has('lat')
+  const baseEndpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, 'items')
+  const endpoint = hasPrivateOrigin
+    ? baseEndpoint
+    : withApiQuery(baseEndpoint, searchParams)
 
   boardPending.value = true
   boardError.value = null
 
   try {
     const response = await $fetch<BoardItemsResponse>(endpoint, {
+      ...(hasPrivateOrigin
+        ? { body: Object.fromEntries(searchParams), method: 'POST' as const }
+        : {}),
       credentials: 'include',
     })
 
@@ -415,13 +412,11 @@ function syncBoardStateFromRoute() {
   let changed = false
   const nextBoardFilter = parseBoardFilter(getQueryValue(route.query.filter))
   const nextBoardSearch = normalizeBoardSearch(getQueryValue(route.query.q))
-  const nextBoardSort = parseBoardSort(getQueryValue(route.query.sort))
+  const requestedSort = parseBoardSort(getQueryValue(route.query.sort))
+  const nextBoardSort = requestedSort === 'nearby' && !boardOrigin.value
+    ? 'recent-activity'
+    : requestedSort
   const nextPage = parsePositivePage(getQueryValue(route.query.page))
-  const nextLat = parseMaybeCoordinate(getQueryValue(route.query.lat))
-  const nextLng = parseMaybeCoordinate(getQueryValue(route.query.lng))
-  const nextOrigin = nextLat != null && nextLng != null
-    ? { lat: nextLat, lng: nextLng }
-    : null
 
   if (boardFilter.value !== nextBoardFilter) {
     boardFilter.value = nextBoardFilter
@@ -439,16 +434,6 @@ function syncBoardStateFromRoute() {
     changed = true
   }
 
-  const currentOrigin = boardOrigin.value
-
-  if (
-    currentOrigin?.lat !== nextOrigin?.lat
-    || currentOrigin?.lng !== nextOrigin?.lng
-  ) {
-    boardOrigin.value = nextOrigin
-    changed = true
-  }
-
   if (boardPagination.value.page !== nextPage) {
     boardPagination.value = {
       ...boardPagination.value,
@@ -460,10 +445,79 @@ function syncBoardStateFromRoute() {
   return changed
 }
 
+function persistBoardOrigin(origin: { lat: number, lng: number } | null) {
+  try {
+    if (origin) {
+      window.sessionStorage.setItem(boardOriginStorageKey, JSON.stringify({
+        ...origin,
+        savedAt: Date.now(),
+      }))
+    }
+    else {
+      window.sessionStorage.removeItem(boardOriginStorageKey)
+    }
+  }
+  catch {
+    return
+  }
+}
+
+function restoreBoardOrigin() {
+  try {
+    const rawOrigin = window.sessionStorage.getItem(boardOriginStorageKey)
+
+    if (!rawOrigin)
+      return
+
+    const storedOrigin = JSON.parse(rawOrigin) as {
+      lat?: unknown
+      lng?: unknown
+      savedAt?: unknown
+    }
+    const ageMs = Date.now() - Number(storedOrigin.savedAt)
+
+    if (
+      typeof storedOrigin.lat === 'number'
+      && Number.isFinite(storedOrigin.lat)
+      && Math.abs(storedOrigin.lat) <= 90
+      && typeof storedOrigin.lng === 'number'
+      && Number.isFinite(storedOrigin.lng)
+      && Math.abs(storedOrigin.lng) <= 180
+      && Number.isFinite(ageMs)
+      && ageMs >= -30_000
+      && ageMs <= boardOriginMaxAgeMs
+    ) {
+      boardOrigin.value = { lat: storedOrigin.lat, lng: storedOrigin.lng }
+      return
+    }
+
+    persistBoardOrigin(null)
+  }
+  catch {
+    persistBoardOrigin(null)
+  }
+}
+
+function scrubPrivateBoardRoute() {
+  const unusableNearby = route.query.sort === 'nearby' && !boardOrigin.value
+
+  if (route.query.lat == null && route.query.lng == null && !unusableNearby)
+    return
+
+  void router.replace({
+    hash: route.hash,
+    path: route.path,
+    query: {
+      ...route.query,
+      lat: undefined,
+      lng: undefined,
+      sort: unusableNearby ? undefined : route.query.sort,
+    },
+  })
+}
+
 async function pushBoardRouteState(nextState?: {
   filter?: BoardFilter
-  lat?: number | null
-  lng?: number | null
   page?: number
   query?: string
   sort?: BoardSortOrder
@@ -472,8 +526,6 @@ async function pushBoardRouteState(nextState?: {
   const nextPage = Math.max(nextState?.page ?? boardPagination.value.page, 1)
   const nextQuery = normalizeBoardSearch(nextState?.query ?? boardSearch.value)
   const nextSort = nextState?.sort ?? boardSort.value
-  const nextLat = nextState?.lat ?? boardOrigin.value?.lat ?? null
-  const nextLng = nextState?.lng ?? boardOrigin.value?.lng ?? null
 
   await router.push({
     hash: route.hash,
@@ -481,8 +533,8 @@ async function pushBoardRouteState(nextState?: {
     query: {
       ...route.query,
       filter: nextFilter === 'all' ? undefined : nextFilter,
-      lat: nextLat != null ? String(nextLat) : undefined,
-      lng: nextLng != null ? String(nextLng) : undefined,
+      lat: undefined,
+      lng: undefined,
       page: nextPage > 1 ? String(nextPage) : undefined,
       q: nextQuery || undefined,
       sort: nextSort === 'recent-activity' ? undefined : nextSort,
@@ -550,22 +602,26 @@ async function enableBoardNearbySort() {
     const position = await new Promise<GeolocationPosition>((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(resolve, reject, {
         enableHighAccuracy: false,
-        maximumAge: 5 * 60 * 1000,
+        maximumAge: boardOrigin.value ? 0 : 5 * 60 * 1000,
         timeout: 10 * 1000,
       })
     })
 
+    const routeAlreadyNearby = parseBoardSort(getQueryValue(route.query.sort)) === 'nearby'
+      && boardPagination.value.page === 1
     boardOrigin.value = {
       lat: position.coords.latitude,
       lng: position.coords.longitude,
     }
+    persistBoardOrigin(boardOrigin.value)
 
     await pushBoardRouteState({
-      lat: boardOrigin.value.lat,
-      lng: boardOrigin.value.lng,
       page: 1,
       sort: 'nearby',
     })
+
+    if (routeAlreadyNearby)
+      await loadBoardItems()
   }
   catch {
     boardGeoError.value = 'Could not read your current location. Nearby sorting needs browser location access.'
@@ -578,10 +634,9 @@ async function enableBoardNearbySort() {
 function clearBoardOrigin() {
   boardOrigin.value = null
   boardGeoError.value = ''
+  persistBoardOrigin(null)
 
   void pushBoardRouteState({
-    lat: null,
-    lng: null,
     page: 1,
     sort: boardSort.value === 'nearby' ? 'recent-activity' : boardSort.value,
   })
@@ -595,8 +650,6 @@ function setBoardSort(nextSort: BoardSortOrder) {
 
   const currentRouteSort = parseBoardSort(getQueryValue(route.query.sort))
 
-  boardSort.value = nextSort
-
   if (currentRouteSort === nextSort && boardPagination.value.page === 1)
     return
 
@@ -606,9 +659,22 @@ function setBoardSort(nextSort: BoardSortOrder) {
   })
 }
 
+function handleBoardSortChange(event: Event) {
+  const select = event.target
+
+  if (!(select instanceof HTMLSelectElement))
+    return
+
+  const nextSort = parseBoardSort(select.value)
+  select.value = boardSort.value
+  setBoardSort(nextSort)
+}
+
 onMounted(() => {
   hasHydrated.value = true
+  restoreBoardOrigin()
   syncBoardStateFromRoute()
+  scrubPrivateBoardRoute()
   const pendingManagementClaim = consumePendingManagementClaim()
   const manageItem = pendingManagementClaim?.itemId || getQueryValue(route.query.manageItem)
   const manageToken = pendingManagementClaim?.managementToken || getQueryValue(route.query.manageToken)
@@ -633,6 +699,7 @@ watch(
       return
 
     const changed = syncBoardStateFromRoute()
+    scrubPrivateBoardRoute()
 
     if (changed)
       void loadBoardItems()
@@ -751,9 +818,9 @@ watch(
           <label class="board-sort">
             <span>Sort</span>
             <select
-              v-model="boardSort"
+              :value="boardSort"
               name="board_sort"
-              @change="setBoardSort(boardSort)"
+              @change="handleBoardSortChange"
             >
               <option
                 v-for="option in boardSortOptions"

@@ -50,6 +50,42 @@ test('service directory search reports when Idealist is not configured', async (
   assert.match(response.provider.message, /not configured/i)
 })
 
+test('location-bearing public search accepts a same-origin POST without URL coordinates', async () => {
+  const server = createApp().listen(0, '127.0.0.1')
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once('listening', resolve)
+      server.once('error', reject)
+    })
+    const address = server.address()
+    assert.ok(address && typeof address === 'object')
+    const endpoint = `http://127.0.0.1:${address.port}/api/service-directory/search`
+    const response = await originalFetch(endpoint, {
+      body: JSON.stringify({ lat: '33.749', lng: '-84.388', provider: 'idealist', query: 'food' }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    })
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get('cache-control'), 'no-store')
+    const body = await response.json() as { query: { lat: number, lng: number, query: string } }
+    assert.equal(body.query.lat, 33.749)
+    assert.equal(body.query.lng, -84.388)
+    assert.equal(body.query.query, 'food')
+
+    const rejectedResponse = await originalFetch(endpoint, {
+      body: JSON.stringify({ lat: '33.749', lng: '-84.388' }),
+      headers: { 'content-type': 'application/json', origin: 'https://untrusted.example' },
+      method: 'POST',
+    })
+    assert.equal(rejectedResponse.status, 403)
+  }
+  finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close(error => error ? reject(error) : resolve())
+    })
+  }
+})
+
 test('service directory search syncs live Idealist listings into a local index', async () => {
   env.IDEALIST_API_KEY = 'test-idealist-key'
 

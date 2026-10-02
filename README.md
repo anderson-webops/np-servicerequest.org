@@ -52,7 +52,7 @@ The previous PWA/service-worker runtime is intentionally disabled right now so c
 The live board and admin review filters now stay in the URL query string so refresh, back/forward navigation, and shared links preserve the current view. The optional account page also supports `?tab=login`.
 Each public board post now uses a canonical detail path at `/posts/<boardItemId>`, while the older `/post?id=<boardItemId>` route remains as a compatibility path. Static hosts that serve the generated front-end directly should keep a SPA-style fallback to `200.html` for direct loads of unknown `/posts/...` paths.
 New posts and replies now collect structured contact details instead of one free-text field, so contributors can explicitly choose email or phone and optionally add a short contact note.
-The homepage board now supports keyword search plus server-backed sorting, including nearby sorting from a browser location origin. The dedicated submission pages save drafts in local browser storage and let posters choose per-post reply notification preferences. The public post page includes report actions for posts and replies.
+The homepage board now supports keyword search plus server-backed sorting, including nearby sorting from a browser location origin. Browser coordinates stay in the current tab's session storage, are restorable for 30 minutes, and are sent in a guarded request body, not the shareable board URL or API request URL. Clear location removes the saved origin. A shared nearby-sort link without a current-tab origin falls back to recent activity; visitors can choose their own location. Legacy board links containing `lat` or `lng` are stripped from browser history before analytics loads. The dedicated submission pages save drafts in local browser storage and let posters choose per-post reply notification preferences. The public post page includes report actions for posts and replies.
 
 Production uses the same-origin `/api` path by default. Set
 `NUXT_PUBLIC_API_BASE_URL` only when the front-end intentionally targets a
@@ -67,8 +67,10 @@ The API lives in `back-end` and exposes:
 - `GET /api/readyz`
 - `GET /api/pageview`
 - `GET /api/service-directory/search`
+- `POST /api/service-directory/search` for location-bearing browser searches
 - `GET /api/board/bootstrap`
 - `GET /api/board/items`
+- `POST /api/board/items` for location-bearing browser searches
 - `GET /api/board/items/:itemId`
 - `POST /api/submissions/service-request`
 - `POST /api/submissions/item-request`
@@ -94,9 +96,15 @@ remains separate from those probes.
 
 Listing endpoints now support server-side filtering and pagination:
 
-- `GET /api/board/items?kind=all|service-request|item-request|item-lending&query=ladder&sort=recent-activity|newest|oldest|nearby&lat=33.749&lng=-84.388&page=1&pageSize=12`
+- `GET /api/board/items?kind=all|service-request|item-request|item-lending&query=ladder&sort=recent-activity|newest|oldest&page=1&pageSize=12`
+- `POST /api/board/items` with JSON body `{"sort":"nearby","lat":"33.749","lng":"-84.388","page":"1","pageSize":"12"}`
 - `GET /api/admin/submissions?review=all|pending|approved|needs-follow-up|rejected&kind=all|service-request|item-request|item-lending&submissionsPage=1&submissionsPageSize=20&activityCategory=all|posts|replies|moderation|deletions|reports&activityPage=1&activityPageSize=40`
-- `GET /api/service-directory/search?provider=idealist&query=food%20pantry&lat=33.749&lng=-84.388&radiusMiles=40&page=1&pageSize=12`
+- `GET /api/service-directory/search?provider=idealist&query=food%20pantry&radiusMiles=40&page=1&pageSize=12`
+- `POST /api/service-directory/search` with JSON body `{"provider":"idealist","lat":"33.749","lng":"-84.388","radiusMiles":"40"}`
+
+The existing GET forms remain available for API compatibility. The site uses
+same-origin-guarded POST bodies for precise browser coordinates to avoid putting
+them in shareable links, request URLs, or URL-based error details.
 
 Local-development default port: `3006`. The reviewed production listener remains
 `127.0.0.1:3016` so it does not collide with other installed services.

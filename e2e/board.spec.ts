@@ -77,6 +77,120 @@ function extractFirstUrl(text: string) {
   return match[0]
 }
 
+test('browser location stays out of shareable board URLs and request URLs', async ({ context, page }) => {
+  await context.grantPermissions(['geolocation'])
+  await context.setGeolocation({ latitude: 33.749, longitude: -84.388 })
+  await page.goto('/')
+
+  const nearbyRequestPromise = page.waitForRequest(request =>
+    request.url().includes('/api/board/items')
+    && (request.method() === 'POST' || new URL(request.url()).searchParams.has('lat')))
+  await page.getByRole('button', { name: 'Use my location' }).click()
+  const nearbyRequest = await nearbyRequestPromise
+  expect(nearbyRequest.method()).toBe('POST')
+  expect(new URL(nearbyRequest.url()).searchParams.has('lat')).toBe(false)
+  expect(new URL(nearbyRequest.url()).searchParams.has('lng')).toBe(false)
+  expect(JSON.parse(nearbyRequest.postData() || '{}')).toMatchObject({
+    lat: '33.749',
+    lng: '-84.388',
+    sort: 'nearby',
+  })
+  await expect(page.getByText('Using your current browser location for nearby sorting.')).toBeVisible()
+  expect(page.url()).not.toMatch(/[?&](?:lat|lng)=/)
+
+  await page.getByRole('button', { name: 'Service projects' }).click()
+  await expect(page).toHaveURL(/filter=service-request/)
+  expect(page.url()).not.toMatch(/[?&](?:lat|lng)=/)
+  await expect(page.getByText('Using your current browser location for nearby sorting.')).toBeVisible()
+
+  await page.goBack()
+  await expect(page.getByRole('button', { name: 'All posts' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByText('Using your current browser location for nearby sorting.')).toBeVisible()
+  expect(page.url()).not.toMatch(/[?&](?:lat|lng)=/)
+
+  await context.setGeolocation({ latitude: 34.001, longitude: -84.002 })
+  const refreshedRequestPromise = page.waitForRequest(request =>
+    request.url().includes('/api/board/items') && request.method() === 'POST')
+  await page.getByRole('button', { name: 'Refresh location' }).click()
+  const refreshedRequest = await refreshedRequestPromise
+  expect(JSON.parse(refreshedRequest.postData() || '{}')).toMatchObject({
+    lat: '34.001',
+    lng: '-84.002',
+    sort: 'nearby',
+  })
+  expect(page.url()).not.toMatch(/[?&](?:lat|lng)=/)
+
+  await page.reload()
+  await expect(page.getByRole('combobox', { name: 'Sort' })).toHaveValue('nearby')
+  await expect(page.getByText('Using your current browser location for nearby sorting.')).toBeVisible()
+  expect(page.url()).not.toMatch(/[?&](?:lat|lng)=/)
+
+  const newestRequestPromise = page.waitForRequest(request =>
+    request.url().includes('/api/board/items') && request.method() === 'POST')
+  await page.getByRole('combobox', { name: 'Sort' }).selectOption('newest')
+  const newestRequest = await newestRequestPromise
+  expect(JSON.parse(newestRequest.postData() || '{}')).toMatchObject({
+    lat: '34.001',
+    lng: '-84.002',
+    sort: 'newest',
+  })
+  await page.getByRole('combobox', { name: 'Sort' }).selectOption('nearby')
+  await expect(page.getByRole('combobox', { name: 'Sort' })).toHaveValue('nearby')
+
+  await page.getByRole('button', { name: 'Clear location' }).click()
+  await expect(page.getByText('Using your current browser location for nearby sorting.')).toHaveCount(0)
+  expect(page.url()).not.toMatch(/[?&](?:lat|lng)=/)
+
+  await page.goBack()
+  await expect(page.getByRole('combobox', { name: 'Sort' })).toHaveValue('recent-activity')
+  await expect(page).not.toHaveURL(/sort=nearby/)
+})
+
+test('legacy coordinate links are scrubbed before page analytics and not reused', async ({ page }) => {
+  const boardRequests: string[] = []
+  page.on('request', (request) => {
+    if (request.url().includes('/api/board/items'))
+      boardRequests.push(request.url())
+  })
+
+  await page.goto('/?filter=service-request&lat=33.749&lat=34&lng=-84.388&sort=nearby#live-board')
+  await expect(page.getByRole('combobox', { name: 'Sort' })).toHaveValue('recent-activity')
+  expect(page.url()).not.toMatch(/[?&](?:lat|lng)=/)
+  expect(page.url()).not.toContain('sort=nearby')
+  expect(page.url()).toContain('filter=service-request')
+  expect(page.url()).toContain('#live-board')
+  expect(boardRequests.every(url => !/[?&](?:lat|lng)=/.test(url))).toBe(true)
+})
+
+test('denied geolocation leaves nearby sorting inactive and the URL clean', async ({ context, page }) => {
+  await context.grantPermissions([])
+  await page.goto('/')
+  await page.getByRole('combobox', { name: 'Sort' }).selectOption('nearby')
+  await expect(page.getByText('Could not read your current location. Nearby sorting needs browser location access.')).toBeVisible()
+  await expect(page.getByRole('combobox', { name: 'Sort' })).toHaveValue('recent-activity')
+  expect(page.url()).not.toMatch(/[?&](?:lat|lng|sort)=/)
+})
+
+test('service-search sends browser coordinates in a request body', async ({ context, page }) => {
+  await context.grantPermissions(['geolocation'])
+  await context.setGeolocation({ latitude: 33.749, longitude: -84.388 })
+  await page.goto('/service-search')
+
+  const nearbyRequestPromise = page.waitForRequest(request =>
+    request.url().includes('/api/service-directory/search')
+    && (request.method() === 'POST' || new URL(request.url()).searchParams.has('lat')))
+  await page.getByRole('button', { name: 'Use my current location' }).click()
+  const nearbyRequest = await nearbyRequestPromise
+  expect(nearbyRequest.method()).toBe('POST')
+  expect(new URL(nearbyRequest.url()).searchParams.has('lat')).toBe(false)
+  expect(new URL(nearbyRequest.url()).searchParams.has('lng')).toBe(false)
+  expect(JSON.parse(nearbyRequest.postData() || '{}')).toMatchObject({
+    lat: '33.749',
+    lng: '-84.388',
+  })
+  expect(page.url()).not.toMatch(/[?&](?:lat|lng)=/)
+})
+
 test('member registration, logout, and login preserve a non-admin identity and strict session cookie', async ({ context, page }) => {
   const email = `member-flow-${Date.now()}@example.com`
   const password = 'member-flow-password'

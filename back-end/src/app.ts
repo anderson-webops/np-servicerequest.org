@@ -538,22 +538,23 @@ export function createApp(options?: AppOptions) {
     }
   })
 
-  app.get('/api/service-directory/search', async (request, response) => {
+  const serviceDirectorySearchHandler: express.RequestHandler = async (request, response) => {
     try {
+      const search = request.method === 'POST' ? request.body ?? {} : request.query
       consumeRateLimit(`service-directory:${getRateLimitClientId(request)}`, {
         limit: 30,
         windowMs: 1000 * 60 * 5,
       })
 
       response.json(await searchServiceDirectory({
-        lat: parseMaybeFloat(request.query.lat),
-        lng: parseMaybeFloat(request.query.lng),
-        page: parsePositiveInt(request.query.page, 1, 999),
-        pageSize: parsePositiveInt(request.query.pageSize, 12, 24),
-        provider: getSingleQueryValue(request.query.provider) === 'idealist' ? 'idealist' : 'idealist',
-        query: getSingleQueryValue(request.query.query),
-        radiusMiles: parsePositiveInt(request.query.radiusMiles, 40, 250),
-        refresh: getSingleQueryValue(request.query.refresh) === 'true',
+        lat: parseMaybeFloat(search.lat),
+        lng: parseMaybeFloat(search.lng),
+        page: parsePositiveInt(search.page, 1, 999),
+        pageSize: parsePositiveInt(search.pageSize, 12, 24),
+        provider: getSingleQueryValue(search.provider) === 'idealist' ? 'idealist' : 'idealist',
+        query: getSingleQueryValue(search.query),
+        radiusMiles: parsePositiveInt(search.radiusMiles, 40, 250),
+        refresh: getSingleQueryValue(search.refresh) === 'true',
       }))
     }
     catch (error) {
@@ -565,7 +566,9 @@ export function createApp(options?: AppOptions) {
         message: 'Unable to load live service listings right now.',
       })
     }
-  })
+  }
+  app.get('/api/service-directory/search', serviceDirectorySearchHandler)
+  app.post('/api/service-directory/search', serviceDirectorySearchHandler)
 
   app.get('/api/admin/session', async (request, response) => {
     try {
@@ -709,24 +712,27 @@ export function createApp(options?: AppOptions) {
     })
   })
 
-  app.get('/api/board/items', async (request, response) => {
-    const kindFilter = getSingleQueryValue(request.query.kind)
-    const sort = getSingleQueryValue(request.query.sort)
+  const boardItemsHandler: express.RequestHandler = async (request, response) => {
+    const search = request.method === 'POST' ? request.body ?? {} : request.query
+    const kindFilter = getSingleQueryValue(search.kind)
+    const sort = getSingleQueryValue(search.sort)
 
     response.json({
       ...await listBoardItems({
         kind: isSubmissionKind(kindFilter) ? kindFilter : 'all',
-        lat: parseMaybeFloat(request.query.lat),
-        lng: parseMaybeFloat(request.query.lng),
-        page: parsePositiveInt(request.query.page, 1, 999),
-        pageSize: parsePositiveInt(request.query.pageSize, 12, 50),
-        query: getSingleQueryValue(request.query.query),
+        lat: parseMaybeFloat(search.lat),
+        lng: parseMaybeFloat(search.lng),
+        page: parsePositiveInt(search.page, 1, 999),
+        pageSize: parsePositiveInt(search.pageSize, 12, 50),
+        query: getSingleQueryValue(search.query),
         sort: boardItemSortOrders.includes(sort as typeof boardItemSortOrders[number])
           ? sort as typeof boardItemSortOrders[number]
           : 'recent-activity',
       }),
     })
-  })
+  }
+  app.get('/api/board/items', boardItemsHandler)
+  app.post('/api/board/items', boardItemsHandler)
 
   app.get('/api/board/items/:itemId', async (request, response) => {
     try {

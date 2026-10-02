@@ -729,6 +729,21 @@ test('nearby board sorting prefers matched locations and stores per-post reply n
   assert.equal((nearbyBoard.items as Array<{ id: string }>)[0]?.id, atlantaBoardItem.id)
   assert.ok(typeof (nearbyBoard.items as Array<{ distanceMiles: number | null }>)[0]?.distanceMiles === 'number')
 
+  const { body: privateNearbyBoard, response: privateNearbyResponse } = await fetchJson('/api/board/items', {
+    body: JSON.stringify({ lat: '33.749', lng: '-84.388', sort: 'nearby' }),
+    method: 'POST',
+  })
+  assert.equal(privateNearbyResponse.status, 200)
+  assert.deepEqual(privateNearbyBoard.items, nearbyBoard.items)
+  assert.equal(privateNearbyResponse.headers.get('cache-control'), 'no-store')
+
+  const { response: rejectedNearbyResponse } = await fetchJson('/api/board/items', {
+    body: JSON.stringify({ lat: '33.749', lng: '-84.388', sort: 'nearby' }),
+    headers: { origin: 'https://untrusted.example' },
+    method: 'POST',
+  })
+  assert.equal(rejectedNearbyResponse.status, 403)
+
   const storedItemPath = resolve(dataDirectory, '_board', 'items', `${atlantaBoardItem.id}.json`)
   const storedItem = JSON.parse(await readFile(storedItemPath, 'utf8')) as {
     geo?: { label?: string }
