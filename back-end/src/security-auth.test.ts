@@ -1,6 +1,6 @@
 import type { Server } from 'node:http'
 import assert from 'node:assert/strict'
-import { scrypt } from 'node:crypto'
+import { randomUUID, scrypt } from 'node:crypto'
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -253,6 +253,67 @@ test('self-registration cannot promote an allowlisted email and passwords are st
   assert.equal(upgradedAccount.passwordAlgorithm, 'scrypt-v2')
   assert.equal(upgradedAccount.role, 'member')
   assert.equal(upgradedAccount.roleVersion, 2)
+})
+
+test('logout cannot be undone by a concurrent session refresh', async () => {
+  const { getViewerFromCookie, invalidateViewerSession } = await import('./accounts.js')
+  const { hashSessionToken, sessionCookieName } = await import('./security.js')
+  const accountId = randomUUID()
+  const accountDirectory = resolve(dataDirectory, '_board', 'accounts')
+  const sessionDirectory = resolve(dataDirectory, '_board', 'sessions')
+  const createdAt = new Date(Date.now() - 6 * 60_000).toISOString()
+
+  await mkdir(accountDirectory, { recursive: true })
+  await mkdir(sessionDirectory, { recursive: true })
+  await writeFile(resolve(accountDirectory, `${accountId}.json`), `${JSON.stringify({
+    createdAt,
+    displayName: 'Session Race Test',
+    email: 'session-race@example.com',
+    emailNormalized: 'session-race@example.com',
+    id: accountId,
+    passwordHash: 'not-used-by-this-test',
+    passwordSalt: 'not-used-by-this-test',
+    role: 'member',
+    roleVersion: 0,
+    updatedAt: createdAt,
+  })}\n`)
+
+  let refreshedLookups = 0
+
+  for (let attempt = 0; attempt < 16; attempt++) {
+    const sessionToken = randomUUID()
+    const tokenHash = hashSessionToken(sessionToken)
+    const cookie = `${sessionCookieName}=${sessionToken}`
+    const sessionPath = resolve(sessionDirectory, `${tokenHash}.json`)
+    await writeFile(sessionPath, `${JSON.stringify({
+      createdAt,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60_000).toISOString(),
+      lastSeenAt: createdAt,
+      roleVersion: 0,
+      tokenHash,
+      userId: accountId,
+    })}\n`)
+
+    const lookup = getViewerFromCookie(cookie)
+    const logout = invalidateViewerSession(cookie)
+    const viewer = await lookup
+    await logout
+
+    if (viewer) {
+      assert.equal(viewer.id, accountId)
+      refreshedLookups += 1
+    }
+    await assert.rejects(readFile(sessionPath, 'utf8'), /ENOENT/u)
+    assert.equal(await getViewerFromCookie(cookie), null)
+
+    const { body, response } = await fetchJson('/api/board/bootstrap', {
+      headers: { cookie, origin: allowedOrigin },
+    })
+    assert.equal(response.status, 200)
+    assert.equal(body.viewer, null)
+  }
+
+  assert.ok(refreshedLookups > 0)
 })
 
 test('admin keys are exchanged for revocable HttpOnly sessions and are not accepted from browser headers', async () => {

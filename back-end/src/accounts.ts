@@ -23,6 +23,7 @@ const sessionIdleDurationMs = 1000 * 60 * 60 * 12
 const sessionTouchIntervalMs = 1000 * 60 * 5
 const currentPasswordAlgorithm = 'scrypt-v2'
 let accountRegistrationQueue = Promise.resolve()
+const sessionQueues = new Map<string, Promise<void>>()
 
 async function wait(milliseconds: number) {
   await new Promise(resolveWait => setTimeout(resolveWait, milliseconds))
@@ -53,6 +54,27 @@ async function withAccountMutationLock<T>(accountId: string, task: () => Promise
   }
   finally {
     await removePathIfExists(lockPath)
+  }
+}
+
+async function withSessionLock<T>(tokenHash: string, task: () => Promise<T>) {
+  const previousTask = sessionQueues.get(tokenHash)
+  let releaseLock = () => {}
+  const currentTask = new Promise<void>((resolveLock) => {
+    releaseLock = resolveLock
+  })
+  sessionQueues.set(tokenHash, currentTask)
+
+  if (previousTask)
+    await previousTask
+
+  try {
+    return await task()
+  }
+  finally {
+    if (sessionQueues.get(tokenHash) === currentTask)
+      sessionQueues.delete(tokenHash)
+    releaseLock()
   }
 }
 
@@ -258,52 +280,60 @@ export async function getViewerFromCookie(cookieHeader: string | undefined) {
     return null
 
   const tokenHash = hashSessionToken(token)
-  const session = await readJsonFile<StoredSession>(getSessionFilePath(tokenHash))
+  const sessionPath = getSessionFilePath(tokenHash)
+  const initialSession = await readJsonFile<StoredSession>(sessionPath)
 
-  if (!session)
+  if (!initialSession)
     return null
 
-  const createdAt = Date.parse(session.createdAt)
+  return withSessionLock(tokenHash, async () => {
+    const session = await readJsonFile<StoredSession>(sessionPath)
 
-  if (
-    !Number.isFinite(createdAt)
-    || Date.parse(session.expiresAt) <= Date.now()
-    || createdAt <= Date.now() - sessionAbsoluteDurationMs
-  ) {
-    await removeFileIfExists(getSessionFilePath(tokenHash))
-    return null
-  }
+    if (!session)
+      return null
 
-  const lastSeenAt = Date.parse(session.lastSeenAt || session.createdAt)
+    const createdAt = Date.parse(session.createdAt)
 
-  if (!Number.isFinite(lastSeenAt) || lastSeenAt <= Date.now() - sessionIdleDurationMs) {
-    await removeFileIfExists(getSessionFilePath(tokenHash))
-    return null
-  }
+    if (
+      !Number.isFinite(createdAt)
+      || Date.parse(session.expiresAt) <= Date.now()
+      || createdAt <= Date.now() - sessionAbsoluteDurationMs
+    ) {
+      await removeFileIfExists(sessionPath)
+      return null
+    }
 
-  const account = await getAccountById(session.userId)
+    const lastSeenAt = Date.parse(session.lastSeenAt || session.createdAt)
 
-  if (!account) {
-    await removeFileIfExists(getSessionFilePath(tokenHash))
-    return null
-  }
+    if (!Number.isFinite(lastSeenAt) || lastSeenAt <= Date.now() - sessionIdleDurationMs) {
+      await removeFileIfExists(sessionPath)
+      return null
+    }
 
-  const accountRoleVersion = Number.isSafeInteger(account.roleVersion) ? account.roleVersion : 0
-  const sessionRoleVersion = Number.isSafeInteger(session.roleVersion) ? session.roleVersion : 0
+    const account = await getAccountById(session.userId)
 
-  if (sessionRoleVersion !== accountRoleVersion) {
-    await removeFileIfExists(getSessionFilePath(tokenHash))
-    return null
-  }
+    if (!account) {
+      await removeFileIfExists(sessionPath)
+      return null
+    }
 
-  if (Date.now() - lastSeenAt >= sessionTouchIntervalMs) {
-    await writeJsonFile(getSessionFilePath(tokenHash), {
-      ...session,
-      lastSeenAt: new Date().toISOString(),
-    })
-  }
+    const accountRoleVersion = Number.isSafeInteger(account.roleVersion) ? account.roleVersion : 0
+    const sessionRoleVersion = Number.isSafeInteger(session.roleVersion) ? session.roleVersion : 0
 
-  return toViewerAccount(account)
+    if (sessionRoleVersion !== accountRoleVersion) {
+      await removeFileIfExists(sessionPath)
+      return null
+    }
+
+    if (Date.now() - lastSeenAt >= sessionTouchIntervalMs) {
+      await writeJsonFile(sessionPath, {
+        ...session,
+        lastSeenAt: new Date().toISOString(),
+      })
+    }
+
+    return toViewerAccount(account)
+  })
 }
 
 export async function invalidateViewerSession(cookieHeader: string | undefined) {
@@ -312,7 +342,16 @@ export async function invalidateViewerSession(cookieHeader: string | undefined) 
   if (!token)
     return
 
-  await removeFileIfExists(getSessionFilePath(hashSessionToken(token)))
+  const tokenHash = hashSessionToken(token)
+  const sessionPath = getSessionFilePath(tokenHash)
+  const initialSession = await readJsonFile<StoredSession>(sessionPath)
+
+  if (!initialSession)
+    return
+
+  await withSessionLock(tokenHash, async () => {
+    await removeFileIfExists(sessionPath)
+  })
 }
 
 export async function registerBoardAccount(input: { displayName: string, email: string, password: string }) {
