@@ -169,11 +169,13 @@ const maxRadiusMiles = 250
 const defaultInitialSyncDays = 45
 const defaultSyncTtlMinutes = 360
 const defaultMinimumRefreshMinutes = 15
+const defaultFailureBackoffMinutes = 30
 const maxFeedPages = 25
 const maxFeedListingsPerPage = 500
 const maxListingsPerSync = 250
 const maxProviderResponseBytes = 2 * 1024 * 1024
 const foregroundSyncWaitMs = 3_000
+const publicSyncError = 'Live service listings are temporarily unavailable.'
 let idealistSyncPromise: Promise<void> | null = null
 
 function getIdealistApiKey() {
@@ -193,6 +195,19 @@ function getIdealistInitialSyncDays() {
 
 function getIdealistMinimumRefreshMinutes() {
   return parsePositiveInt(env.IDEALIST_MIN_REFRESH_MINUTES, defaultMinimumRefreshMinutes)
+}
+
+function isIdealistAttemptCoolingDown(lastAttemptedAt: string | null, lastError: string | null) {
+  const attemptedAt = Date.parse(lastAttemptedAt || '')
+  const now = Date.now()
+  const minimumMinutes = getIdealistMinimumRefreshMinutes()
+  const cooldownMinutes = lastError == null
+    ? minimumMinutes
+    : Math.max(minimumMinutes, defaultFailureBackoffMinutes)
+
+  return Number.isFinite(attemptedAt)
+    && attemptedAt <= now
+    && now - attemptedAt < cooldownMinutes * 60 * 1000
 }
 
 function parsePositiveInt(value: string | undefined, fallback: number) {
@@ -493,6 +508,10 @@ async function syncIdealistListings() {
 
   idealistSyncPromise = (async () => {
     const previousState = await readIdealistState()
+
+    if (isIdealistAttemptCoolingDown(previousState.lastAttemptedAt, previousState.lastError))
+      return
+
     const nextState: IdealistProviderState = {
       ...previousState,
       lastAttemptedAt: new Date().toISOString(),
@@ -554,7 +573,7 @@ async function syncIdealistListings() {
 
       await writeIdealistState({
         cursorSince: since,
-        lastAttemptedAt: nextState.lastAttemptedAt,
+        lastAttemptedAt: new Date().toISOString(),
         lastError: null,
         lastSyncedAt: new Date().toISOString(),
       })
@@ -562,8 +581,8 @@ async function syncIdealistListings() {
     catch (error) {
       await writeIdealistState({
         ...previousState,
-        lastAttemptedAt: nextState.lastAttemptedAt,
-        lastError: error instanceof Error ? error.message : 'Unknown Idealist sync error',
+        lastAttemptedAt: new Date().toISOString(),
+        lastError: publicSyncError,
       })
       throw error
     }
@@ -646,7 +665,7 @@ async function getIdealistProviderStatus() {
     configured,
     id: idealistProviderId,
     lastAttemptedAt: state.lastAttemptedAt,
-    lastError: state.lastError,
+    lastError: state.lastError == null ? null : publicSyncError,
     lastSyncedAt: state.lastSyncedAt,
     listingCount: listings.length,
     message: configured
@@ -663,12 +682,11 @@ function shouldSyncProvider(status: ServiceDirectoryProviderStatus, refresh: boo
   if (!status.configured)
     return false
 
-  if (refresh) {
-    const lastAttemptedAt = Date.parse(status.lastAttemptedAt || '')
+  if (isIdealistAttemptCoolingDown(status.lastAttemptedAt, status.lastError))
+    return false
 
-    return !Number.isFinite(lastAttemptedAt)
-      || Date.now() - lastAttemptedAt >= getIdealistMinimumRefreshMinutes() * 60 * 1000
-  }
+  if (refresh)
+    return true
 
   if (!status.lastSyncedAt || status.listingCount === 0)
     return true

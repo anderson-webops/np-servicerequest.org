@@ -102,3 +102,10 @@ private handling as the live directory.
 Do not manually patch packages or copy native modules onto a production host.
 Every dependency fix must be represented in the manifests and committed
 lockfile. Source release completion and live promotion remain separate states.
+
+As of 2026-10-02, the full development-dependency audit is blocked by
+`GHSA-86w9-cpqp-85rv` in `node-forge@1.4.0`, reached through Nuxt CLI and
+`listhen`. No patched `node-forge` release is available on this dependency
+line. The production-only audit reports zero findings. Do not downgrade Nuxt
+with `npm audit fix --force` or exclude the advisory; recheck upstream before
+publishing another release.

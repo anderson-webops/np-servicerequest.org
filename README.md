@@ -129,6 +129,7 @@ The back-end keeps a cached local index of volunteer listings, then filters and 
 - `IDEALIST_LISTINGS_API_KEY` and `SERVICE_DIRECTORY_IDEALIST_API_KEY` are also accepted
 - `IDEALIST_INITIAL_SYNC_DAYS` controls how far back the first sync looks and defaults to `45`
 - `IDEALIST_SYNC_TTL_MINUTES` controls how long cached data is kept before a fresh sync is attempted and defaults to `360`
+- `IDEALIST_MIN_REFRESH_MINUTES` enforces the minimum interval between all provider attempts and defaults to `15`; failed attempts back off for at least `30` minutes
 
 This implementation uses the official Idealist listings API feed and maintains a local search index on the host instead of scraping public pages.
 

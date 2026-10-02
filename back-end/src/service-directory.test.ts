@@ -5,7 +5,9 @@ import { join } from 'node:path'
 import { env } from 'node:process'
 import { afterEach, beforeEach, test } from 'node:test'
 
+import { createApp } from './app.js'
 import { searchServiceDirectory } from './service-directory.js'
+import { readJsonFile, writeJsonFile } from './data.js'
 
 const originalFetch = globalThis.fetch
 const originalDataDirectory = env.SUBMISSIONS_DATA_DIR
@@ -139,4 +141,129 @@ test('service directory search syncs live Idealist listings into a local index',
   assert.equal(response.results[0]?.isRecurring, true)
   assert.match(response.results[0]?.matchReason || '', /Idealist/i)
   assert.ok(requestCount >= 2)
+})
+
+test('empty provider results honor the minimum attempt interval for ordinary and forced searches', async () => {
+  env.IDEALIST_API_KEY = 'synthetic-provider-key'
+  let requestCount = 0
+  globalThis.fetch = async () => {
+    requestCount += 1
+    return new Response(JSON.stringify({ hasMore: false, volops: [] }), { status: 200 })
+  }
+
+  const search = () => searchServiceDirectory({ provider: 'idealist', query: 'food' })
+  const first = await search()
+  assert.equal(first.provider.listingCount, 0)
+  await search()
+  await searchServiceDirectory({ provider: 'idealist', refresh: true })
+  assert.equal(requestCount, 1)
+
+  await writeJsonFile(join(dataDirectory, '_service-directory', 'idealist', 'state.json'), {
+    cursorSince: null,
+    lastAttemptedAt: new Date(Date.now() - 16 * 60 * 1000).toISOString(),
+    lastError: null,
+    lastSyncedAt: new Date().toISOString(),
+  })
+  await Promise.all([search(), search()])
+  assert.equal(requestCount, 2)
+})
+
+test('failed provider sync backs off and never returns private diagnostics', async () => {
+  env.IDEALIST_API_KEY = 'synthetic-provider-key'
+  let requestCount = 0
+  let failureTime = 0
+  const originalConsoleError = console.error
+  console.error = () => {}
+  globalThis.fetch = async () => {
+    requestCount += 1
+    await new Promise(resolve => setTimeout(resolve, 20))
+    failureTime = Date.now()
+    throw new Error('SYNTHETIC_PRIVATE_PROVIDER_DETAIL')
+  }
+
+  try {
+    const search = () => searchServiceDirectory({ provider: 'idealist' })
+    const first = await search()
+    assert.equal(first.provider.lastError, 'Live service listings are temporarily unavailable.')
+    const statePath = join(dataDirectory, '_service-directory', 'idealist', 'state.json')
+    const storedState = await readJsonFile<{ lastAttemptedAt: string, lastError: string }>(statePath)
+    assert.ok(Date.parse(storedState?.lastAttemptedAt || '') >= failureTime)
+    assert.equal(storedState?.lastError, 'Live service listings are temporarily unavailable.')
+    await search()
+    await searchServiceDirectory({ provider: 'idealist', refresh: true })
+    assert.equal(requestCount, 1)
+
+    await writeJsonFile(join(dataDirectory, '_service-directory', 'idealist', 'state.json'), {
+      cursorSince: null,
+      lastAttemptedAt: new Date(Date.now() - 16 * 60 * 1000).toISOString(),
+      lastError: 'SYNTHETIC_LEGACY_PRIVATE_DETAIL',
+      lastSyncedAt: null,
+    })
+    const backedOff = await search()
+    assert.equal(backedOff.provider.lastError, 'Live service listings are temporarily unavailable.')
+    assert.equal(requestCount, 1)
+
+    await writeJsonFile(join(dataDirectory, '_service-directory', 'idealist', 'state.json'), {
+      cursorSince: null,
+      lastAttemptedAt: new Date(Date.now() - 31 * 60 * 1000).toISOString(),
+      lastError: 'SYNTHETIC_LEGACY_PRIVATE_DETAIL',
+      lastSyncedAt: null,
+    })
+    await search()
+    assert.equal(requestCount, 2)
+  }
+  finally {
+    console.error = originalConsoleError
+  }
+})
+
+test('future-dated provider attempts do not prevent an empty cache from recovering', async () => {
+  env.IDEALIST_API_KEY = 'synthetic-provider-key'
+  let requestCount = 0
+  globalThis.fetch = async () => {
+    requestCount += 1
+    return new Response(JSON.stringify({ hasMore: false, volops: [] }), { status: 200 })
+  }
+
+  await writeJsonFile(join(dataDirectory, '_service-directory', 'idealist', 'state.json'), {
+    cursorSince: null,
+    lastAttemptedAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    lastError: null,
+    lastSyncedAt: null,
+  })
+  await searchServiceDirectory({ provider: 'idealist' })
+  assert.equal(requestCount, 1)
+})
+
+test('public search route redacts a legacy stored provider error', async () => {
+  env.IDEALIST_API_KEY = 'synthetic-provider-key'
+  await writeJsonFile(join(dataDirectory, '_service-directory', 'idealist', 'state.json'), {
+    cursorSince: null,
+    lastAttemptedAt: new Date().toISOString(),
+    lastError: 'SYNTHETIC_LEGACY_PRIVATE_DETAIL',
+    lastSyncedAt: null,
+  })
+  globalThis.fetch = async () => {
+    throw new Error('Provider request should remain in cooldown')
+  }
+
+  const server = createApp().listen(0, '127.0.0.1')
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once('listening', resolve)
+      server.once('error', reject)
+    })
+    const address = server.address()
+    assert.ok(address && typeof address === 'object')
+    const response = await originalFetch(`http://127.0.0.1:${address.port}/api/service-directory/search`)
+    assert.equal(response.status, 200)
+    const body = await response.json() as { provider: { lastError: string } }
+    assert.equal(body.provider.lastError, 'Live service listings are temporarily unavailable.')
+    assert.equal(JSON.stringify(body).includes('SYNTHETIC_LEGACY_PRIVATE_DETAIL'), false)
+  }
+  finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close(error => error ? reject(error) : resolve())
+    })
+  }
 })
