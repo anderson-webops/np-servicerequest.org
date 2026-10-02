@@ -68,6 +68,10 @@ export interface BoardItem {
   hasContact: boolean
   id: string
   interactionCount: number
+  interactionPage?: {
+    hasMore: boolean
+    nextCursor: string | null
+  }
   interactions: BoardInteraction[]
   kind: SubmissionKind
   kindLabel: string

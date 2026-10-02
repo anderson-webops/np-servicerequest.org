@@ -43,6 +43,8 @@ const item = ref<BoardItem | null>(null)
 const itemLoaded = ref(false)
 const itemPending = ref(false)
 const itemError = ref<BoardFormErrorState | null>(null)
+const interactionsPending = ref(false)
+const interactionsError = ref<BoardFormErrorState | null>(null)
 const securityError = ref<BoardFormErrorState | null>(null)
 const managementNotice = ref('')
 const managementPending = ref(false)
@@ -189,6 +191,7 @@ function syncReplyDraftWithViewer() {
 
 function replaceItem(nextItem: BoardItem) {
   item.value = nextItem
+  interactionsError.value = null
   refreshStoredDeleteToken()
 
   if (nextItem.resolutionStatus !== 'open')
@@ -214,7 +217,7 @@ function removeInteraction(interactionId: string) {
   const remainingInteractions = item.value.interactions.filter(interaction => interaction.id !== interactionId)
   item.value = {
     ...item.value,
-    interactionCount: remainingInteractions.length,
+    interactionCount: Math.max(0, item.value.interactionCount - 1),
     interactions: remainingInteractions,
     lastActivityAt: remainingInteractions[0]?.createdAt || item.value.createdAt,
   }
@@ -386,6 +389,7 @@ async function loadItem(itemId: string) {
   const endpoint = getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `items/${itemId}`)
   itemPending.value = true
   itemError.value = null
+  interactionsError.value = null
 
   try {
     const response = await $fetch<BoardItemDetailResponse>(endpoint, {
@@ -403,6 +407,45 @@ async function loadItem(itemId: string) {
   finally {
     itemPending.value = false
     itemLoaded.value = true
+  }
+}
+
+async function loadMoreInteractions() {
+  const currentItem = item.value
+  const cursor = currentItem?.interactionPage?.nextCursor
+
+  if (!currentItem || !cursor || interactionsPending.value)
+    return
+
+  const endpoint = `${getBoardEndpoint(runtimeConfig.public.apiBaseUrl, `items/${currentItem.id}`)}?after=${encodeURIComponent(cursor)}`
+  interactionsPending.value = true
+  interactionsError.value = null
+
+  try {
+    const response = await $fetch<BoardItemDetailResponse>(endpoint, {
+      credentials: 'include',
+    })
+
+    if (!item.value || response.item.id !== currentItem.id || item.value.id !== currentItem.id || item.value.interactionPage?.nextCursor !== cursor)
+      return
+
+    const loadedIds = new Set(item.value.interactions.map(interaction => interaction.id))
+    item.value = {
+      ...item.value,
+      interactionCount: response.item.interactionCount,
+      interactionPage: response.item.interactionPage,
+      interactions: [
+        ...item.value.interactions,
+        ...response.item.interactions.filter(interaction => !loadedIds.has(interaction.id)),
+      ],
+    }
+  }
+  catch (error) {
+    if (item.value?.id === currentItem.id)
+      interactionsError.value = getBoardApiErrorState(error, endpoint, 'Unable to load older responses right now.', applyServerContext)
+  }
+  finally {
+    interactionsPending.value = false
   }
 }
 
@@ -1147,6 +1190,18 @@ watch(routeManagementToken, (nextToken, previousToken) => {
 
           <p v-else class="board-card__thread-empty">
             No responses yet. This is the place where neighbors can answer the request directly.
+          </p>
+          <button
+            v-if="item.interactionPage?.hasMore"
+            class="submit-button submit-button--slim"
+            :disabled="interactionsPending"
+            type="button"
+            @click="loadMoreInteractions"
+          >
+            {{ interactionsPending ? 'Loading older responses...' : 'Load older responses' }}
+          </button>
+          <p v-if="interactionsError" class="inline-note inline-note--error" role="alert">
+            {{ interactionsError.message }} {{ interactionsError.detail }}
           </p>
         </section>
 

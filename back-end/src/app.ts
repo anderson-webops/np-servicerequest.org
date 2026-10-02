@@ -364,6 +364,30 @@ export function createApp(options?: AppOptions) {
     : undefined
   const readinessCheck = options?.readinessCheck ?? assertDataDirectoryReady
   const isStopping = options?.isStopping ?? (() => false)
+  let activePublicBoardReads = 0
+
+  async function runPublicBoardRead<T>(request: express.Request, read: () => Promise<T>) {
+    consumeRateLimit(`board:read:${getRateLimitClientId(request)}`, {
+      limit: 120,
+      windowMs: 1000 * 60,
+    })
+    consumeRateLimit('board:read:all', {
+      limit: 1200,
+      windowMs: 1000 * 60,
+    })
+
+    if (activePublicBoardReads >= 8)
+      throw new RateLimitError('The board is busy. Please try again shortly.', 1000)
+
+    activePublicBoardReads += 1
+
+    try {
+      return await read()
+    }
+    finally {
+      activePublicBoardReads -= 1
+    }
+  }
 
   if (process.env.NODE_ENV === 'production') {
     assertValidAdminConfiguration()
@@ -713,12 +737,12 @@ export function createApp(options?: AppOptions) {
   })
 
   const boardItemsHandler: express.RequestHandler = async (request, response) => {
-    const search = request.method === 'POST' ? request.body ?? {} : request.query
-    const kindFilter = getSingleQueryValue(search.kind)
-    const sort = getSingleQueryValue(search.sort)
+    try {
+      const search = request.method === 'POST' ? request.body ?? {} : request.query
+      const kindFilter = getSingleQueryValue(search.kind)
+      const sort = getSingleQueryValue(search.sort)
 
-    response.json({
-      ...await listBoardItems({
+      response.json(await runPublicBoardRead(request, () => listBoardItems({
         kind: isSubmissionKind(kindFilter) ? kindFilter : 'all',
         lat: parseMaybeFloat(search.lat),
         lng: parseMaybeFloat(search.lng),
@@ -728,8 +752,15 @@ export function createApp(options?: AppOptions) {
         sort: boardItemSortOrders.includes(sort as typeof boardItemSortOrders[number])
           ? sort as typeof boardItemSortOrders[number]
           : 'recent-activity',
-      }),
-    })
+      })))
+    }
+    catch (error) {
+      if (handleApiError(response, error))
+        return
+
+      console.error('Failed to list board items:', error)
+      response.status(500).json({ message: 'Unable to load the live board right now.' })
+    }
   }
   app.get('/api/board/items', boardItemsHandler)
   app.post('/api/board/items', boardItemsHandler)
@@ -737,7 +768,10 @@ export function createApp(options?: AppOptions) {
   app.get('/api/board/items/:itemId', async (request, response) => {
     try {
       response.json({
-        item: await getPublicBoardItem(request.params.itemId),
+        item: await runPublicBoardRead(request, () => getPublicBoardItem(
+          request.params.itemId,
+          getSingleQueryValue(request.query.after),
+        )),
       })
     }
     catch (error) {

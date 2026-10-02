@@ -102,6 +102,16 @@ Listing endpoints now support server-side filtering and pagination:
 - `GET /api/service-directory/search?provider=idealist&query=food%20pantry&radiusMiles=40&page=1&pageSize=12`
 - `POST /api/service-directory/search` with JSON body `{"provider":"idealist","lat":"33.749","lng":"-84.388","radiusMiles":"40"}`
 
+Public board lists return reply counts without reply bodies. Item detail returns
+the newest 20 visible replies and an `interactionPage` object. When `hasMore` is
+true, request `GET /api/board/items/:itemId?after=<nextCursor>` to load the next
+page. The cursor is opaque; use the returned value unchanged. Older replies
+remain available through successive pages. Public board reads have per-client,
+global, and concurrent request budgets; excess requests return HTTP 429 with
+`Retry-After`. The public read index is rebuilt before the API starts serving
+and updated when posts or replies change, so public reads do not rescan all
+stored records.
+
 The existing GET forms remain available for API compatibility. The site uses
 same-origin-guarded POST bodies for precise browser coordinates to avoid putting
 them in shareable links, request URLs, or URL-based error details.

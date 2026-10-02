@@ -134,6 +134,23 @@ interface StoredBoardInteraction {
   statusChangedAt?: string
 }
 
+interface PublicInteractionPointer {
+  createdAt: string
+  id: string
+}
+
+interface PublicBoardReadIndex {
+  generation: number
+  interactions: Map<string, PublicInteractionPointer[]>
+  items: Map<string, StoredBoardItem>
+  loading: Promise<void> | null
+  ready: boolean
+  root: string
+}
+
+let publicBoardReadIndex: PublicBoardReadIndex | null = null
+const publicInteractionPageSize = 20
+
 export interface PublicBoardInteraction {
   author: BoardAuthor
   createdAt: string
@@ -151,6 +168,10 @@ export interface PublicBoardItem {
   hasContact: boolean
   id: string
   interactionCount: number
+  interactionPage?: {
+    hasMore: boolean
+    nextCursor: string | null
+  }
   interactions: PublicBoardInteraction[]
   kind: SubmissionKind
   kindLabel: string
@@ -676,6 +697,8 @@ function toPublicInteraction(interaction: StoredBoardInteraction): PublicBoardIn
 }
 
 function toPublicItem(item: StoredBoardItem, interactions: StoredBoardInteraction[], options?: {
+  interactionCount?: number
+  interactionPage?: PublicBoardItem['interactionPage']
   origin?: GeoPoint
 }): PublicBoardItem {
   return {
@@ -685,7 +708,8 @@ function toPublicItem(item: StoredBoardItem, interactions: StoredBoardInteractio
     distanceMiles: getBoardItemDistanceMiles(item, options?.origin),
     hasContact: Boolean(item.contact),
     id: item.id,
-    interactionCount: interactions.length,
+    interactionCount: options?.interactionCount ?? interactions.length,
+    ...(options?.interactionPage ? { interactionPage: options.interactionPage } : {}),
     interactions: interactions.map(toPublicInteraction),
     kind: item.kind,
     kindLabel: item.kindLabel,
@@ -762,12 +786,117 @@ async function listStoredInteractions(itemId: string) {
   return interactions.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
 }
 
+function getPublicBoardReadIndex() {
+  const root = getBoardItemDirectory()
+
+  if (!publicBoardReadIndex || publicBoardReadIndex.root !== root) {
+    publicBoardReadIndex = {
+      generation: 0,
+      interactions: new Map(),
+      items: new Map(),
+      loading: null,
+      ready: false,
+      root,
+    }
+  }
+
+  return publicBoardReadIndex
+}
+
+function comparePublicInteractionPointers(left: PublicInteractionPointer, right: PublicInteractionPointer) {
+  const timeOrder = Date.parse(right.createdAt) - Date.parse(left.createdAt)
+  return timeOrder || left.id.localeCompare(right.id)
+}
+
+async function readPublicInteractionPointers(itemId: string) {
+  return (await listJsonDirectory<StoredBoardInteraction>(getInteractionDirectory(itemId)))
+    .filter(isBoardInteractionVisibleToPublic)
+    .map(({ createdAt, id }) => ({ createdAt, id }))
+    .sort(comparePublicInteractionPointers)
+}
+
+async function buildPublicBoardReadIndex(index: PublicBoardReadIndex) {
+  const generation = index.generation
+  const items = (await listStoredBoardItems()).filter(isBoardItemVisibleToPublic)
+  const interactions = new Map<string, PublicInteractionPointer[]>()
+
+  for (const item of items)
+    interactions.set(item.id, await readPublicInteractionPointers(item.id))
+
+  if (getPublicBoardReadIndex() !== index || index.generation !== generation)
+    return
+
+  index.items = new Map(items.map(item => [item.id, item]))
+  index.interactions = interactions
+  index.ready = true
+}
+
+async function ensurePublicBoardReadIndex(): Promise<PublicBoardReadIndex> {
+  while (true) {
+    const index = getPublicBoardReadIndex()
+
+    if (index.ready)
+      return index
+
+    if (!index.loading)
+      index.loading = buildPublicBoardReadIndex(index)
+
+    const loading = index.loading
+
+    try {
+      await loading
+    }
+    finally {
+      if (index.loading === loading)
+        index.loading = null
+    }
+  }
+}
+
+export async function warmBoardPublicReadIndex() {
+  await ensurePublicBoardReadIndex()
+}
+
+function updatePublicBoardReadIndex() {
+  const index = getPublicBoardReadIndex()
+  index.generation += 1
+  return index.ready ? index : null
+}
+
 async function writeStoredBoardItem(item: StoredBoardItem) {
   await writeJsonFile(getItemFilePath(item.id), item)
+  const index = updatePublicBoardReadIndex()
+
+  if (!index)
+    return
+
+  if (isBoardItemVisibleToPublic(item)) {
+    if (!index.interactions.has(item.id))
+      index.interactions.set(item.id, await readPublicInteractionPointers(item.id))
+    index.items.set(item.id, normalizeStoredBoardItem(item))
+  }
+  else {
+    index.items.delete(item.id)
+    index.interactions.delete(item.id)
+  }
 }
 
 async function writeStoredBoardInteraction(interaction: StoredBoardInteraction) {
   await writeJsonFile(getInteractionFilePath(interaction.itemId, interaction.id), interaction)
+  const index = updatePublicBoardReadIndex()
+
+  if (!index || !index.items.has(interaction.itemId))
+    return
+
+  const pointers = (index.interactions.get(interaction.itemId) || [])
+    .filter(pointer => pointer.id !== interaction.id)
+
+  if (isBoardInteractionVisibleToPublic(interaction)) {
+    pointers.push({ createdAt: interaction.createdAt, id: interaction.id })
+    pointers.sort(comparePublicInteractionPointers)
+  }
+
+  index.interactions.set(interaction.itemId, pointers)
 }
 
 async function findStoredBoardItemForSubmission(input: {
@@ -884,8 +1013,8 @@ export async function listBoardItems(options?: {
         lng: Number(options?.lng),
       }
     : undefined
-  const allVisibleItems = (await listStoredBoardItems())
-    .filter(isBoardItemVisibleToPublic)
+  const index = await ensurePublicBoardReadIndex()
+  const allVisibleItems = [...index.items.values()]
   const searchedItems = allVisibleItems.filter(item => matchesBoardSearchQuery(item, searchQuery))
 
   const counts = searchedItems.reduce<BoardItemCounts>((summary, item) => {
@@ -909,12 +1038,10 @@ export async function listBoardItems(options?: {
   const startIndex = (page - 1) * pageSize
   const pagedItems = sortedItems.slice(startIndex, startIndex + pageSize)
 
-  const publicItems = await Promise.all(
-    pagedItems.map(async (item) => {
-      const interactions = (await listStoredInteractions(item.id)).filter(isBoardInteractionVisibleToPublic)
-      return toPublicItem(item, interactions, { origin })
-    }),
-  )
+  const publicItems = pagedItems.map(item => toPublicItem(item, [], {
+    interactionCount: index.interactions.get(item.id)?.length ?? item.interactionCount,
+    origin,
+  }))
 
   return {
     activitySummary,
@@ -942,12 +1069,73 @@ export function describeBoardItemResolutionStatus(status: BoardItemResolutionSta
   }
 }
 
-export async function getPublicBoardItem(itemId: string) {
+function parsePublicInteractionCursor(value: string | undefined): PublicInteractionPointer | null {
+  if (!value)
+    return null
+
+  if (value.length > 256 || !/^[\w-]+$/u.test(value))
+    throw new BoardValidationError('The board response cursor is invalid.')
+
+  try {
+    const decoded: unknown = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'))
+
+    if (!Array.isArray(decoded) || decoded.length !== 2 || typeof decoded[0] !== 'string' || typeof decoded[1] !== 'string')
+      throw new Error('Invalid cursor data')
+
+    if (!Number.isFinite(Date.parse(decoded[0])))
+      throw new Error('Invalid cursor time')
+
+    assertBoardResourceId(decoded[1], 'board response')
+    return { createdAt: decoded[0], id: decoded[1] }
+  }
+  catch {
+    throw new BoardValidationError('The board response cursor is invalid.')
+  }
+}
+
+function getPublicInteractionPageStart(pointers: PublicInteractionPointer[], cursor: PublicInteractionPointer | null) {
+  if (!cursor)
+    return 0
+
+  let first = 0
+  let last = pointers.length
+
+  while (first < last) {
+    const middle = Math.floor((first + last) / 2)
+
+    if (comparePublicInteractionPointers(pointers[middle], cursor) <= 0)
+      first = middle + 1
+    else
+      last = middle
+  }
+
+  return first
+}
+
+export async function getPublicBoardItem(itemId: string, after?: string) {
+  const cursor = parsePublicInteractionCursor(after)
   const item = await getStoredBoardItem(itemId)
   assertPublicBoardItemAvailable(item)
 
-  const interactions = (await listStoredInteractions(item.id)).filter(isBoardInteractionVisibleToPublic)
-  return toPublicItem(item, interactions)
+  const index = await ensurePublicBoardReadIndex()
+  const pointers = index.interactions.get(item.id) || []
+  const first = getPublicInteractionPageStart(pointers, cursor)
+  const pagePointers = pointers.slice(first, first + publicInteractionPageSize)
+  const interactions = (await Promise.all(
+    pagePointers.map(pointer => readJsonFile<StoredBoardInteraction>(getInteractionFilePath(item.id, pointer.id))),
+  )).filter((interaction): interaction is StoredBoardInteraction => Boolean(interaction && isBoardInteractionVisibleToPublic(interaction)))
+  const hasMore = first + publicInteractionPageSize < pointers.length
+  const lastPointer = pagePointers.at(-1)
+
+  return toPublicItem(item, interactions, {
+    interactionCount: pointers.length,
+    interactionPage: {
+      hasMore,
+      nextCursor: hasMore && lastPointer
+        ? Buffer.from(JSON.stringify([lastPointer.createdAt, lastPointer.id])).toString('base64url')
+        : null,
+    },
+  })
 }
 
 export function validateBoardSubmissionFields(input: {
@@ -1071,6 +1259,9 @@ export async function createBoardItemFromSubmission(input: {
     }
     catch (error) {
       await removeFileIfExists(getItemFilePath(item.id))
+      const index = updatePublicBoardReadIndex()
+      index?.items.delete(item.id)
+      index?.interactions.delete(item.id)
       throw error
     }
   })
@@ -1236,8 +1427,7 @@ async function setBoardItemResolutionUnlocked(input: {
     visibilityState: item.status,
   })
 
-  const interactions = (await listStoredInteractions(item.id)).filter(isBoardInteractionVisibleToPublic)
-  return toPublicItem(nextItem, interactions)
+  return getPublicBoardItem(nextItem.id)
 }
 
 export async function setBoardItemResolution(
@@ -1553,5 +1743,8 @@ export async function purgeBoardItemArtifacts(itemId: string) {
   await withBoardItemMutationLock(itemId, async () => {
     await removePathIfExists(getItemFilePath(itemId))
     await removePathIfExists(getInteractionDirectory(itemId))
+    const index = updatePublicBoardReadIndex()
+    index?.items.delete(itemId)
+    index?.interactions.delete(itemId)
   })
 }

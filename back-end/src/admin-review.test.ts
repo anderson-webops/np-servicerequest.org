@@ -817,3 +817,26 @@ test('structured contact fields work for new posts and replies while reveal endp
   assert.equal(revealedReplyContactResponse.status, 200)
   assert.equal(revealedReplyContact.contact, 'Email: neighbor@example.com (Subject line should mention bookshelf help)')
 })
+
+test('public board read budget returns 429 for excess requests', async () => {
+  const { resetRateLimitStateForTests } = await import('./security.js')
+  resetRateLimitStateForTests()
+
+  try {
+    for (let index = 0; index < 120; index++) {
+      const response = await fetch(`${baseUrl}/api/board/items`, index % 2
+        ? { body: '{}', headers: { 'content-type': 'application/json' }, method: 'POST' }
+        : undefined)
+      assert.equal(response.status, 200)
+      await response.body?.cancel()
+    }
+
+    const response = await fetch(`${baseUrl}/api/board/items/00000000-0000-4000-8000-000000000001`)
+    assert.equal(response.status, 429)
+    assert.ok(Number(response.headers.get('retry-after')) >= 1)
+    await response.body?.cancel()
+  }
+  finally {
+    resetRateLimitStateForTests()
+  }
+})

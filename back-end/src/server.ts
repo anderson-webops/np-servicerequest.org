@@ -4,6 +4,7 @@ import process, { env, exit } from "node:process";
 import { resolve } from "node:path";
 
 import { createApp } from "./app.js";
+import { warmBoardPublicReadIndex } from "./board.js";
 import { resolveRuntimeConfiguration } from "./runtime-config.js";
 
 async function main() {
@@ -15,6 +16,7 @@ async function main() {
 				? resolve(runtime.staticDirectory)
 				: undefined
 	});
+	await warmBoardPublicReadIndex();
 
 	const server = app.listen(runtime.port, runtime.host, () => {
 		console.log(`Server listening on ${runtime.host}:${runtime.port}.`);

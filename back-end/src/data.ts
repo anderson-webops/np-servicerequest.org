@@ -146,14 +146,20 @@ export async function listJsonDirectory<T>(directory: string): Promise<T[]> {
       .map(entry => entry.name)
       .sort((left, right) => left.localeCompare(right))
 
-    const values = await Promise.all(
-      files.map(async (fileName) => {
-        const value = await readJsonFile<T>(resolve(trustedDirectory, fileName))
-        return value
-      }),
-    )
+    const values: T[] = []
 
-    return values.filter(value => value != null) as T[]
+    for (let offset = 0; offset < files.length; offset += 16) {
+      const batch = await Promise.all(
+        files.slice(offset, offset + 16).map(fileName => readJsonFile<T>(resolve(trustedDirectory, fileName))),
+      )
+
+      for (const item of batch) {
+        if (item != null)
+          values.push(item)
+      }
+    }
+
+    return values
   }
   catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT')

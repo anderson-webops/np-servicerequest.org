@@ -300,6 +300,61 @@ test('anonymous posters can use the path-style detail route, reclaim management 
   await managementContext.close()
 })
 
+test('older board replies load without replacing newer replies', async ({ page }) => {
+  const itemId = '00000000-0000-4000-8000-000000000001'
+  const createdAt = '2026-01-01T12:00:00.000Z'
+  const newestReplies = Array.from({ length: 20 }, (_, index) => ({
+    author: { displayName: `Neighbor ${index + 1}`, hasAccount: false },
+    createdAt,
+    hasContact: false,
+    id: `00000000-0000-4000-8000-${String(index + 2).padStart(12, '0')}`,
+    message: `Recent response ${index + 1}`,
+  }))
+  const olderReply = {
+    author: { displayName: 'Older Neighbor', hasAccount: false },
+    createdAt,
+    hasContact: false,
+    id: '00000000-0000-4000-8000-000000000099',
+    message: 'Older response',
+  }
+
+  await page.route(`**/api/board/items/${itemId}*`, route => route.fulfill({
+    json: {
+      item: {
+        attributes: [],
+        author: { displayName: 'Post Author', hasAccount: false },
+        createdAt,
+        distanceMiles: null,
+        hasContact: false,
+        id: itemId,
+        interactionCount: 21,
+        interactionPage: new URL(route.request().url()).searchParams.has('after')
+          ? { hasMore: false, nextCursor: null }
+          : { hasMore: true, nextCursor: 'older-page' },
+        interactions: new URL(route.request().url()).searchParams.has('after')
+          ? [olderReply]
+          : newestReplies,
+        kind: 'service-request',
+        kindLabel: 'Service request',
+        lastActivityAt: createdAt,
+        resolutionStatus: 'open',
+        status: 'visible',
+        summary: 'A public board post.',
+        summaryLabel: 'Details',
+        title: 'Pagination fixture',
+      },
+    },
+  }))
+
+  await page.goto(`/posts/${itemId}`, { waitUntil: 'commit' })
+  await expect(page.getByText('Recent response 1', { exact: true })).toBeVisible()
+  await expect(page.getByText('Older response', { exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Load older responses' }).click()
+  await expect(page.getByText('Older response', { exact: true })).toBeVisible()
+  await expect(page.getByText('Recent response 1', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Load older responses' })).toHaveCount(0)
+})
+
 test('the separate admin page rejects a bad key, accepts the admin key, and hiding a submission removes it from the public board', async ({ page, request }) => {
   const title = `Borrow drill ${Date.now()}`
   const submission = await createSubmission(request, 'item-request', {
