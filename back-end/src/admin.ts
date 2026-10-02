@@ -12,7 +12,7 @@ import { listBoardActivity, recordBoardActivity } from './activity.js'
 import { describeBoardItemStatus, getBoardStateForSubmission, syncBoardItemVisibilityFromSubmissionReview } from './board.js'
 import { readJsonFile, removeFileIfExists, resolveDataPath, writeJsonFile } from './data.js'
 import { readCookieValue } from './security.js'
-import { isSubmissionKind, submissionKinds } from './submissions.js'
+import { isSubmissionKind, submissionKinds, withSubmissionMutationLock } from './submissions.js'
 
 export const adminReviewStatuses = [
   'pending',
@@ -648,16 +648,20 @@ export async function listAdminSubmissions(options?: {
   }
 }
 
-export async function reviewAdminSubmission(input: {
+interface ReviewAdminSubmissionInput {
   id: string
   kind: SubmissionKind
   notes: string
   status: string
-}) {
+}
+
+export async function reviewAdminSubmission(input: ReviewAdminSubmissionInput) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.id))
     throw new AdminSubmissionValidationError('The submission id is invalid.')
 
-  if (!isValidAdminReviewStatus(input.status))
+  const status = input.status
+
+  if (!isValidAdminReviewStatus(status))
     throw new AdminSubmissionValidationError('Choose a valid review status.')
 
   const notes = input.notes.trim()
@@ -665,6 +669,13 @@ export async function reviewAdminSubmission(input: {
   if (notes.length > 4000)
     throw new AdminSubmissionValidationError('Review notes are too long.')
 
+  return withSubmissionMutationLock(input.id, () => reviewAdminSubmissionUnlocked({
+    ...input,
+    status,
+  }, notes))
+}
+
+async function reviewAdminSubmissionUnlocked(input: ReviewAdminSubmissionInput & { status: AdminReviewStatus }, notes: string) {
   const storedSubmission = await findStoredSubmission(input.kind, input.id)
 
   if (!storedSubmission)

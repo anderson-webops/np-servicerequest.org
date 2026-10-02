@@ -1,7 +1,7 @@
 import cors from 'cors'
 import express from 'express'
 import helmet from 'helmet'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { readdirSync, readFileSync } from 'node:fs'
 import { extname, resolve } from 'node:path'
 import process from 'node:process'
@@ -47,6 +47,7 @@ import {
   revealBoardInteractionContact,
   revealBoardItemContact,
   setBoardItemResolution,
+  validateBoardSubmissionFields,
 } from './board.js'
 import { normalizeStructuredContact } from './contact.js'
 import { assertDataDirectoryReady } from './data.js'
@@ -74,10 +75,11 @@ import { searchServiceDirectory } from './service-directory.js'
 import { resolveReleaseIdentity } from './release-identity.js'
 import {
   AccountValidationError,
-  attachBoardItemToSubmission,
   isSubmissionKind,
+  removeSavedSubmission,
   saveSubmission,
   SubmissionValidationError,
+  withSubmissionMutationLock,
 } from './submissions.js'
 
 const startedAt = Date.now()
@@ -761,12 +763,43 @@ export function createApp(options?: AppOptions) {
       validateAntiBotPayload(request.body)
 
       const viewer = await getViewerFromCookie(request.get('cookie'))
-      const result = await saveSubmission({
-        kind,
-        rawPayload: request.body,
+      const boardItemId = randomUUID()
+      const submissionId = randomUUID()
+      const { result, createdBoardItem } = await withSubmissionMutationLock(submissionId, async () => {
+        const result = await saveSubmission({
+          boardItemId,
+          kind,
+          rawPayload: request.body,
+          submissionId,
+          validateFields(fields) {
+            validateBoardSubmissionFields({ fields, kind })
+          },
+        })
+
+        if (!result.accepted)
+          return { result, createdBoardItem: null }
+
+        try {
+          const createdBoardItem = await createBoardItemFromSubmission({
+            fields: result.fields,
+            itemId: boardItemId,
+            kind,
+            submissionId: result.id,
+            viewer,
+          })
+          return { result, createdBoardItem }
+        }
+        catch (error) {
+          await removeSavedSubmission({
+            createdAt: result.createdAt,
+            id: result.id,
+            kind,
+          })
+          throw error
+        }
       })
 
-      if (!result.accepted) {
+      if (!createdBoardItem) {
         response.status(202).json({
           ok: true,
           id: result.id,
@@ -776,18 +809,6 @@ export function createApp(options?: AppOptions) {
         })
         return
       }
-
-      const createdBoardItem = await createBoardItemFromSubmission({
-        fields: result.fields,
-        kind,
-        submissionId: result.id,
-        viewer,
-      })
-      await attachBoardItemToSubmission({
-        itemId: createdBoardItem.item.id,
-        kind,
-        submissionId: result.id,
-      })
 
       void sendBoardItemNotificationEmail({
         authorName: createdBoardItem.item.author.displayName,

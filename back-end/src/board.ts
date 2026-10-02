@@ -8,7 +8,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 import { recordBoardActivity } from './activity.js'
 import { isEmailAddress, normalizeStructuredContact } from './contact.js'
-import { listJsonDirectory, readJsonFile, removePathIfExists, resolveDataPath, writeJsonFile } from './data.js'
+import { listJsonDirectory, readJsonFile, removeFileIfExists, removePathIfExists, resolveDataPath, writeJsonFile } from './data.js'
 import { getDistanceMiles, inferKnownPlaceFromText } from './places.js'
 import { isSafeEqual } from './security.js'
 import { SubmissionValidationError } from './submissions.js'
@@ -950,13 +950,10 @@ export async function getPublicBoardItem(itemId: string) {
   return toPublicItem(item, interactions)
 }
 
-export async function createBoardItemFromSubmission(input: {
+export function validateBoardSubmissionFields(input: {
   fields: Record<string, string>
   kind: SubmissionKind
-  submissionId: string
-  viewer: ViewerAccount | null
 }) {
-  const createdAt = new Date().toISOString()
   const labels = buildItemLabels(input.kind)
   const title = buildItemTitle(input.kind, input.fields)
   const summary = buildItemSummary(input.kind, input.fields)
@@ -987,12 +984,43 @@ export async function createBoardItemFromSubmission(input: {
     contact,
     fields: input.fields,
   })
+
+  return {
+    attributes: buildBoardAttributes(input.kind, input.fields),
+    authorName,
+    contact,
+    geo: buildBoardGeo(input.kind, input.fields),
+    labels,
+    notificationSettings,
+    summary,
+    title,
+  }
+}
+
+export async function createBoardItemFromSubmission(input: {
+  fields: Record<string, string>
+  itemId?: string
+  kind: SubmissionKind
+  submissionId: string
+  viewer: ViewerAccount | null
+}) {
+  const createdAt = new Date().toISOString()
+  const {
+    attributes,
+    authorName,
+    contact,
+    geo,
+    labels,
+    notificationSettings,
+    summary,
+    title,
+  } = validateBoardSubmissionFields(input)
   const deleteToken = createBoardDeleteToken()
   const managementToken = !input.viewer && contact.managementEmail ? createBoardManagementToken() : ''
 
   const item: StoredBoardItem = {
-    id: randomUUID(),
-    attributes: buildBoardAttributes(input.kind, input.fields),
+    id: input.itemId || randomUUID(),
+    attributes,
     author: {
       accountId: input.viewer?.id,
       displayName: authorName,
@@ -1004,7 +1032,7 @@ export async function createBoardItemFromSubmission(input: {
     contactValue: contact.value || undefined,
     createdAt,
     deleteTokenHash: hashDeleteToken(deleteToken),
-    geo: buildBoardGeo(input.kind, input.fields),
+    geo,
     interactionCount: 0,
     kind: input.kind,
     kindLabel: labels.kindLabel,
@@ -1023,20 +1051,28 @@ export async function createBoardItemFromSubmission(input: {
     title,
   }
 
-  await writeStoredBoardItem(item)
-  await recordBoardActivity({
-    action: 'board_item_created',
-    actor: input.viewer
-      ? { kind: 'account', label: authorName }
-      : { kind: 'anonymous', label: authorName },
-    category: 'posts',
-    createdAt,
-    detail: 'Posted to the public board.',
-    itemId: item.id,
-    kind: input.kind,
-    submissionId: input.submissionId,
-    title: item.title,
-    visibilityState: item.status,
+  await withBoardItemMutationLock(item.id, async () => {
+    await writeStoredBoardItem(item)
+    try {
+      await recordBoardActivity({
+        action: 'board_item_created',
+        actor: input.viewer
+          ? { kind: 'account', label: authorName }
+          : { kind: 'anonymous', label: authorName },
+        category: 'posts',
+        createdAt,
+        detail: 'Posted to the public board.',
+        itemId: item.id,
+        kind: input.kind,
+        submissionId: input.submissionId,
+        title: item.title,
+        visibilityState: item.status,
+      })
+    }
+    catch (error) {
+      await removeFileIfExists(getItemFilePath(item.id))
+      throw error
+    }
   })
 
   return {

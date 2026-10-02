@@ -1,6 +1,6 @@
 import type { Server } from 'node:http'
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -41,6 +41,17 @@ async function getAgedAntiBotChallenge() {
 
   await sleep(1250)
   return body.antiBot as { issuedAt: number, token: string }
+}
+
+async function listFiles(directory: string) {
+  try {
+    return await readdir(directory)
+  }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT')
+      return []
+    throw error
+  }
 }
 
 before(async () => {
@@ -97,6 +108,120 @@ after(async () => {
     await rm(dataDirectory, { force: true, recursive: true })
 })
 
+test('invalid board fields do not persist a submission or board item', async () => {
+  const submissionDirectory = resolve(dataDirectory, 'service-request')
+
+  try {
+    for (const invalidFields of [
+      { name: 'N'.repeat(81), projectType: 'Community project', error: /name.*too long/i },
+      { name: 'Normal Name', projectType: 'T'.repeat(2001), error: /title.*too long/i },
+    ]) {
+      const antiBot = await getAgedAntiBotChallenge()
+      const { body, response } = await fetchJson('/api/submissions/service-request', {
+        body: JSON.stringify({
+          challengeIssuedAt: String(antiBot.issuedAt),
+          challengeToken: antiBot.token,
+          contact: 'poster@example.com',
+          details: 'Help with a neighborhood project.',
+          location: 'Downtown',
+          name: invalidFields.name,
+          project_type: invalidFields.projectType,
+          timing: 'This weekend',
+        }),
+        method: 'POST',
+      })
+
+      assert.equal(response.status, 400)
+      assert.match(String(body.message), invalidFields.error)
+      assert.deepEqual(await listFiles(submissionDirectory), [])
+      assert.deepEqual(await listFiles(resolve(dataDirectory, '_board', 'items')), [])
+    }
+
+    const antiBot = await getAgedAntiBotChallenge()
+    const { body, response } = await fetchJson('/api/submissions/service-request', {
+      body: JSON.stringify({
+        'bot-field': 'automated sender',
+        challengeIssuedAt: String(antiBot.issuedAt),
+        challengeToken: antiBot.token,
+      }),
+      method: 'POST',
+    })
+    assert.equal(response.status, 400)
+    assert.match(String(body.message), /automated submissions/i)
+    assert.deepEqual(await listFiles(submissionDirectory), [])
+  }
+  finally {
+    await rm(submissionDirectory, { force: true, recursive: true })
+  }
+})
+
+test('a board write failure does not leave an orphaned submission', async () => {
+  const boardDirectory = resolve(dataDirectory, '_board')
+  const boardItemPath = resolve(boardDirectory, 'items')
+  const submissionDirectory = resolve(dataDirectory, 'service-request')
+  await mkdir(boardDirectory, { recursive: true })
+  await writeFile(boardItemPath, 'block board item writes')
+
+  try {
+    const antiBot = await getAgedAntiBotChallenge()
+    const { response } = await fetchJson('/api/submissions/service-request', {
+      body: JSON.stringify({
+        challengeIssuedAt: String(antiBot.issuedAt),
+        challengeToken: antiBot.token,
+        contact: 'poster@example.com',
+        details: 'Help with a neighborhood project.',
+        location: 'Downtown',
+        name: 'Board Write Test',
+        project_type: 'Community project',
+        timing: 'This weekend',
+      }),
+      method: 'POST',
+    })
+
+    assert.equal(response.status, 500)
+    assert.deepEqual(await listFiles(submissionDirectory), [])
+  }
+  finally {
+    await rm(boardItemPath, { force: true })
+    await rm(submissionDirectory, { force: true, recursive: true })
+  }
+})
+
+test('an activity write failure removes the incomplete board item and submission', async () => {
+  const boardDirectory = resolve(dataDirectory, '_board')
+  const activityPath = resolve(boardDirectory, 'activity')
+  const submissionDirectory = resolve(dataDirectory, 'service-request')
+  await mkdir(boardDirectory, { recursive: true })
+  await writeFile(activityPath, 'block activity writes')
+
+  try {
+    const antiBot = await getAgedAntiBotChallenge()
+    const { response } = await fetchJson('/api/submissions/service-request', {
+      body: JSON.stringify({
+        challengeIssuedAt: String(antiBot.issuedAt),
+        challengeToken: antiBot.token,
+        contact: 'poster@example.com',
+        details: 'Help with a neighborhood project.',
+        location: 'Downtown',
+        name: 'Activity Write Test',
+        project_type: 'Community project',
+        timing: 'This weekend',
+      }),
+      method: 'POST',
+    })
+
+    assert.equal(response.status, 500)
+    assert.deepEqual(await listFiles(submissionDirectory), [])
+    assert.deepEqual(await listFiles(resolve(boardDirectory, 'items')), [])
+  }
+  finally {
+    await rm(activityPath, { force: true })
+    await rm(submissionDirectory, { force: true, recursive: true })
+    const { resetRateLimitStateForTests } = await import('./security.js')
+    resetRateLimitStateForTests()
+  }
+})
+
 test('rejected submissions disappear from the public board while remaining in admin review and activity logs', async () => {
   const antiBot = await getAgedAntiBotChallenge()
 
@@ -121,6 +246,11 @@ test('rejected submissions disappear from the public board while remaining in ad
 
   const createdBoardItem = createdSubmission.boardItem as { id: string }
   const createdSubmissionId = String(createdSubmission.id)
+  const submissionDirectory = resolve(dataDirectory, 'item-request')
+  const submissionFile = (await listFiles(submissionDirectory)).find(name => name.includes(createdSubmissionId))
+  assert.ok(submissionFile)
+  const storedSubmission = JSON.parse(await readFile(resolve(submissionDirectory, submissionFile), 'utf8'))
+  assert.equal(storedSubmission.board?.itemId, createdBoardItem.id)
 
   const { body: initialBoard, response: initialBoardResponse } = await fetchJson('/api/board/items', {
     method: 'GET',
@@ -130,7 +260,18 @@ test('rejected submissions disappear from the public board while remaining in ad
   assert.equal((initialBoard.items as Array<{ id: string }>).length, 1)
   assert.equal((initialBoard.items as Array<{ id: string }>)[0]?.id, createdBoardItem.id)
 
-  const { body: rejectedReview, response: rejectResponse } = await fetchJson(`/api/admin/submissions/item-request/${createdSubmissionId}/review`, {
+  const { withSubmissionMutationLock } = await import('./submissions.js')
+  let releaseLock = () => {}
+  let signalLockEntered = () => {}
+  const lockEntered = new Promise<void>((resolveLock) => { signalLockEntered = resolveLock })
+  const lockRelease = new Promise<void>((resolveLock) => { releaseLock = resolveLock })
+  const heldLock = withSubmissionMutationLock(createdSubmissionId, async () => {
+    signalLockEntered()
+    await lockRelease
+  })
+  await lockEntered
+
+  const reviewRequest = fetchJson(`/api/admin/submissions/item-request/${createdSubmissionId}/review`, {
     body: JSON.stringify({
       notes: 'Rejected during admin review.',
       status: 'rejected',
@@ -140,6 +281,19 @@ test('rejected submissions disappear from the public board while remaining in ad
     },
     method: 'POST',
   })
+  let reviewSettled = false
+  void reviewRequest.then(() => { reviewSettled = true }, () => { reviewSettled = true })
+
+  try {
+    await sleep(100)
+    assert.equal(reviewSettled, false)
+  }
+  finally {
+    releaseLock()
+  }
+
+  await heldLock
+  const { body: rejectedReview, response: rejectResponse } = await reviewRequest
 
   assert.equal(rejectResponse.status, 200)
   const rejectedSubmission = rejectedReview.submission as {

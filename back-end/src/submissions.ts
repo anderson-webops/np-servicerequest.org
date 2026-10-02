@@ -1,13 +1,12 @@
-import { randomUUID } from 'node:crypto'
-import { readdir, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { env } from 'node:process'
 
 import { normalizeStructuredContact } from './contact.js'
-import { ensurePrivateDirectory, writeJsonFile } from './data.js'
+import { ensurePrivateDirectory, removeFileIfExists, writeJsonFile } from './data.js'
 
 const defaultSubmissionsDirectory = resolve(tmpdir(), 'np-servicerequest', 'submissions')
+const submissionMutationQueues = new Map<string, Promise<void>>()
 
 export const submissionKinds = [
   'service-request',
@@ -52,8 +51,11 @@ export class AccountValidationError extends Error {
 }
 
 export interface SaveSubmissionInput {
+  boardItemId: string
   kind: SubmissionKind
   rawPayload: unknown
+  submissionId: string
+  validateFields: (fields: Record<string, string>) => void
 }
 
 export interface SaveSubmissionResult {
@@ -165,29 +167,34 @@ function buildSubmissionFileName(createdAt: string, id: string) {
   return `${createdAt.replaceAll(':', '-').replaceAll('.', '-')}--${id}.json`
 }
 
-async function findStoredSubmissionFile(kind: SubmissionKind, submissionId: string) {
-  const submissionDirectory = buildSubmissionDirectory(kind)
-  await ensurePrivateDirectory(submissionDirectory)
-  const fileNames = await readdir(submissionDirectory)
+export async function withSubmissionMutationLock<T>(submissionId: string, task: () => Promise<T>) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(submissionId))
+    throw new SubmissionValidationError('The submission id is invalid.')
 
-  for (const fileName of fileNames) {
-    if (!fileName.endsWith('.json'))
-      continue
+  const previousMutation = submissionMutationQueues.get(submissionId) || Promise.resolve()
+  let releaseMutation = () => {}
+  const currentMutation = new Promise<void>((resolveMutation) => {
+    releaseMutation = resolveMutation
+  })
+  submissionMutationQueues.set(submissionId, currentMutation)
 
-    const filePath = resolve(submissionDirectory, fileName)
-    const storedSubmission = JSON.parse(await readFile(filePath, 'utf8')) as StoredSubmission
+  await previousMutation
 
-    if (storedSubmission.id === submissionId)
-      return { filePath, submission: storedSubmission }
+  try {
+    return await task()
   }
+  finally {
+    releaseMutation()
 
-  return null
+    if (submissionMutationQueues.get(submissionId) === currentMutation)
+      submissionMutationQueues.delete(submissionId)
+  }
 }
 
 export async function saveSubmission(input: SaveSubmissionInput): Promise<SaveSubmissionResult> {
   const payload = sanitizePayload(input.kind, input.rawPayload)
   const createdAt = new Date().toISOString()
-  const id = randomUUID()
+  const id = input.submissionId
 
   if (payload['bot-field']) {
     return {
@@ -206,8 +213,10 @@ export async function saveSubmission(input: SaveSubmissionInput): Promise<SaveSu
         !['bot-field', 'challengeIssuedAt', 'challengeToken'].includes(fieldName) && value.length > 0,
     ),
   )
+  input.validateFields(fields)
 
   const submission: StoredSubmission = {
+    board: { itemId: input.boardItemId },
     id,
     kind: input.kind,
     createdAt,
@@ -230,26 +239,12 @@ export async function saveSubmission(input: SaveSubmissionInput): Promise<SaveSu
   }
 }
 
-export async function attachBoardItemToSubmission(input: {
-  itemId: string
+export async function removeSavedSubmission(input: {
+  createdAt: string
+  id: string
   kind: SubmissionKind
-  submissionId: string
 }) {
-  const storedSubmission = await findStoredSubmissionFile(input.kind, input.submissionId)
-
-  if (!storedSubmission)
-    return false
-
-  await writeJsonFile(
-    storedSubmission.filePath,
-    {
-      ...storedSubmission.submission,
-      board: {
-        ...storedSubmission.submission.board,
-        itemId: input.itemId,
-      },
-    },
+  await removeFileIfExists(
+    resolve(buildSubmissionDirectory(input.kind), buildSubmissionFileName(input.createdAt, input.id)),
   )
-
-  return true
 }
