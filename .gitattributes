@@ -1,4 +1,7 @@
 * text=auto eol=lf
+*.cts text eol=lf
+*.mts text eol=lf
+vendor/*/LICENSE text eol=lf
 
 *.ico binary
 *.jpg binary

@@ -140,6 +140,7 @@ test('browser location stays out of shareable board URLs and request URLs', asyn
   await page.getByRole('button', { name: 'Clear location' }).click()
   await expect(page.getByText('Using your current browser location for nearby sorting.')).toHaveCount(0)
   expect(page.url()).not.toMatch(/[?&](?:lat|lng)=/)
+  await expect(page).not.toHaveURL(/sort=nearby/)
 
   await page.goBack()
   await expect(page.getByRole('combobox', { name: 'Sort' })).toHaveValue('recent-activity')

@@ -1,7 +1,7 @@
 {
 	"name": "np-servicerequest-org-monorepo",
 	"type": "module",
-	"version": "1.2.45",
+	"version": "1.2.46",
 	"private": true,
 	"packageManager": "npm@12.0.2",
 	"engines": {
@@ -40,7 +40,7 @@
 		"clean": "rm -rf node_modules front-end/node_modules front-end/.nuxt front-end/.output back-end/node_modules back-end/dist",
 		"roles:account": "node back-end/scripts/manage-account-role.mjs",
 		"sanitize:network-metadata": "node back-end/scripts/sanitize-network-metadata.mjs",
-		"test": "node --test scripts/*.test.mjs && npm run -w back-end test && python3 -B -m unittest scripts/test_runtime_artifact.py -v",
+		"test": "node --test scripts/*.test.mjs scripts/test-braces-compat.mjs scripts/test-listhen-compat.mjs && npm run -w back-end test && python3 -B -m unittest scripts/test_runtime_artifact.py -v",
 		"up": "taze major -I && npm run -w front-end up && npm run -w back-end up",
 		"a11y": "node scripts/a11y-smoke.mjs",
 		"verify:dependency-graph": "node scripts/verify-dependency-graph.mjs",
@@ -55,10 +55,12 @@
 		"@antfu/eslint-config": "^9.2.0",
 		"@playwright/test": "^1.62.1",
 		"axe-core": "^4.12.1",
+		"braces": "file:vendor/braces",
 		"commander": "15.0.0",
 		"eslint": "^10.8.0",
 		"eslint-plugin-format": "^2.0.1",
 		"lint-staged": "^17.2.0",
+		"listhen": "file:vendor/listhen",
 		"puppeteer": "^25.4.0",
 		"rollup": "4.63.4",
 		"simple-git-hooks": "^2.13.1",
@@ -74,6 +76,8 @@
 		]
 	},
 	"overrides": {
+		"braces": "$braces",
+		"listhen": "$listhen",
 		"devalue": "5.9.4",
 		"nanoid@^3": "3.3.18",
 		"@bomb.sh/tab": {
