@@ -34,7 +34,7 @@
     "@pinia/nuxt": "^1.0.2",
     "@unocss/eslint-config": "^66.10.5",
     "@unocss/nuxt": "^66.10.5",
-    "@vueuse/nuxt": "^14.4.0",
+    "@vueuse/nuxt": "^15.0.0",
     "nuxt": "^4.5.2",
     "rollup": "^4.63.4",
     "unocss": "^66.10.5",
