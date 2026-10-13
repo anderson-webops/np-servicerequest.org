@@ -27,7 +27,7 @@
     "vue": "^3.5.43"
   },
   "devDependencies": {
-    "@iconify-json/carbon": "^1.2.27",
+    "@iconify-json/carbon": "^1.2.28",
     "@iconify-json/twemoji": "^1.2.5",
     "@nuxt/eslint-config": "^1.17.0",
     "@nuxtjs/color-mode": "^4.0.1",
@@ -35,10 +35,10 @@
     "@unocss/eslint-config": "^66.10.5",
     "@unocss/nuxt": "^66.10.5",
     "@vueuse/nuxt": "^14.4.0",
-    "nuxt": "^4.5.2",
-    "rollup": "^4.63.4",
+    "nuxt": "^4.6.1",
+    "rollup": "^4.64.4",
     "unocss": "^66.10.5",
-    "vue-tsc": "^3.3.11"
+    "vue-tsc": "^3.3.12"
   },
   "optionalDependencies": {
     "@esbuild/linux-arm64": "0.28.2",
