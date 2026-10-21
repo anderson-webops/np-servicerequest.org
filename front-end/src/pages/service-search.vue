@@ -69,15 +69,15 @@ const areaResults = computed(() =>
 
 const searchModeLabel = computed(() => {
   if (browserOrigin.value)
-    return 'Using your current location for local matching.'
+    return 'Location: current location'
 
   if (placeMatch.value)
-    return `Using ${placeMatch.value.label} for local matching.`
+    return `Location: ${placeMatch.value.label}`
 
   if (locationQuery.value.trim())
-    return 'Using text matching only. Your current location will produce better nearby results.'
+    return 'Place not recognized. Matching by name only.'
 
-  return 'Start with the local examples below, or enter a place to narrow them.'
+  return ''
 })
 
 const providerSummaryLabel = computed(() => {
@@ -85,10 +85,10 @@ const providerSummaryLabel = computed(() => {
     return 'Loading live Idealist listings…'
 
   if (providerError.value)
-    return 'Live search is unavailable right now. The directory links on this page still work.'
+    return 'Live search unavailable.'
 
   if (!providerStatus.value.configured)
-    return 'Live search is not enabled on this server yet. Use the directory links on this page for now.'
+    return 'Live Idealist search unavailable.'
 
   return `${providerResults.value.length} live Idealist result${providerResults.value.length === 1 ? '' : 's'} shown from ${providerPagination.value.totalItems} current matches.`
 })
@@ -243,28 +243,12 @@ function changeProviderPage(nextPage: number) {
         Back to service directory
       </NuxtLink>
 
-      <p class="eyebrow">
-        Live service search
-      </p>
-      <h1>Search service opportunities.</h1>
-      <p class="service-directory-page__lede">
-        Use your current location or a place name to narrow local service
-        websites, then pull live results from the configured provider when
-        they are available.
-      </p>
+      <h1>Service opportunities</h1>
     </section>
 
     <section class="directory-section">
       <div class="section-heading">
-        <p class="eyebrow">
-          Nationwide platforms
-        </p>
-        <h2>Start with the large volunteer networks first.</h2>
-        <p class="section-copy">
-          These are the broadest directories for service and volunteer
-          opportunities. Use them first when you want a wider search than one
-          city or organization can provide.
-        </p>
+        <h2>Nationwide platforms</h2>
       </div>
 
       <div class="nationwide-grid">
@@ -305,16 +289,7 @@ function changeProviderPage(nextPage: number) {
 
     <section class="directory-section directory-section--finder">
       <div class="section-heading">
-        <p class="eyebrow">
-          Area-specific search
-        </p>
-        <h2>
-          Search local and metro-specific service websites by place and radius.
-        </h2>
-        <p class="section-copy">
-          Use your current location or type a place to narrow the local links
-          below.
-        </p>
+        <h2>Local service websites</h2>
       </div>
 
       <div class="finder-layout">
@@ -388,7 +363,7 @@ function changeProviderPage(nextPage: number) {
             </button>
           </div>
 
-          <p class="finder-panel__note">
+          <p v-if="searchModeLabel" class="finder-panel__note">
             {{ searchModeLabel }}
           </p>
           <p
@@ -398,9 +373,6 @@ function changeProviderPage(nextPage: number) {
           >
             {{ geoError }}
           </p>
-          <p v-if="placeMatch" class="inline-note" role="status">
-            Supported place match: {{ placeMatch.label }}
-          </p>
         </aside>
 
         <div class="finder-results">
@@ -408,7 +380,6 @@ function changeProviderPage(nextPage: number) {
             <span>{{ areaResults.length }} local directory result<span
               v-if="areaResults.length !== 1"
             >s</span></span>
-            <span>Use your current location for tighter local matching.</span>
           </div>
 
           <div v-if="!areaResults.length" class="finder-empty">
@@ -465,14 +436,7 @@ function changeProviderPage(nextPage: number) {
 
     <section class="directory-section directory-section--provider">
       <div class="section-heading">
-        <p class="eyebrow">
-          Live search
-        </p>
-        <h2>Search live opportunities when they are available.</h2>
-        <p class="section-copy">
-          The same controls above can also search current Idealist opportunities
-          when live search is enabled on this server.
-        </p>
+        <h2>Live Idealist opportunities</h2>
       </div>
 
       <div class="provider-results">
@@ -490,13 +454,6 @@ function changeProviderPage(nextPage: number) {
           {{ providerError }}
         </p>
         <p
-          v-else-if="!providerStatus.configured"
-          class="inline-note"
-          role="status"
-        >
-          Live Idealist search is not enabled on this server yet.
-        </p>
-        <p
           v-else-if="providerStatus.lastError"
           class="inline-note inline-note--error"
           role="alert"
@@ -510,10 +467,9 @@ function changeProviderPage(nextPage: number) {
           role="status"
         >
           <h3>Loading live listings…</h3>
-          <p>Checking current Idealist opportunities now.</p>
         </div>
 
-        <div v-else-if="!providerResults.length" class="finder-empty">
+        <div v-else-if="providerStatus.configured && !providerResults.length" class="finder-empty">
           <h3>No live Idealist listings matched this search yet.</h3>
           <p>Try a broader keyword or a wider radius.</p>
         </div>

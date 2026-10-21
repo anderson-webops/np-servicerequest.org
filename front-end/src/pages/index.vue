@@ -110,12 +110,6 @@ const activeBoardTotal = computed(() =>
     ? displayBoardCounts.value.all
     : displayBoardCounts.value[boardFilter.value],
 )
-const activeBoardSortLabel = computed(() =>
-  boardSortOptions.find(option => option.value === boardSort.value)?.label
-  || 'Recently active',
-)
-const isNearbySortActive = computed(() => boardSort.value === 'nearby')
-
 function applyServerContext(payload: unknown) {
   if (!payload || typeof payload !== 'object')
     return
@@ -718,15 +712,6 @@ watch(
     <section class="hero">
       <div class="hero__inner">
         <div class="hero__copy">
-          <p class="eyebrow">
-            One shared place for community requests
-          </p>
-          <h2>Help, borrow, and lend.</h2>
-          <p class="hero__lede">
-            Post a service project, ask to borrow something practical, or lend
-            an item to a neighbor.
-          </p>
-
           <div class="hero__actions">
             <a href="#live-board">View the live board</a>
             <NuxtLink prefetch-on="interaction" to="/service-request">
@@ -770,9 +755,6 @@ watch(
                 }}</strong>
               </div>
             </div>
-            <p class="poster__note">
-              anonymous use stays open
-            </p>
           </div>
         </div>
       </div>
@@ -781,13 +763,7 @@ watch(
     <section id="live-board" class="live-board">
       <div class="live-board__heading">
         <div class="section-heading">
-          <p class="eyebrow">
-            Live board
-          </p>
-          <h2>Browse the live board.</h2>
-          <p class="section-copy">
-            Open any post for the full thread, replies, and management tools.
-          </p>
+          <h2>Live board</h2>
         </div>
 
         <div class="board-tools">
@@ -915,11 +891,6 @@ watch(
             <p v-if="boardSearch">
               Search: "{{ boardSearch }}"
             </p>
-            <p>Sorted by {{ activeBoardSortLabel.toLowerCase() }}.</p>
-            <p v-if="isNearbySortActive && boardOrigin">
-              Using your current browser location for nearby sorting.
-            </p>
-            <p>Open a post for replies and the full thread.</p>
             <p v-if="managementPending">
               Claiming management access...
             </p>
@@ -952,19 +923,6 @@ watch(
                   ? 'No posts match this search yet.'
                   : 'No posts match this filter yet.'
               }}
-            </p>
-            <p>
-              Start one from the dedicated
-              <NuxtLink prefetch-on="interaction" to="/service-request">
-                service project
-              </NuxtLink>,
-              <NuxtLink prefetch-on="interaction" to="/item-request">
-                item request
-              </NuxtLink>, or
-              <NuxtLink prefetch-on="interaction" to="/item-lending">
-                item lending
-              </NuxtLink>
-              page.
             </p>
           </div>
 

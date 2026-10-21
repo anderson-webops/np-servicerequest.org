@@ -8,60 +8,6 @@ useSeoMeta({
   description:
     'Learn how the live community board works and what kinds of requests and lending offers belong there.',
 })
-
-const processSteps = [
-  {
-    number: '01',
-    title: 'Choose the dedicated page',
-    description:
-      'Use the matching page so the post lands in the right category from the start.',
-  },
-  {
-    number: '02',
-    title: 'Reply on the board or reveal contact when needed',
-    description:
-      'People can answer publicly on the thread or reveal contact only when they are ready to reach out directly.',
-  },
-  {
-    number: '03',
-    title: 'Stay anonymous or create an account',
-    description:
-      'An account is optional. It only helps if you want a consistent identity across repeat posts and replies.',
-  },
-]
-
-const boardGroups = [
-  {
-    title: 'Service projects',
-    items: [
-      'yard cleanup',
-      'small repairs',
-      'moving help',
-      'accessibility upgrades',
-      'setup or teardown',
-    ],
-  },
-  {
-    title: 'Borrow requests',
-    items: [
-      'axes and hand tools',
-      'kitchen utensils',
-      'books',
-      'ladders',
-      'seasonal gear',
-    ],
-  },
-  {
-    title: 'Items to lend',
-    items: [
-      'power tools',
-      'cookware',
-      'study materials',
-      'gardening supplies',
-      'one-off specialty items',
-    ],
-  },
-]
 </script>
 
 <template>
@@ -75,58 +21,25 @@ const boardGroups = [
         Back to live board
       </NuxtLink>
 
-      <p class="eyebrow">
-        Help
-      </p>
-      <h1>Use the board well.</h1>
+      <h1>Help</h1>
+    </section>
+
+    <section class="help-section">
+      <div class="section-heading">
+        <h2>Public posts and contact details</h2>
+      </div>
       <p class="help-page__lede">
-        Use the right posting page, keep requests specific, and make it easy for
-        someone else to act.
+        Posts and replies are public. Other visitors can reveal the contact details you provide.
       </p>
     </section>
 
     <section class="help-section">
       <div class="section-heading">
-        <p class="eyebrow">
-          How it works
-        </p>
-        <h2>
-          Post clearly, reply clearly, and reveal contact only when needed.
-        </h2>
+        <h2>Managing posts</h2>
       </div>
-
-      <ol class="process__list">
-        <li v-for="step in processSteps" :key="step.number">
-          <span class="process__number">{{ step.number }}</span>
-          <div>
-            <h3>{{ step.title }}</h3>
-            <p>{{ step.description }}</p>
-          </div>
-        </li>
-      </ol>
-    </section>
-
-    <section class="help-section">
-      <div class="section-heading">
-        <p class="eyebrow">
-          What belongs here
-        </p>
-        <h2>
-          Keep posts practical and specific enough for another person to respond
-          quickly.
-        </h2>
-      </div>
-
-      <div class="board-groups__grid">
-        <article v-for="group in boardGroups" :key="group.title">
-          <h3>{{ group.title }}</h3>
-          <ul>
-            <li v-for="item in group.items" :key="item">
-              {{ item }}
-            </li>
-          </ul>
-        </article>
-      </div>
+      <p class="help-page__lede">
+        For posts made with email, a private management link allows deletion from another browser.
+      </p>
     </section>
   </div>
 </template>

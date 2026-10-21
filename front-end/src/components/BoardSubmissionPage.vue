@@ -9,10 +9,7 @@ import { getBoardEndpoint } from '~/utils/board'
 import { getBoardDetailPath } from '~/utils/boardUi'
 
 const props = defineProps<{
-  description: string
   draftKey?: string
-  eyebrow: string
-  examples: string[]
   kind: SubmissionKind
   pendingLabel: string
   securityError: FormErrorState | null
@@ -48,7 +45,6 @@ const categoryCopy = computed(() => {
     return {
       empty: 'No public service projects are waiting yet.',
       label: 'Service projects',
-      nextAction: 'Neighbors can offer help publicly, then reveal contact only when follow-up is needed.',
       postNoun: 'service project',
     }
   }
@@ -57,7 +53,6 @@ const categoryCopy = computed(() => {
     return {
       empty: 'No public borrow requests are waiting yet.',
       label: 'Borrow requests',
-      nextAction: 'Neighbors can reply if they have the item, then coordinate pickup after contact is revealed.',
       postNoun: 'borrow request',
     }
   }
@@ -65,7 +60,6 @@ const categoryCopy = computed(() => {
   return {
     empty: 'No public lending offers are available yet.',
     label: 'Lending offers',
-    nextAction: 'Neighbors can ask to borrow the item, and you can use a management link to remove it later.',
     postNoun: 'lending offer',
   }
 })
@@ -324,13 +318,7 @@ watch(
         Back to live board
       </NuxtLink>
 
-      <p class="eyebrow">
-        {{ eyebrow }}
-      </p>
       <h1>{{ title }}</h1>
-      <p class="submission-page__lede">
-        {{ description }}
-      </p>
     </section>
 
     <section class="submission-page__panel">
@@ -349,8 +337,8 @@ watch(
           <p>
             {{
               draftRestored
-                ? 'Saved draft restored in this browser.'
-                : 'Draft saves automatically in this browser.'
+                ? 'Draft restored from this browser.'
+                : 'Draft saved in this browser.'
             }}
           </p>
           <button
@@ -391,17 +379,18 @@ watch(
           <slot />
         </div>
 
+        <p class="submission-page__rail-note">
+          Posts are public. Other visitors can reveal your contact details.
+        </p>
+
         <button class="submit-button" :disabled="status.pending" type="submit">
           {{ status.pending ? pendingLabel : submitLabel }}
         </button>
       </form>
     </section>
 
-    <aside class="submission-page__rail" aria-label="Submission guidance and board activity">
+    <aside class="submission-page__rail" aria-label="Board activity">
       <section class="submission-page__activity" aria-labelledby="submission-activity-heading">
-        <p class="eyebrow">
-          Live category
-        </p>
         <div class="submission-page__activity-head">
           <h2 id="submission-activity-heading">
             {{ categoryCopy.label }}
@@ -431,29 +420,6 @@ watch(
         </p>
         <p v-else class="submission-page__rail-note">
           {{ activityLoaded ? categoryCopy.empty : 'Loading current board activity...' }}
-        </p>
-      </section>
-
-      <section class="submission-page__tips" aria-labelledby="submission-checklist-heading">
-        <p id="submission-checklist-heading" class="eyebrow">
-          Quick checklist
-        </p>
-        <ul class="submission-page__examples">
-          <li v-for="example in examples" :key="example">
-            {{ example }}
-          </li>
-        </ul>
-      </section>
-
-      <section class="submission-page__flow" aria-labelledby="submission-flow-heading">
-        <p id="submission-flow-heading" class="eyebrow">
-          After posting
-        </p>
-        <p>
-          Posts publish to the public board immediately. {{ categoryCopy.nextAction }}
-        </p>
-        <p>
-          If you post with email, the server sends a private management link so you can delete it later.
         </p>
       </section>
     </aside>

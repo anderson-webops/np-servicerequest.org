@@ -1,7 +1,6 @@
 <template>
   <header class="site-header">
     <NuxtLink class="site-header__brand" prefetch-on="interaction" to="/">
-      <span class="site-header__eyebrow">Community request board</span>
       <span class="site-header__name">np-servicerequest.org</span>
     </NuxtLink>
 

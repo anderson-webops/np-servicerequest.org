@@ -43,21 +43,14 @@ watch(
 
 <template>
   <BoardSubmissionPage
-    description="Use this page when you want to borrow a practical item such as a tool, book, kitchen item, or ladder."
     draft-key="item-request"
-    eyebrow="Request an item"
-    :examples="[
-      'Name the exact item if you can.',
-      'Say how long you expect to borrow it.',
-      'Include whether you can pick it up yourself or need help getting it.',
-    ]"
     kind="item-request"
     pending-label="Posting item request..."
     :security-error="securityError"
     :status="status"
     submit-label="Post item request"
-    success-text="Posted. Your item request now appears on the live board. If you used an email address, a management link was sent there so you can delete it later from another browser."
-    title="Ask to borrow a specific item."
+    success-text="Item request posted. If you posted with email, check it for a private management link to delete the post."
+    title="Request an item"
     @submit="submit"
   >
     <label class="field">
@@ -168,7 +161,6 @@ watch(
       <span>Your neighborhood</span>
       <input
         name="neighborhood"
-        placeholder="Where you are located"
         required
         type="text"
       >
@@ -178,7 +170,6 @@ watch(
       <span>Details</span>
       <textarea
         name="details"
-        placeholder="Share size, edition, quantity, or use details."
         required
         rows="6"
       />

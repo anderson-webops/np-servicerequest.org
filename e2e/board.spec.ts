@@ -95,17 +95,17 @@ test('browser location stays out of shareable board URLs and request URLs', asyn
     lng: '-84.388',
     sort: 'nearby',
   })
-  await expect(page.getByText('Using your current browser location for nearby sorting.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Refresh location' })).toBeVisible()
   expect(page.url()).not.toMatch(/[?&](?:lat|lng)=/)
 
   await page.getByRole('button', { name: 'Service projects' }).click()
   await expect(page).toHaveURL(/filter=service-request/)
   expect(page.url()).not.toMatch(/[?&](?:lat|lng)=/)
-  await expect(page.getByText('Using your current browser location for nearby sorting.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Refresh location' })).toBeVisible()
 
   await page.goBack()
   await expect(page.getByRole('button', { name: 'All posts' })).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.getByText('Using your current browser location for nearby sorting.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Refresh location' })).toBeVisible()
   expect(page.url()).not.toMatch(/[?&](?:lat|lng)=/)
 
   await context.setGeolocation({ latitude: 34.001, longitude: -84.002 })
@@ -122,7 +122,7 @@ test('browser location stays out of shareable board URLs and request URLs', asyn
 
   await page.reload()
   await expect(page.getByRole('combobox', { name: 'Sort' })).toHaveValue('nearby')
-  await expect(page.getByText('Using your current browser location for nearby sorting.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Refresh location' })).toBeVisible()
   expect(page.url()).not.toMatch(/[?&](?:lat|lng)=/)
 
   const newestRequestPromise = page.waitForRequest(request =>
@@ -138,7 +138,7 @@ test('browser location stays out of shareable board URLs and request URLs', asyn
   await expect(page.getByRole('combobox', { name: 'Sort' })).toHaveValue('nearby')
 
   await page.getByRole('button', { name: 'Clear location' }).click()
-  await expect(page.getByText('Using your current browser location for nearby sorting.')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Refresh location' })).toHaveCount(0)
   expect(page.url()).not.toMatch(/[?&](?:lat|lng)=/)
   await expect(page).not.toHaveURL(/sort=nearby/)
 
@@ -251,7 +251,7 @@ test('anonymous posters can use the path-style detail route, reclaim management 
   }
   const boardItemId = submissionBody.boardItem.id
 
-  await expect(page.getByText('Posted. Your service project now appears on the live board.')).toBeVisible()
+  await expect(page.getByText('Service request posted.', { exact: false })).toBeVisible()
 
   const managementEmail = await waitForCapturedEmail({
     subjectPrefix: '[Board Manage]',
@@ -372,7 +372,7 @@ test('the separate admin page rejects a bad key, accepts the admin key, and hidi
   const boardItemId = (submission.boardItem as { id: string }).id
 
   await page.goto('/admin', { waitUntil: 'commit' })
-  await expect(page.getByRole('heading', { name: 'Review board submissions.' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Admin review' })).toBeVisible()
 
   await page.getByLabel('Admin key').fill('wrong-key')
   await page.getByRole('button', { name: 'Sign in with admin key' }).click()

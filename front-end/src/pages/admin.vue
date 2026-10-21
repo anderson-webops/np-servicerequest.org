@@ -808,27 +808,13 @@ watch(
         Back to live board
       </NuxtLink>
 
-      <p class="eyebrow">
-        Admin review
-      </p>
-      <h1>Review board submissions.</h1>
-      <p class="admin-page__lede">
-        This page is separate from the normal board account flow. Use the admin
-        key here when you need moderation and review access.
-      </p>
+      <h1>Admin review</h1>
     </section>
 
     <section class="admin-page__panel">
       <div class="admin-page__copy">
-        <p class="eyebrow">
-          Separate access path
-        </p>
-        <h2>This is not the optional account sign-in.</h2>
-        <ul class="admin-page__list">
-          <li>Use the admin key here, not the public account login.</li>
-          <li>The key is exchanged for an HttpOnly, eight-hour session and is not stored by this page.</li>
-          <li>Sign out here when you are done reviewing.</li>
-        </ul>
+        <h2>Admin access</h2>
+        <p>Sessions expire after eight hours.</p>
       </div>
 
       <div class="admin-panel">
@@ -858,7 +844,6 @@ watch(
               v-model="adminKeyInput"
               autocomplete="off"
               name="admin_key"
-              placeholder="Enter the admin key"
               required
               spellcheck="false"
               type="password"
@@ -876,7 +861,6 @@ watch(
               Admin session
             </p>
             <strong>Key accepted</strong>
-            <small>Protected temporary session active.</small>
           </div>
 
           <button class="secondary-button" type="button" @click="signOutAdmin">
@@ -891,14 +875,7 @@ watch(
 
     <section v-if="isAuthenticated" class="admin-review">
       <div class="section-heading">
-        <p class="eyebrow">
-          Review queue
-        </p>
-        <h2>Review stored submissions and record an admin decision.</h2>
-        <p class="section-copy">
-          Rejecting a submission hides its linked board item from public view
-          while keeping the internal record here for review history.
-        </p>
+        <h2>Review queue</h2>
       </div>
 
       <div class="admin-review__filters">
@@ -1097,16 +1074,7 @@ watch(
 
     <section v-if="isAuthenticated" class="admin-review admin-review--activity">
       <div class="section-heading">
-        <p class="eyebrow">
-          Activity log
-        </p>
-        <h2>
-          Track posts, replies, reports, moderation actions, and deletions.
-        </h2>
-        <p class="section-copy">
-          This log keeps the internal moderation trail even when a post is
-          hidden from the public board.
-        </p>
+        <h2>Activity log</h2>
       </div>
 
       <div class="admin-review__filters">

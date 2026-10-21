@@ -27,14 +27,7 @@ useSeoMeta({
         Back to live board
       </NuxtLink>
 
-      <p class="eyebrow">
-        Service directory
-      </p>
-      <h1>Browse service websites.</h1>
-      <p class="service-directory-page__lede">
-        Start with the broad volunteer networks, then move into regional
-        organizations and local service hubs.
-      </p>
+      <h1>Service directory</h1>
 
       <div class="service-directory-page__actions">
         <NuxtLink prefetch-on="interaction" to="/service-search">
@@ -45,14 +38,7 @@ useSeoMeta({
 
     <section class="directory-section">
       <div class="section-heading">
-        <p class="eyebrow">
-          Nationwide platforms
-        </p>
-        <h2>Use the large networks when you need a broad search.</h2>
-        <p class="section-copy">
-          These platforms are best when you want many opportunities across
-          cities, causes, or organizations.
-        </p>
+        <h2>Nationwide platforms</h2>
       </div>
 
       <div class="directory-grid">
@@ -90,14 +76,7 @@ useSeoMeta({
 
     <section class="directory-section">
       <div class="section-heading">
-        <p class="eyebrow">
-          Area-specific organizations
-        </p>
-        <h2>Use regional hubs when you want place-specific service work.</h2>
-        <p class="section-copy">
-          These are local or metro-specific sites that are useful when you want
-          neighborhood, county, or city-level service opportunities.
-        </p>
+        <h2>Area-specific organizations</h2>
       </div>
 
       <div class="directory-grid">
@@ -131,28 +110,6 @@ useSeoMeta({
           </div>
         </article>
       </div>
-    </section>
-
-    <section class="directory-cta">
-      <div>
-        <p class="eyebrow">
-          Live search
-        </p>
-        <h2>Need something more dynamic?</h2>
-        <p class="section-copy">
-          Use the live search page when you want to search local links by
-          distance and pull live provider results when the backend is configured
-          for it.
-        </p>
-      </div>
-
-      <NuxtLink
-        class="directory-cta__link"
-        prefetch-on="interaction"
-        to="/service-search"
-      >
-        Go to live service search
-      </NuxtLink>
     </section>
   </div>
 </template>

@@ -381,24 +381,13 @@ watch(
         Back to live board
       </NuxtLink>
 
-      <p class="eyebrow">
-        Account optional
-      </p>
-      <h1>Create a saved board identity.</h1>
-      <p class="account-page__lede">
-        You can browse, post, and reply without signing in. This page is only
-        for people who want a reusable board identity.
-      </p>
+      <h1>Account</h1>
     </section>
 
     <section class="account-page__panel">
       <div class="account-panel">
-        <p class="account-panel__intro">
-          The board still works without an account. Create one only if you want
-          your posts and replies to carry the same name each time.
-        </p>
         <p v-if="!accountUiReady" class="account-panel__note" role="status">
-          Account tools load after the page initializes.
+          Loading account tools…
         </p>
         <p
           v-else-if="securityError"
@@ -447,20 +436,10 @@ watch(
 
         <div v-else-if="showAdminSessionCard" class="account-panel__signed-in">
           <div>
-            <p
-              class="account-panel__note account-panel__note--success"
-              role="status"
-            >
-              A protected temporary admin session is active.
-            </p>
             <p class="account-panel__label">
               Admin session
             </p>
             <strong>Key accepted</strong>
-            <small>The admin key is not stored by this page.</small>
-            <small class="account-panel__admin">
-              This admin path is separate from optional board user accounts.
-            </small>
           </div>
 
           <NuxtLink

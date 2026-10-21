@@ -132,13 +132,7 @@ watch(panelAlignment, async () => {
     >
       <div class="palette-control__panel-head">
         <div>
-          <p class="palette-control__eyebrow">
-            Color scheme
-          </p>
-          <h2>Choose the palette family</h2>
-          <p>
-            The palette applies to both light and dark mode. Use the header theme control for system, light, or dark.
-          </p>
+          <h2>Color scheme</h2>
         </div>
         <button
           class="palette-control__close"
@@ -167,7 +161,6 @@ watch(panelAlignment, async () => {
               <span v-if="option.isDefault" class="palette-control__badge">Default</span>
               <span v-if="option.id === scheme" class="palette-control__badge palette-control__badge--active">Active</span>
             </span>
-            <span class="palette-control__option-description">{{ option.description }}</span>
           </span>
 
           <span class="palette-control__swatches" aria-hidden="true">

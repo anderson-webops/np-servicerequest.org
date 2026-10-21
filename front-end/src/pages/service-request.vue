@@ -43,21 +43,14 @@ watch(
 
 <template>
   <BoardSubmissionPage
-    description="Use this page for hands-on help such as cleanups, repairs, setup, moving help, or accessibility work."
     draft-key="service-request"
-    eyebrow="Request a service project"
-    :examples="[
-      'Give a short title to the project.',
-      'Say where the work will happen and when it is needed.',
-      'Explain whether the project needs tools, lifting, transport, or a special skill.',
-    ]"
     kind="service-request"
     pending-label="Posting service request..."
     :security-error="securityError"
     :status="status"
     submit-label="Post service request"
-    success-text="Posted. Your service project now appears on the live board. If you used an email address, a management link was sent there so you can delete it later from another browser."
-    title="Describe the service project."
+    success-text="Service request posted. If you posted with email, check it for a private management link to delete the post."
+    title="Request a service project"
     @submit="submit"
   >
     <label class="field">
@@ -147,7 +140,6 @@ watch(
       <input
         autocomplete="street-address"
         name="location"
-        placeholder="Where the project is happening"
         required
         type="text"
       >
@@ -167,7 +159,6 @@ watch(
       <span>Project details</span>
       <textarea
         name="details"
-        placeholder="Explain the work, supplies, and anything responders should know."
         required
         rows="6"
       />

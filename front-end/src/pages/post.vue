@@ -347,9 +347,9 @@ function getResolvedNote(currentItem: BoardItem) {
   const changedAt = currentItem.resolutionChangedAt || currentItem.lastActivityAt
 
   if (currentItem.resolutionStatus === 'fulfilled')
-    return `This post was marked fulfilled ${formatBoardDate(changedAt)}. It stays visible for reference, and new public replies are closed until it is reopened.`
+    return `Fulfilled ${formatBoardDate(changedAt)}. Replies are closed until this post is reopened.`
 
-  return `This post was closed ${formatBoardDate(changedAt)}. It stays visible for reference, and new public replies are paused until it is reopened.`
+  return `Closed ${formatBoardDate(changedAt)}. Replies are closed until this post is reopened.`
 }
 
 function getResolutionBadgeLabel(currentItem: BoardItem) {
@@ -864,15 +864,9 @@ watch(routeManagementToken, (nextToken, previousToken) => {
         Back to live board
       </NuxtLink>
 
-      <p class="eyebrow">
-        Board post
-      </p>
       <h1>
         {{ pageHeading }}
       </h1>
-      <p class="post-page__lede">
-        {{ pageDescription }}
-      </p>
 
       <p v-if="securityError" class="inline-note inline-note--error" role="alert">
         {{ securityError.message }} {{ securityError.detail }}
@@ -904,7 +898,6 @@ watch(routeManagementToken, (nextToken, previousToken) => {
             <p class="board-card__kind">
               {{ item.kindLabel }}
             </p>
-            <h2>{{ item.title }}</h2>
           </div>
 
           <div class="board-card__meta">
@@ -1041,7 +1034,6 @@ watch(routeManagementToken, (nextToken, previousToken) => {
               <span>Details (optional)</span>
               <textarea
                 v-model="itemReportDetails"
-                placeholder="Add a short note if it would help an admin understand the problem."
                 rows="3"
               />
             </label>
@@ -1056,9 +1048,6 @@ watch(routeManagementToken, (nextToken, previousToken) => {
           </form>
         </div>
 
-        <p class="board-card__contact-note">
-          Contact details are hidden until you deliberately reveal them to reduce scraping.
-        </p>
         <p v-if="item.resolutionStatus !== 'open'" class="board-card__resolved-note">
           {{ getResolvedNote(item) }}
         </p>
@@ -1153,7 +1142,6 @@ watch(routeManagementToken, (nextToken, previousToken) => {
                   <span>Details (optional)</span>
                   <textarea
                     v-model="reportInteractionDetails[interaction.id]"
-                    placeholder="Add a short note if it would help an admin understand the problem."
                     rows="3"
                   />
                 </label>
@@ -1189,7 +1177,7 @@ watch(routeManagementToken, (nextToken, previousToken) => {
           </div>
 
           <p v-else class="board-card__thread-empty">
-            No responses yet. This is the place where neighbors can answer the request directly.
+            No responses yet.
           </p>
           <button
             v-if="item.interactionPage?.hasMore"
@@ -1204,10 +1192,6 @@ watch(routeManagementToken, (nextToken, previousToken) => {
             {{ interactionsError.message }} {{ interactionsError.detail }}
           </p>
         </section>
-
-        <p v-if="item.resolutionStatus !== 'open'" class="board-card__thread-empty">
-          This post is {{ item.resolutionStatus === 'fulfilled' ? 'fulfilled' : 'closed' }}, so new public replies are paused unless the owner or an admin reopens it.
-        </p>
       </article>
 
       <section
@@ -1215,13 +1199,7 @@ watch(routeManagementToken, (nextToken, previousToken) => {
         class="reply-panel"
       >
         <div class="reply-panel__header">
-          <p class="board-card__thread-label">
-            Reply
-          </p>
           <h2>{{ getReplyActionLabel(item.kind) }}</h2>
-          <p class="reply-panel__lede">
-            Keep the reply practical so the person who posted can decide quickly whether to continue the conversation.
-          </p>
         </div>
 
         <form
@@ -1267,7 +1245,7 @@ watch(routeManagementToken, (nextToken, previousToken) => {
 
             <label class="field field--wide">
               <span>Message</span>
-              <textarea v-model="replyDraft.message" placeholder="Share what you can offer and what timing works." required rows="5" />
+              <textarea v-model="replyDraft.message" required rows="5" />
             </label>
           </div>
 

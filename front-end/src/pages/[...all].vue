@@ -1,14 +1,8 @@
 <template>
   <section class="not-found">
-    <p class="not-found__eyebrow">
-      Nothing posted here
-    </p>
     <h1>
       Page not found.
     </h1>
-    <p>
-      Head back to the main page to browse the live board, request a service project, borrow an item, or offer something useful to lend.
-    </p>
     <NuxtLink class="not-found__link" prefetch-on="interaction" to="/">
       Return home
     </NuxtLink>

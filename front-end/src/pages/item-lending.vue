@@ -43,21 +43,14 @@ watch(
 
 <template>
   <BoardSubmissionPage
-    description="Use this page to offer an item that someone else can borrow."
     draft-key="item-lending"
-    eyebrow="Volunteer an item to lend"
-    :examples="[
-      'Say what the item is and what condition it is in.',
-      'Explain any borrowing rules, pickup limits, or return expectations.',
-      'Let people know the neighborhood and how to reach you.',
-    ]"
     kind="item-lending"
     pending-label="Posting lending offer..."
     :security-error="securityError"
     :status="status"
     submit-label="Post lending offer"
-    success-text="Posted. Your lending offer now appears on the live board. If you used an email address, a management link was sent there so you can delete it later from another browser."
-    title="Offer an item to lend."
+    success-text="Lending offer posted. If you posted with email, check it for a private management link to delete the post."
+    title="Lend an item"
     @submit="submit"
   >
     <label class="field">
@@ -143,7 +136,6 @@ watch(
       <span>Neighborhood</span>
       <input
         name="neighborhood"
-        placeholder="Where pickup can happen"
         required
         type="text"
       >
@@ -173,7 +165,6 @@ watch(
       <span>Borrowing guidelines</span>
       <textarea
         name="guidelines"
-        placeholder="List borrowing limits, pickup notes, and return expectations."
         required
         rows="6"
       />
