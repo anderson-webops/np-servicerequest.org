@@ -28,6 +28,7 @@ import {
   getRevealKey,
 } from '~/utils/boardUi'
 import { consumePendingManagementClaim } from '~/utils/managementLink'
+import { formatRelativeTime, formatReplyCount, getPostType, postTypeLinks } from '~/utils/postTypes'
 import { submissionKinds } from '~/utils/submissions'
 
 type BoardFilter = 'all' | SubmissionKind
@@ -105,11 +106,18 @@ const displayBoardCounts = computed<BoardItemCounts>(() =>
     ? boardCounts.value
     : placeholderBoardCounts,
 )
-const activeBoardTotal = computed(() =>
-  boardFilter.value === 'all'
-    ? displayBoardCounts.value.all
-    : displayBoardCounts.value[boardFilter.value],
-)
+const boardSummary = computed(() => {
+  if (!boardUiReady.value || boardError.value)
+    return ''
+
+  const total = boardPagination.value.totalItems
+  const noun = total === 1 ? 'post' : 'posts'
+
+  return boardSearch.value
+    ? `${total} ${noun} matching “${boardSearch.value}”`
+    : `${total} ${noun}`
+})
+
 function applyServerContext(payload: unknown) {
   if (!payload || typeof payload !== 'object')
     return
@@ -390,16 +398,7 @@ async function revealItemContact(item: BoardItem) {
 }
 
 function getResolutionBadgeLabel(item: BoardItem) {
-  return item.resolutionStatus === 'fulfilled' ? 'fulfilled' : 'closed'
-}
-
-function getResolvedNote(item: BoardItem) {
-  const changedAt = item.resolutionChangedAt || item.lastActivityAt
-
-  if (item.resolutionStatus === 'fulfilled')
-    return `This post was marked fulfilled ${formatBoardDate(changedAt)}. It stays visible for reference on its full post page.`
-
-  return `This post was closed ${formatBoardDate(changedAt)}. It stays visible for reference, but new public replies are paused until it is reopened.`
+  return item.resolutionStatus === 'fulfilled' ? 'Fulfilled' : 'Closed'
 }
 
 function syncBoardStateFromRoute() {
@@ -702,98 +701,73 @@ watch(
 </script>
 
 <template>
-  <div class="home-page">
-    <section class="home-title" aria-labelledby="home-title-heading">
+  <div class="home-page container">
+    <section class="home-hero" aria-labelledby="home-title-heading">
       <h1 id="home-title-heading">
         North Point Ward Service Board
       </h1>
+
+      <ul class="home-hero__tiles" aria-label="New post">
+        <li v-for="postType in postTypeLinks" :key="postType.to">
+          <NuxtLink
+            class="post-tile"
+            :class="postType.tone"
+            prefetch-on="interaction"
+            :to="postType.to"
+          >
+            <span aria-hidden="true" class="post-tile__icon"><span :class="postType.icon" /></span>
+            <span class="post-tile__label">{{ postType.label }}</span>
+            <span aria-hidden="true" class="post-tile__label-short">{{ postType.shortLabel }}</span>
+            <span aria-hidden="true" class="i-carbon-arrow-right post-tile__arrow" />
+          </NuxtLink>
+        </li>
+      </ul>
     </section>
 
-    <section class="hero">
-      <div class="hero__inner">
-        <div class="hero__copy">
-          <div class="hero__actions">
-            <a href="#live-board">View the live board</a>
-            <NuxtLink prefetch-on="interaction" to="/service-request">
-              Service project
-            </NuxtLink>
-            <NuxtLink prefetch-on="interaction" to="/item-request">
-              Borrow item
-            </NuxtLink>
-            <NuxtLink prefetch-on="interaction" to="/item-lending">
-              Lend item
-            </NuxtLink>
-          </div>
-        </div>
-
-        <div aria-hidden="true" class="hero__poster">
-          <div class="poster">
-            <div class="poster__stamp">
-              live board
-            </div>
-            <div class="poster__headline">
-              <strong>{{ displayBoardCounts.all }}</strong>
-              <span>active community posts</span>
-            </div>
-            <div class="poster__lanes">
-              <div>
-                <small>service</small>
-                <strong>{{
-                  displayBoardCounts[submissionKinds.service]
-                }}</strong>
-              </div>
-              <div>
-                <small>borrow</small>
-                <strong>{{
-                  displayBoardCounts[submissionKinds.itemRequest]
-                }}</strong>
-              </div>
-              <div>
-                <small>lend</small>
-                <strong>{{
-                  displayBoardCounts[submissionKinds.itemLending]
-                }}</strong>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section id="live-board" class="live-board">
+    <section id="live-board" class="live-board" aria-labelledby="live-board-heading">
       <div class="live-board__heading">
-        <div class="section-heading">
-          <h2>Live board</h2>
-        </div>
+        <h2 id="live-board-heading" class="section-title">
+          Live board
+        </h2>
+        <p class="live-board__summary" aria-live="polite">
+          {{ boardSummary }}
+          <span v-if="managementPending"> · Claiming management access...</span>
+          <span v-else-if="boardPending && boardUiReady"> · Refreshing...</span>
+        </p>
+      </div>
 
-        <div class="board-tools">
-          <form class="board-search" @submit.prevent="submitBoardSearch">
-            <label class="board-search__field">
-              <span class="sr-only">Search the live board</span>
-              <input
-                v-model="boardSearchDraft"
-                autocomplete="off"
-                name="board_search"
-                placeholder="Search the board"
-                type="search"
-              >
-            </label>
-            <button class="secondary-button secondary-button--dark" type="submit">
-              Search
-            </button>
-            <button
-              v-if="boardSearch || boardSearchDraft"
-              class="secondary-button"
-              type="button"
-              @click="clearBoardSearch"
+      <div class="board-toolbar">
+        <form class="board-search" role="search" @submit.prevent="submitBoardSearch">
+          <label class="board-search__field">
+            <span class="sr-only">Search the live board</span>
+            <span aria-hidden="true" class="i-carbon-search board-search__icon" />
+            <input
+              v-model="boardSearchDraft"
+              autocomplete="off"
+              class="input"
+              name="board_search"
+              placeholder="Search posts"
+              type="search"
             >
-              Clear
-            </button>
-          </form>
+          </label>
+          <button class="button button--secondary" type="submit">
+            Search
+          </button>
+          <button
+            v-if="boardSearch || boardSearchDraft"
+            class="button button--quiet"
+            type="button"
+            @click="clearBoardSearch"
+          >
+            Clear
+          </button>
+        </form>
 
+        <div class="board-toolbar__options">
           <label class="board-sort">
             <span>Sort</span>
             <select
+              class="input"
               :value="boardSort"
               name="board_sort"
               @change="handleBoardSortChange"
@@ -808,957 +782,685 @@ watch(
             </select>
           </label>
 
-          <div class="board-origin">
-            <span>Origin</span>
-            <div class="board-origin__actions">
-              <button
-                class="secondary-button"
-                :disabled="boardGeoPending"
-                type="button"
-                @click="enableBoardNearbySort"
-              >
-                {{ boardGeoPending ? "Locating..." : boardOrigin ? "Refresh location" : "Use my location" }}
-              </button>
-              <button
-                v-if="boardOrigin"
-                class="secondary-button"
-                type="button"
-                @click="clearBoardOrigin"
-              >
-                Clear location
-              </button>
-            </div>
+          <div class="board-location">
+            <button
+              class="button button--quiet"
+              :disabled="boardGeoPending"
+              type="button"
+              @click="enableBoardNearbySort"
+            >
+              <span aria-hidden="true" :class="boardOrigin ? 'i-carbon-location-filled' : 'i-carbon-location'" />
+              {{ boardGeoPending ? "Locating..." : boardOrigin ? "Refresh location" : "Use my location" }}
+            </button>
+            <button
+              v-if="boardOrigin"
+              class="button button--quiet"
+              type="button"
+              @click="clearBoardOrigin"
+            >
+              Clear location
+            </button>
           </div>
-        </div>
-
-        <div
-          class="board-filter-strip"
-          role="group"
-          aria-label="Board filters"
-        >
-          <button
-            v-for="filter in boardFilters"
-            :key="filter.key"
-            :aria-pressed="boardFilter === filter.key"
-            :disabled="boardPending"
-            class="board-filter"
-            :class="[{ 'board-filter--active': boardFilter === filter.key }]"
-            type="button"
-            @click="setBoardFilter(filter.key)"
-          >
-            <span>{{ filter.label }}</span>
-            <strong>{{ displayBoardCounts[filter.key] }}</strong>
-          </button>
         </div>
       </div>
 
-      <div class="live-board__layout">
-        <div class="board-feed">
+      <div
+        class="board-filters"
+        role="group"
+        aria-label="Board filters"
+      >
+        <button
+          v-for="filter in boardFilters"
+          :key="filter.key"
+          :aria-pressed="boardFilter === filter.key"
+          :disabled="boardPending"
+          class="board-filter"
+          type="button"
+          @click="setBoardFilter(filter.key)"
+        >
+          <span>{{ filter.label }}</span>
+          <span class="board-filter__count">{{ displayBoardCounts[filter.key] }}</span>
+        </button>
+      </div>
+
+      <div class="board-notices">
+        <p
+          v-if="boardGeoError"
+          class="inline-note inline-note--error"
+          role="alert"
+        >
+          {{ boardGeoError }}
+        </p>
+        <p
+          v-if="securityError"
+          class="inline-note inline-note--error"
+          role="alert"
+        >
+          {{ securityError.message }} {{ securityError.detail }}
+        </p>
+        <p
+          v-if="managementNotice"
+          class="inline-note inline-note--success"
+          role="status"
+        >
+          {{ managementNotice }}
+        </p>
+        <p
+          v-if="managementError"
+          class="inline-note inline-note--error"
+          role="alert"
+        >
+          {{ managementError.message }} {{ managementError.detail }}
+        </p>
+      </div>
+
+      <div v-if="!boardUiReady" class="board-grid" role="status">
+        <span class="sr-only">Loading the live board...</span>
+        <div v-for="index in 4" :key="index" aria-hidden="true" class="board-card board-card--skeleton">
+          <span class="skeleton skeleton--short" />
+          <span class="skeleton skeleton--title" />
+          <span class="skeleton" />
+          <span class="skeleton" />
+        </div>
+      </div>
+
+      <div
+        v-else-if="boardError"
+        class="board-empty inline-note--error"
+        role="alert"
+      >
+        <p>{{ boardError.message }}</p>
+        <p>{{ boardError.detail }}</p>
+      </div>
+
+      <div v-else-if="!boardItems.length" class="board-empty">
+        <p>
+          {{
+            boardSearch
+              ? 'No posts match this search yet.'
+              : 'No posts match this filter yet.'
+          }}
+        </p>
+        <button
+          v-if="boardSearch"
+          class="button button--secondary"
+          type="button"
+          @click="clearBoardSearch"
+        >
+          Clear search
+        </button>
+      </div>
+
+      <div v-else class="board-grid">
+        <article
+          v-for="item in boardItems"
+          :key="item.id"
+          class="board-card"
+          :class="[getPostType(item.kind).tone, { 'board-card--resolved': item.resolutionStatus !== 'open' }]"
+        >
+          <div class="board-card__top">
+            <span class="badge badge--kind">
+              <span aria-hidden="true" :class="getPostType(item.kind).icon" />
+              {{ item.kindLabel }}
+            </span>
+            <span
+              v-if="item.resolutionStatus !== 'open'"
+              class="badge"
+              :class="item.resolutionStatus === 'fulfilled' ? 'badge--success' : 'badge--muted'"
+            >{{ getResolutionBadgeLabel(item) }}</span>
+            <time
+              class="board-card__time"
+              :datetime="item.createdAt"
+              :title="formatBoardDate(item.createdAt)"
+            >{{ formatRelativeTime(item.createdAt) }}</time>
+          </div>
+
+          <h3 class="board-card__title">
+            <NuxtLink prefetch-on="interaction" :to="getBoardDetailPath(item.id)">
+              {{ item.title }}
+            </NuxtLink>
+          </h3>
+
+          <p class="board-card__byline">
+            <span>{{ item.author.displayName }}</span>
+            <span v-if="item.author.hasAccount" class="badge badge--muted">Member</span>
+            <span aria-hidden="true">·</span>
+            <span>{{ formatReplyCount(item.interactionCount) }}</span>
+            <template v-if="item.distanceMiles != null">
+              <span aria-hidden="true">·</span>
+              <span>{{ item.distanceMiles.toFixed(1) }} mi away</span>
+            </template>
+          </p>
+
+          <p class="board-card__summary">
+            <span class="sr-only">{{ item.summaryLabel }}: </span>{{ item.summary }}
+          </p>
+
+          <dl v-if="item.attributes.length" class="board-card__facts">
+            <div
+              v-for="attribute in item.attributes"
+              :key="`${item.id}-${attribute.label}`"
+            >
+              <dt>{{ attribute.label }}</dt>
+              <dd>{{ attribute.value }}</dd>
+            </div>
+          </dl>
+
+          <div class="board-card__actions">
+            <NuxtLink
+              class="button button--secondary button--small"
+              prefetch-on="interaction"
+              :to="getBoardDetailPath(item.id)"
+            >
+              Open post
+            </NuxtLink>
+            <button
+              class="button button--quiet button--small"
+              :disabled="revealPending[item.id]"
+              type="button"
+              @click="revealItemContact(item)"
+            >
+              {{ getItemContactActionLabel(item) }}
+            </button>
+          </div>
           <p
-            v-if="boardGeoError"
+            v-if="revealErrors[item.id]"
             class="inline-note inline-note--error"
             role="alert"
           >
-            {{ boardGeoError }}
+            {{ revealErrors[item.id]?.message }}
+            {{ revealErrors[item.id]?.detail }}
           </p>
           <p
-            v-if="securityError"
-            class="inline-note inline-note--error"
-            role="alert"
-          >
-            {{ securityError.message }} {{ securityError.detail }}
-          </p>
-          <p
-            v-if="managementNotice"
+            v-if="isItemContactVisible(item.id)"
             class="inline-note inline-note--success"
             role="status"
           >
-            {{ managementNotice }}
+            Contact: {{ revealItemContacts[item.id] }}
           </p>
-          <p
-            v-if="managementError"
-            class="inline-note inline-note--error"
-            role="alert"
-          >
-            {{ managementError.message }} {{ managementError.detail }}
-          </p>
-
-          <div class="board-feed__meta">
-            <p>
-              {{ activeBoardTotal }}
-              {{ boardFilter === "all" ? "live posts" : "matching posts" }}
-            </p>
-            <p v-if="boardSearch">
-              Search: "{{ boardSearch }}"
-            </p>
-            <p v-if="managementPending">
-              Claiming management access...
-            </p>
-            <p v-else-if="boardPending && boardUiReady">
-              Refreshing this board view...
-            </p>
-          </div>
-
-          <div
-            v-if="!boardUiReady"
-            class="board-empty board-empty--loading"
-            role="status"
-          >
-            Loading the live board...
-          </div>
-
-          <div
-            v-else-if="boardError"
-            class="board-empty board-empty--error"
-            role="alert"
-          >
-            <p>{{ boardError.message }}</p>
-            <p>{{ boardError.detail }}</p>
-          </div>
-
-          <div v-else-if="!boardItems.length" class="board-empty">
-            <p>
-              {{
-                boardSearch
-                  ? 'No posts match this search yet.'
-                  : 'No posts match this filter yet.'
-              }}
-            </p>
-          </div>
-
-          <div v-else class="board-feed__list">
-            <article
-              v-for="item in boardItems"
-              :key="item.id"
-              class="board-card"
-            >
-              <header class="board-card__header">
-                <div>
-                  <p class="board-card__kind">
-                    {{ item.kindLabel }}
-                  </p>
-                  <h3>{{ item.title }}</h3>
-                </div>
-
-                <div class="board-card__meta">
-                  <span>{{ formatBoardDate(item.createdAt) }}</span>
-                  <span>{{ item.interactionCount }} replies</span>
-                  <span v-if="item.distanceMiles != null">{{ item.distanceMiles.toFixed(1) }} mi away</span>
-                </div>
-              </header>
-
-              <div class="board-card__author">
-                <strong>{{ item.author.displayName }}</strong>
-                <span v-if="item.author.hasAccount" class="board-card__badge">account-backed</span>
-                <span
-                  v-if="item.resolutionStatus !== 'open'"
-                  class="board-card__badge board-card__badge--resolved"
-                >{{ getResolutionBadgeLabel(item) }}</span>
-              </div>
-
-              <p class="board-card__summary-label">
-                {{ item.summaryLabel }}
-              </p>
-              <p class="board-card__summary">
-                {{ item.summary }}
-              </p>
-
-              <dl v-if="item.attributes.length" class="board-card__attributes">
-                <div
-                  v-for="attribute in item.attributes"
-                  :key="`${item.id}-${attribute.label}`"
-                >
-                  <dt>{{ attribute.label }}</dt>
-                  <dd>{{ attribute.value }}</dd>
-                </div>
-              </dl>
-
-              <div class="board-card__actions">
-                <NuxtLink
-                  class="secondary-button"
-                  prefetch-on="interaction"
-                  :to="getBoardDetailPath(item.id)"
-                >
-                  Open post
-                </NuxtLink>
-                <button
-                  class="secondary-button"
-                  :disabled="revealPending[item.id]"
-                  type="button"
-                  @click="revealItemContact(item)"
-                >
-                  {{ getItemContactActionLabel(item) }}
-                </button>
-              </div>
-              <p
-                v-if="item.resolutionStatus !== 'open'"
-                class="board-card__resolved-note"
-              >
-                {{ getResolvedNote(item) }}
-              </p>
-              <p
-                v-if="revealErrors[item.id]"
-                class="inline-note inline-note--error"
-                role="alert"
-              >
-                {{ revealErrors[item.id]?.message }}
-                {{ revealErrors[item.id]?.detail }}
-              </p>
-              <p
-                v-if="isItemContactVisible(item.id)"
-                class="inline-note inline-note--success"
-                role="status"
-              >
-                Contact: {{ revealItemContacts[item.id] }}
-              </p>
-            </article>
-          </div>
-
-          <div v-if="boardUiReady && !boardError" class="board-pagination">
-            <div class="board-pagination__summary">
-              Page {{ boardPagination.page }} of
-              {{ boardPagination.totalPages }}
-              <span>· {{ boardPagination.totalItems }} total in this view</span>
-            </div>
-            <div class="board-pagination__actions">
-              <button
-                class="secondary-button"
-                :disabled="boardPending || !boardPagination.hasPreviousPage"
-                type="button"
-                @click="changeBoardPage(boardPagination.page - 1)"
-              >
-                Newer posts
-              </button>
-              <button
-                class="secondary-button secondary-button--dark"
-                :disabled="boardPending || !boardPagination.hasNextPage"
-                type="button"
-                @click="changeBoardPage(boardPagination.page + 1)"
-              >
-                Older posts
-              </button>
-            </div>
-          </div>
-        </div>
+        </article>
       </div>
+
+      <nav
+        v-if="boardUiReady && !boardError && boardPagination.totalPages > 1"
+        aria-label="Board pages"
+        class="board-pagination"
+      >
+        <button
+          class="button button--secondary"
+          :disabled="boardPending || !boardPagination.hasPreviousPage"
+          type="button"
+          @click="changeBoardPage(boardPagination.page - 1)"
+        >
+          <span aria-hidden="true" class="i-carbon-chevron-left" />
+          Previous page
+        </button>
+        <p class="board-pagination__summary">
+          Page {{ boardPagination.page }} of {{ boardPagination.totalPages }}
+        </p>
+        <button
+          class="button button--secondary"
+          :disabled="boardPending || !boardPagination.hasNextPage"
+          type="button"
+          @click="changeBoardPage(boardPagination.page + 1)"
+        >
+          Next page
+          <span aria-hidden="true" class="i-carbon-chevron-right" />
+        </button>
+      </nav>
     </section>
   </div>
 </template>
 
 <style scoped>
 .home-page {
-  display: flex;
-  flex-direction: column;
-  gap: 2.75rem;
-  padding-bottom: 2rem;
-}
-
-.hero,
-.live-board {
-  padding-right: var(--page-inline-end);
-  padding-left: var(--page-inline-start);
-}
-
-.home-title {
-  padding-right: max(1rem, env(safe-area-inset-right));
-  padding-left: max(1rem, env(safe-area-inset-left));
-  padding-top: clamp(2rem, 4.5vw, 4.6rem);
-  text-align: center;
-}
-
-.home-title h1 {
-  width: 100%;
-  max-width: none;
-  margin: 0 auto;
-  font-family: 'DM Serif Display', serif;
-  font-size: clamp(3rem, 5.65vw, 6.75rem);
-  font-weight: 400;
-  line-height: 0.88;
-  letter-spacing: -0.05em;
-  color: var(--site-heading);
-  text-wrap: balance;
-}
-
-.hero {
-  padding-top: 0;
-}
-
-.hero__inner {
-  min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(250px, 0.65fr);
-  align-items: center;
-  gap: clamp(2rem, 4vw, 4.5rem);
-  padding-block: clamp(3rem, 7vw, 5.5rem);
+  gap: clamp(1.75rem, 3.5vw, 2.75rem);
 }
 
-.hero__copy {
-  align-self: center;
-  min-width: 0;
-  max-width: 46rem;
-  padding-right: clamp(0rem, 2vw, 1.75rem);
-  animation: rise-in 700ms ease both;
+/* Hero ---------------------------------------------------------------- */
+
+.home-hero {
+  display: grid;
+  gap: 1.25rem;
+  padding-top: clamp(1.75rem, 4vw, 3rem);
 }
 
-.eyebrow {
-  margin: 0 0 1rem;
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--site-muted);
-}
-
-.hero h2,
-.section-heading h2 {
-  margin: 0;
-  font-family: 'DM Serif Display', serif;
+.home-hero h1 {
+  font-family: var(--font-serif);
+  font-size: clamp(2.2rem, 4.6vw, 3.6rem);
   font-weight: 400;
   letter-spacing: -0.03em;
-  color: var(--site-heading);
+  line-height: 1;
 }
 
-.hero h2 {
-  max-width: 15ch;
-  font-size: clamp(2.2rem, 3.7vw, 3.65rem);
-  line-height: 0.95;
-  overflow-wrap: anywhere;
-  text-wrap: balance;
-}
-
-.hero__lede,
-.section-copy,
-.board-card__summary {
-  color: var(--site-text);
-  line-height: 1.7;
-}
-
-.hero__lede {
-  max-width: 38rem;
-  margin: 1.1rem 0 0;
-  font-size: 1.04rem;
-}
-
-.hero__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.9rem;
-  margin-top: 1.55rem;
-}
-
-.hero__actions a,
-.secondary-button,
-.board-filter {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 2.95rem;
-  padding: 0.88rem 1.2rem;
-  border: 0;
-  border-radius: 1rem;
-  text-decoration: none;
-  font-size: 0.96rem;
-  font-weight: 700;
-  touch-action: manipulation;
-  transition:
-    transform 180ms ease,
-    box-shadow 180ms ease,
-    background-color 180ms ease,
-    color 180ms ease,
-    border-color 180ms ease;
-}
-
-.hero__actions a,
-.secondary-button--dark {
-  background: var(--site-button-bg);
-  color: var(--site-button-text);
-  box-shadow: 0 16px 30px var(--site-focus-ring);
-}
-
-.hero__actions a:hover,
-.hero__actions a:focus-visible,
-.secondary-button--dark:hover,
-.secondary-button--dark:focus-visible {
-  transform: translateY(-1px);
-  background: var(--site-button-bg-hover);
-}
-
-.hero__caption {
-  margin: 1.35rem 0 0;
-  max-width: 32rem;
-  color: var(--site-subtle);
-  line-height: 1.65;
-}
-
-.hero__poster {
-  align-self: center;
-  display: flex;
-  min-width: 0;
-  justify-content: flex-end;
-  animation: poster-in 860ms ease 60ms both;
-}
-
-.poster {
-  position: relative;
-  width: min(24rem, 100%);
-  padding: 1.35rem;
-  border-radius: 1.75rem;
-  background: linear-gradient(160deg, var(--site-poster-start), var(--site-poster-end)), var(--site-elevated-strong);
-  border: 1px solid var(--site-border);
-  box-shadow:
-    var(--site-shadow-strong),
-    inset 0 1px 0 var(--site-accent-ghost);
-  transform: rotate(2deg);
-}
-
-.poster::before {
-  content: '';
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  width: 4.75rem;
-  height: 4.75rem;
-  border-radius: 50%;
-  background: var(--site-highlight);
-  filter: blur(2px);
-}
-
-.poster__stamp {
-  display: inline-flex;
-  padding: 0.45rem 0.75rem;
-  border-radius: 999px;
-  background: var(--site-accent-soft);
-  font-size: 0.76rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--site-link);
-}
-
-.poster__headline {
-  margin-top: 1.4rem;
-  display: grid;
-  gap: 0.35rem;
-}
-
-.poster__headline strong {
-  font-family: 'DM Serif Display', serif;
-  font-size: clamp(2.35rem, 5vw, 3.35rem);
-  line-height: 0.95;
-  color: var(--site-text-strong);
-}
-
-.poster__headline span {
-  max-width: 15rem;
-  color: var(--site-subtle);
-  line-height: 1.5;
-}
-
-.poster__lanes {
+.home-hero__tiles {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.65rem;
-  margin-top: 1.2rem;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.poster__lanes div {
-  padding: 0.78rem 0.82rem;
-  border-radius: 1.2rem;
-  background: var(--site-elevated);
-  border: 1px solid var(--site-border);
+.post-tile {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  height: 100%;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  background: var(--site-surface-strong);
+  color: var(--site-heading);
+  font-weight: 700;
+  text-decoration: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
-.poster__lanes small {
-  display: block;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--site-muted);
-  font-size: 0.72rem;
-}
-
-.poster__lanes strong {
-  display: block;
-  margin-top: 0.3rem;
-  font-size: 1.55rem;
+.post-tile:hover,
+.post-tile:focus-visible {
+  border-color: var(--kind);
+  box-shadow: var(--site-shadow);
   color: var(--site-heading);
 }
 
-.poster__note {
-  margin: 1.1rem 0 0;
-  color: var(--site-subtle);
-  font-size: 0.94rem;
+.post-tile__icon {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--kind) 14%, transparent);
+  color: var(--kind);
+  font-size: 1.15rem;
 }
+
+.post-tile__label {
+  flex: 1;
+  line-height: 1.3;
+}
+
+.post-tile__label-short {
+  display: none;
+}
+
+.post-tile__arrow {
+  flex: none;
+  color: var(--site-subtle);
+  transition: transform 160ms ease;
+}
+
+.post-tile:hover .post-tile__arrow {
+  transform: translateX(3px);
+}
+
+/* Board --------------------------------------------------------------- */
 
 .live-board {
-  display: grid;
-  gap: 1.5rem;
-}
-
-.live-board__heading {
   display: grid;
   gap: 1rem;
 }
 
-.board-tools {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 0.9rem;
-  align-items: end;
-  padding: var(--page-surface-padding);
-  border: 1px solid var(--site-border);
-  border-radius: var(--page-surface-radius);
-  background: color-mix(in srgb, var(--site-surface-soft) 82%, transparent);
+.live-board__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 1rem;
+}
+
+.live-board__summary {
+  color: var(--site-subtle);
+  font-size: var(--text-sm);
+}
+
+.board-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
 }
 
 .board-search {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-
-.board-search__field,
-.board-sort,
-.board-origin {
-  display: grid;
-  gap: 0.45rem;
+  flex: 1 1 26rem;
+  gap: 0.5rem;
 }
 
 .board-search__field {
-  flex: 1 1 20rem;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.board-search__icon {
+  position: absolute;
+  top: 50%;
+  left: 0.85rem;
+  color: var(--site-subtle);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.board-search__field .input {
+  padding-left: 2.5rem;
+}
+
+.board-toolbar__options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
 }
 
 .board-sort {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--site-subtle);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.board-sort .input {
+  width: auto;
   min-width: 11rem;
 }
 
-.board-sort span,
-.board-origin span {
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--site-muted);
-}
-
-.board-origin__actions {
+.board-location {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.6rem;
+  gap: 0.25rem;
 }
 
-.board-search__field input,
-.board-sort select {
-  width: 100%;
-  border: 1px solid var(--site-border-strong);
-  border-radius: 1rem;
-  background: var(--site-input-bg);
-  color: var(--site-input-text);
-  padding: 0.92rem 1rem;
-  font: inherit;
-  transition:
-    border-color 180ms ease,
-    box-shadow 180ms ease,
-    background-color 180ms ease;
-}
-
-.board-search__field input:focus-visible,
-.board-sort select:focus-visible {
-  outline: none;
-  border-color: var(--site-focus);
-  box-shadow: 0 0 0 4px var(--site-focus-ring);
-  background: var(--site-elevated-strong);
-}
-
-.section-heading {
-  min-width: 0;
-  max-width: 42rem;
-}
-
-.section-copy {
-  margin: 1rem 0 0;
-}
-
-.board-filter-strip {
+.board-filters {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 0.5rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.board-filters::-webkit-scrollbar {
+  display: none;
 }
 
 .board-filter {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
   gap: 0.5rem;
-  min-width: fit-content;
-  padding: 0.78rem 0.95rem;
+  min-height: 2.5rem;
+  padding: 0.45rem 0.6rem 0.45rem 0.9rem;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
   background: transparent;
-  color: var(--site-text-strong);
-  border: 1px solid var(--site-border-strong);
+  color: var(--site-text);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
 }
 
-.board-filter strong {
-  font-size: 0.82rem;
-  color: var(--site-subtle);
+.board-filter:hover:not(:disabled) {
+  border-color: var(--field-border);
+  color: var(--site-heading);
 }
 
-.board-filter:hover,
-.board-filter:focus-visible,
-.board-filter--active {
-  border-color: var(--site-accent-soft-strong);
-  background: color-mix(in srgb, var(--site-surface-soft) 90%, transparent);
+.board-filter[aria-pressed='true'] {
+  border-color: var(--site-button-bg);
+  background: var(--site-button-bg);
+  color: var(--site-button-text);
 }
 
-.live-board__layout {
+.board-filter:disabled {
+  cursor: wait;
+}
+
+.board-filter__count {
+  min-width: 1.6rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-align: center;
+}
+
+.board-notices {
   display: grid;
-  gap: 1.35rem;
+  gap: 0.6rem;
+}
+
+.board-notices:empty {
+  display: none;
+}
+
+.board-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+  gap: 1rem;
   align-items: start;
 }
 
 .board-card {
-  padding: 1.5rem;
-  border-radius: 1.65rem;
-  background: var(--site-surface);
-  border: 1px solid var(--site-border);
+  display: grid;
+  gap: 0.6rem;
+  min-width: 0;
+  padding: 1.1rem 1.2rem 1rem;
+  border: 1px solid var(--card-border);
+  border-top: 3px solid var(--kind, var(--card-border));
+  border-radius: var(--radius-lg);
+  background: var(--site-surface-strong);
+  transition: box-shadow 160ms ease;
+}
+
+.board-card:hover {
   box-shadow: var(--site-shadow);
 }
-.board-card__resolved-note {
-  margin: 0;
-  color: var(--site-subtle);
-  line-height: 1.65;
+
+.board-card--resolved {
+  border-top-color: var(--card-border);
 }
 
-.inline-note,
-.success-note,
-.error-panel {
-  margin-top: 1rem;
-  padding: 0.9rem 1rem;
-  border-radius: 1rem;
-  line-height: 1.55;
-}
-
-.inline-note--success,
-.success-note {
-  background: var(--site-success-bg);
-  color: var(--site-success-text);
-}
-
-.inline-note--error,
-.error-panel {
-  background: var(--site-error-bg);
-  color: var(--site-error-text);
-}
-
-.board-feed {
-  display: grid;
-  gap: 1rem;
-}
-
-.board-feed__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem 1rem;
-  color: var(--site-subtle);
-  font-size: 0.95rem;
-}
-
-.board-feed__meta p {
-  margin: 0;
-}
-
-.board-feed__list {
-  display: grid;
-  gap: 1rem;
-}
-
-.board-pagination {
+.board-card__top {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.9rem;
-  padding: 1rem 0 0.2rem;
+  gap: 0.4rem;
 }
 
-.board-pagination__summary {
+.board-card__time {
+  margin-left: auto;
   color: var(--site-subtle);
-  font-size: 0.95rem;
+  font-size: var(--text-xs);
 }
 
-.board-pagination__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-
-.board-empty {
-  padding: 1.4rem 1.5rem;
-  border-radius: 1.4rem;
-  background: var(--site-surface-soft);
-  border: 1px dashed var(--site-border-dashed);
-  color: var(--site-subtle);
-}
-
-.board-empty p {
-  margin: 0;
-}
-
-.board-empty p + p {
-  margin-top: 0.55rem;
-}
-
-.board-empty a {
-  color: var(--site-link);
+.board-card__title {
+  font-size: var(--text-lg);
   font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.board-card__title a {
+  color: var(--site-heading);
   text-decoration: none;
 }
 
-.board-empty a:hover,
-.board-empty a:focus-visible {
+.board-card__title a:hover,
+.board-card__title a:focus-visible {
   text-decoration: underline;
-  text-underline-offset: 0.2em;
 }
 
-.board-card {
-  display: grid;
-  gap: 1rem;
-}
-
-.board-card__header {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: flex-start;
-}
-
-.board-card__header > div {
-  min-width: 0;
-}
-
-.board-card__kind,
-.board-card__summary-label {
-  margin: 0;
-  font-size: 0.76rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--site-muted);
-}
-
-.board-card__header h3 {
-  margin: 0.35rem 0 0;
-  font-family: 'DM Serif Display', serif;
-  font-size: 2rem;
-  line-height: 1;
-  color: var(--site-text-strong);
-  overflow-wrap: anywhere;
-  text-wrap: balance;
-}
-
-.board-card__meta {
-  display: grid;
-  gap: 0.35rem;
-  justify-items: end;
-  color: var(--site-subtle);
-  font-size: 0.88rem;
-}
-
-.board-card__author {
+.board-card__byline {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.65rem;
   align-items: center;
-  color: var(--site-text-strong);
-}
-
-.board-card__badge {
-  display: inline-flex;
-  padding: 0.32rem 0.62rem;
-  border-radius: 0.8rem;
-  background: var(--site-accent-soft);
-  color: var(--site-link);
-  font-size: 0.76rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.board-card__badge--resolved {
-  background: var(--site-success-bg);
-  color: var(--site-success-text);
-}
-
-.board-card__summary-label {
-  margin-bottom: -0.4rem;
+  gap: 0.2rem 0.45rem;
+  color: var(--site-subtle);
+  font-size: var(--text-sm);
 }
 
 .board-card__summary {
-  margin: 0;
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--site-text);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
   overflow-wrap: anywhere;
 }
 
-.board-card__attributes {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 0.8rem;
+.board-card__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
   margin: 0;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--divider);
+  font-size: var(--text-sm);
 }
 
-.board-card__attributes div {
-  padding: 0.9rem 0.95rem;
-  border-radius: 1rem;
-  background: var(--site-elevated);
+.board-card__facts div {
+  min-width: 0;
 }
 
-.board-card__attributes dt {
+.board-card__facts dt {
+  color: var(--site-subtle);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.board-card__facts dd {
   margin: 0;
-  font-size: 0.75rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--site-muted);
-}
-
-.board-card__attributes dd {
-  margin: 0.4rem 0 0;
   color: var(--site-heading);
-  line-height: 1.55;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 
 .board-card__actions {
   display: flex;
   flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.2rem;
+}
+
+.board-card--skeleton {
   gap: 0.75rem;
+  border-top-color: var(--card-border);
 }
 
-.secondary-button {
-  background: transparent;
-  color: var(--site-heading);
-  border: 1px solid var(--site-border-strong);
+.skeleton {
+  display: block;
+  height: 0.9rem;
+  border-radius: 0.4rem;
+  background: color-mix(in srgb, var(--site-text) 10%, transparent);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
 }
 
-.secondary-button:hover,
-.secondary-button:focus-visible {
-  transform: translateY(-1px);
-  background: var(--site-elevated);
+.skeleton--short {
+  width: 35%;
 }
 
-.secondary-button:disabled,
-.board-filter:disabled {
-  opacity: 0.68;
-  cursor: wait;
-  transform: none;
+.skeleton--title {
+  width: 70%;
+  height: 1.3rem;
 }
 
-.secondary-button--dark {
-  background: var(--site-button-bg);
-  color: var(--site-button-text);
+.board-empty {
+  display: grid;
+  justify-items: start;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  border: 1px dashed var(--field-border);
+  border-radius: var(--radius-lg);
+  color: var(--site-subtle);
 }
 
-.secondary-button--danger {
-  border-color: rgba(181, 95, 82, 0.3);
-  color: var(--site-error-text);
-  background: var(--site-error-bg);
+.board-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
 }
 
-.secondary-button--danger:hover,
-.secondary-button--danger:focus-visible {
-  background: rgba(181, 95, 82, 0.24);
+.board-pagination__summary {
+  color: var(--site-subtle);
+  font-size: var(--text-sm);
 }
 
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-@keyframes rise-in {
-  from {
-    opacity: 0;
-    transform: translateY(22px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes poster-in {
-  from {
-    opacity: 0;
-    transform: translateY(20px) rotate(6deg);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) rotate(2deg);
-  }
-}
-
-@media (max-width: 1080px) {
-  .hero__inner {
-    grid-template-columns: 1fr;
-    padding-block: clamp(2.35rem, 6vw, 4.25rem);
-  }
-
-  .hero__poster {
-    display: none;
-  }
-}
-
-@media (max-width: 860px) {
-  .board-tools,
-  .poster__lanes {
-    grid-template-columns: 1fr;
-  }
-
-  .board-card__header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .board-card__meta {
-    justify-items: start;
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.5;
   }
 }
 
 @media (max-width: 760px) {
-  .home-title {
-    padding-top: 1.65rem;
+  .home-hero {
+    gap: 1rem;
   }
 
-  .home-title h1 {
-    font-size: clamp(2.7rem, 14vw, 4.25rem);
+  .home-hero__tiles {
+    gap: 0.5rem;
   }
 
-  .hero__inner {
-    gap: 1.45rem;
-    padding-block: clamp(1.75rem, 7vw, 3rem);
-  }
-
-  .hero h2 {
-    max-width: 100%;
-  }
-
-  .board-card {
-    padding: 1.2rem;
-  }
-
-  .hero__actions,
-  .board-search,
-  .board-origin__actions,
-  .board-card__actions {
+  .post-tile {
     flex-direction: column;
-    align-items: stretch;
+    gap: 0.4rem;
+    padding: 0.75rem 0.4rem;
+    font-size: var(--text-sm);
+    text-align: center;
   }
 
-  .board-search__field {
-    flex-basis: auto;
+  .post-tile {
+    position: relative;
   }
 
-  .secondary-button,
-  .hero__actions a {
+  /* Keep the full label as the link's accessible name. */
+  .post-tile__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .post-tile__arrow {
+    display: none;
+  }
+
+  .post-tile__label-short {
+    display: block;
+    line-height: 1.25;
+  }
+
+  .board-search {
+    flex-basis: 100%;
+  }
+
+  .board-toolbar__options {
     width: 100%;
+    justify-content: space-between;
+  }
+
+  .board-sort .input {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .board-pagination .button {
+    padding-inline: 0.75rem;
+  }
+
+  .board-pagination__summary {
+    font-size: var(--text-xs);
   }
 }
 </style>
