@@ -373,13 +373,6 @@ watch(
 <template>
   <div class="account-page">
     <section class="account-page__hero">
-      <NuxtLink
-        class="account-page__back"
-        prefetch-on="interaction"
-        to="/#live-board"
-      >
-        Back to live board
-      </NuxtLink>
 
       <h1>Account</h1>
     </section>
@@ -585,19 +578,6 @@ watch(
   min-width: 0;
   max-width: var(--page-hero-max);
   padding-block: var(--page-hero-space);
-}
-
-.account-page__back {
-  width: fit-content;
-  text-decoration: none;
-  color: var(--site-link);
-  font-weight: 700;
-}
-
-.account-page__back:hover,
-.account-page__back:focus-visible {
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
 }
 
 .eyebrow {

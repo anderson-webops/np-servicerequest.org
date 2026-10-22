@@ -19,13 +19,6 @@ useSeoMeta({
 <template>
   <div class="service-directory-page">
     <section class="service-directory-page__hero">
-      <NuxtLink
-        class="service-directory-page__back"
-        prefetch-on="interaction"
-        to="/#live-board"
-      >
-        Back to live board
-      </NuxtLink>
 
       <h1>Service directory</h1>
 
@@ -130,15 +123,6 @@ useSeoMeta({
   padding-block: var(--page-hero-space);
 }
 
-.service-directory-page__back {
-  width: fit-content;
-  text-decoration: none;
-  color: var(--site-link);
-  font-weight: 700;
-}
-
-.service-directory-page__back:hover,
-.service-directory-page__back:focus-visible,
 .service-directory-page__actions a:hover,
 .service-directory-page__actions a:focus-visible,
 .directory-cta__link:hover,

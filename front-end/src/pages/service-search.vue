@@ -236,11 +236,12 @@ function changeProviderPage(nextPage: number) {
   <div class="service-directory-page">
     <section class="service-directory-page__hero">
       <NuxtLink
-        class="service-directory-page__back"
+        class="back-link"
         prefetch-on="interaction"
         to="/service-directory"
       >
-        Back to service directory
+        <span aria-hidden="true" class="i-carbon-arrow-left" />
+        Service directory
       </NuxtLink>
 
       <h1>Service opportunities</h1>
@@ -581,19 +582,6 @@ function changeProviderPage(nextPage: number) {
   max-width: var(--page-hero-max);
   min-width: 0;
   padding-block: var(--page-hero-space);
-}
-
-.service-directory-page__back {
-  width: fit-content;
-  text-decoration: none;
-  color: var(--site-link);
-  font-weight: 700;
-}
-
-.service-directory-page__back:hover,
-.service-directory-page__back:focus-visible {
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
 }
 
 .eyebrow {

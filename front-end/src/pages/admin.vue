@@ -800,13 +800,6 @@ watch(
 <template>
   <div class="admin-page">
     <section class="admin-page__hero">
-      <NuxtLink
-        class="admin-page__back"
-        prefetch-on="interaction"
-        to="/#live-board"
-      >
-        Back to live board
-      </NuxtLink>
 
       <h1>Admin review</h1>
     </section>
@@ -1200,19 +1193,6 @@ watch(
   max-width: var(--page-hero-max);
   padding-block: var(--page-hero-space);
   gap: var(--page-hero-gap);
-}
-
-.admin-page__back {
-  width: fit-content;
-  color: var(--site-link);
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.admin-page__back:hover,
-.admin-page__back:focus-visible {
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
 }
 
 .eyebrow {
