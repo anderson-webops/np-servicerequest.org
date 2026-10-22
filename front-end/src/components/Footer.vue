@@ -1,36 +1,59 @@
+<script setup lang="ts">
+import { postTypeLinks } from '~/utils/postTypes'
+</script>
+
 <template>
   <footer class="site-footer">
-    <div class="site-footer__left">
-      <NuxtLink class="site-footer__help" prefetch-on="interaction" to="/help">
-        Help
-      </NuxtLink>
-      <NuxtLink
-        class="site-footer__help"
-        prefetch-on="interaction"
-        to="/service-directory"
-      >
-        Service directory
-      </NuxtLink>
-    </div>
+    <div class="site-footer__inner">
+      <nav aria-label="Footer" class="site-footer__nav">
+        <div class="site-footer__group">
+          <h2>Board</h2>
+          <ul>
+            <li>
+              <NuxtLink prefetch-on="interaction" to="/#live-board">
+                Live board
+              </NuxtLink>
+            </li>
+            <li>
+              <NuxtLink prefetch-on="interaction" to="/account">
+                Account
+              </NuxtLink>
+            </li>
+            <li>
+              <NuxtLink prefetch-on="interaction" to="/help">
+                Help
+              </NuxtLink>
+            </li>
+          </ul>
+        </div>
 
-    <div class="site-footer__right">
-      <div class="site-footer__links">
-        <NuxtLink prefetch-on="interaction" to="/#live-board">
-          Live board
-        </NuxtLink>
-        <NuxtLink prefetch-on="interaction" to="/service-request">
-          Service projects
-        </NuxtLink>
-        <NuxtLink prefetch-on="interaction" to="/item-request">
-          Borrow an item
-        </NuxtLink>
-        <NuxtLink prefetch-on="interaction" to="/item-lending">
-          Lend an item
-        </NuxtLink>
-        <NuxtLink prefetch-on="interaction" to="/account">
-          Optional account
-        </NuxtLink>
-      </div>
+        <div class="site-footer__group">
+          <h2>Post</h2>
+          <ul>
+            <li v-for="postType in postTypeLinks" :key="postType.to">
+              <NuxtLink prefetch-on="interaction" :to="postType.to">
+                {{ postType.label }}
+              </NuxtLink>
+            </li>
+          </ul>
+        </div>
+
+        <div class="site-footer__group">
+          <h2>Resources</h2>
+          <ul>
+            <li>
+              <NuxtLink prefetch-on="interaction" to="/service-directory">
+                Service directory
+              </NuxtLink>
+            </li>
+            <li>
+              <NuxtLink prefetch-on="interaction" to="/service-search">
+                Local service search
+              </NuxtLink>
+            </li>
+          </ul>
+        </div>
+      </nav>
 
       <div class="site-footer__theme">
         <ThemeSchemePicker compact align="end" panel-align="end" />
@@ -41,74 +64,60 @@
 
 <style scoped>
 .site-footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1.5rem;
-  padding-top: 2.5rem;
-  padding-right: var(--page-inline-end);
-  padding-bottom: max(3rem, calc(2rem + var(--page-block-end)));
-  padding-left: var(--page-inline-start);
+  margin-top: clamp(2.5rem, 5vw, 4rem);
+  border-top: 1px solid var(--divider);
   color: var(--site-subtle);
 }
 
-.site-footer__left {
-  display: grid;
-  gap: 0.4rem;
-}
-
-.site-footer__right {
-  display: grid;
-  gap: 1rem;
-  justify-items: end;
-  margin-left: auto;
-}
-
-.site-footer__links {
+.site-footer__inner {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  max-width: 48rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 2rem;
+  max-width: var(--content-max);
+  margin-inline: auto;
+  padding: 2rem var(--page-inline-end) max(2.5rem, calc(1.5rem + var(--page-block-end))) var(--page-inline-start);
+}
+
+.site-footer__nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem clamp(2rem, 6vw, 4.5rem);
+}
+
+.site-footer__group h2 {
+  margin-bottom: 0.6rem;
+  color: var(--site-subtle);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.site-footer__group ul {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site-footer__group a {
+  color: var(--site-heading);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.site-footer__group a:hover,
+.site-footer__group a:focus-visible {
+  text-decoration: underline;
 }
 
 .site-footer__theme {
   width: min(100%, 13.5rem);
 }
 
-.site-footer__help,
-.site-footer__links a {
-  color: var(--site-heading);
-  text-decoration: none;
-  font-weight: 600;
-}
-
-.site-footer__help:hover,
-.site-footer__help:focus-visible,
-.site-footer__links a:hover,
-.site-footer__links a:focus-visible {
-  text-decoration: underline;
-  text-underline-offset: 0.22em;
-}
-
-@media (max-width: 760px) {
-  .site-footer {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .site-footer__right {
-    width: 100%;
-    justify-items: start;
-    margin-left: 0;
-  }
-
-  .site-footer__links {
-    margin-left: 0;
-    justify-content: flex-start;
-  }
-
+@media (max-width: 640px) {
   .site-footer__theme {
     width: 100%;
   }

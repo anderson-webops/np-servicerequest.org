@@ -33,7 +33,7 @@ useHead(() => ({
 
 <style>
 :root {
-  --page-inline: clamp(1.25rem, 4vw, 5rem);
+  --page-inline: clamp(1rem, 4vw, 2.5rem);
   --page-inline-start: max(var(--page-inline), env(safe-area-inset-left));
   --page-inline-end: max(var(--page-inline), env(safe-area-inset-right));
   --page-block-start: max(0px, env(safe-area-inset-top));
@@ -64,7 +64,7 @@ video {
 
 html {
   scroll-behavior: smooth;
-  scroll-padding-top: 6rem;
+  scroll-padding-top: 5.5rem;
   background: var(--site-bg-start);
 }
 

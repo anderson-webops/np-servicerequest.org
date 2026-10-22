@@ -1,30 +1,37 @@
+<script setup lang="ts">
+const route = useRoute()
+
+const navLinks = [
+  { label: 'Board', to: '/#live-board', match: (path: string) => path === '/' || path.startsWith('/post') },
+  { label: 'Directory', to: '/service-directory', match: (path: string) => path.startsWith('/service-directory') || path.startsWith('/service-search') },
+  { label: 'Help', to: '/help', match: (path: string) => path.startsWith('/help') },
+  { label: 'Account', to: '/account', match: (path: string) => path.startsWith('/account') },
+]
+</script>
+
 <template>
   <header class="site-header">
-    <NuxtLink class="site-header__brand" prefetch-on="interaction" to="/">
-      <span class="site-header__name">np-servicerequest.org</span>
-    </NuxtLink>
+    <div class="site-header__inner">
+      <NuxtLink class="site-header__brand" prefetch-on="interaction" to="/">
+        np-servicerequest.org
+      </NuxtLink>
 
-    <div class="site-header__actions">
       <nav aria-label="Primary" class="site-header__nav">
-        <NuxtLink prefetch-on="interaction" to="/#live-board">
-          <span class="site-header__label-full">Live board</span>
-          <span class="site-header__label-short">Board</span>
-        </NuxtLink>
-        <NuxtLink prefetch-on="interaction" to="/service-request">
-          <span class="site-header__label-full">Service projects</span>
-          <span class="site-header__label-short">Service</span>
-        </NuxtLink>
-        <NuxtLink prefetch-on="interaction" to="/item-request">
-          <span class="site-header__label-full">Borrow an item</span>
-          <span class="site-header__label-short">Borrow</span>
-        </NuxtLink>
-        <NuxtLink prefetch-on="interaction" to="/item-lending">
-          <span class="site-header__label-full">Lend an item</span>
-          <span class="site-header__label-short">Lend</span>
+        <NuxtLink
+          v-for="link in navLinks"
+          :key="link.to"
+          :aria-current="link.match(route.path) ? 'page' : undefined"
+          prefetch-on="interaction"
+          :to="link.to"
+        >
+          {{ link.label }}
         </NuxtLink>
       </nav>
 
-      <DarkToggle />
+      <div class="site-header__actions">
+        <NewPostMenu />
+        <DarkToggle />
+      </div>
     </div>
   </header>
 </template>
@@ -34,168 +41,123 @@
   position: sticky;
   top: 0;
   z-index: 30;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
-  padding-top: max(1rem, var(--page-block-start));
-  padding-right: var(--page-inline-end);
-  padding-bottom: 1rem;
-  padding-left: var(--page-inline-start);
+  padding-top: var(--page-block-start);
   background: var(--site-header-bg);
   backdrop-filter: blur(18px);
-  border-bottom: 1px solid var(--site-header-border);
+  border-bottom: 1px solid var(--divider);
+}
+
+.site-header__inner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: 'brand nav actions';
+  align-items: center;
+  gap: 0.75rem 1.5rem;
+  max-width: var(--content-max);
+  margin-inline: auto;
+  padding: 0.7rem var(--page-inline-end) 0.7rem var(--page-inline-start);
 }
 
 .site-header__brand {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
+  grid-area: brand;
   min-width: 0;
-  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--site-heading);
-}
-
-.site-header__eyebrow {
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--site-muted);
-}
-
-.site-header__name {
-  font-family: 'DM Serif Display', serif;
-  font-size: 1.55rem;
+  font-family: var(--font-serif);
+  font-size: 1.35rem;
   line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
 }
 
-.site-header__actions {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.7rem;
+.site-header__brand:hover {
+  color: var(--site-heading);
 }
 
 .site-header__nav {
+  grid-area: nav;
   display: flex;
-  flex-wrap: wrap;
+  gap: 0.25rem;
   min-width: 0;
-  justify-content: flex-end;
-  gap: 0.35rem 0.55rem;
 }
 
 .site-header__nav a {
-  padding: 0.6rem 0.78rem;
-  border: 1px solid transparent;
-  border-radius: 0.95rem;
-  text-decoration: none;
-  color: var(--site-heading);
-  font-size: 0.92rem;
+  position: relative;
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--radius-sm);
+  color: var(--site-text);
+  font-size: var(--text-sm);
   font-weight: 600;
+  text-decoration: none;
   white-space: nowrap;
-  touch-action: manipulation;
-  transition:
-    border-color 160ms ease,
-    background-color 160ms ease,
-    color 160ms ease;
 }
 
 .site-header__nav a:hover,
 .site-header__nav a:focus-visible {
-  border-color: var(--site-border);
-  background: color-mix(in srgb, var(--site-surface-soft) 86%, transparent);
-  color: var(--site-text-strong);
+  background: var(--site-accent-soft);
+  color: var(--site-heading);
 }
 
-.site-header__label-short {
-  display: none;
+.site-header__nav a[aria-current='page'] {
+  color: var(--site-heading);
 }
 
-@media (max-width: 1080px) {
-  .site-header {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 1rem;
-  }
+.site-header__nav a[aria-current='page']::after {
+  content: '';
+  position: absolute;
+  right: 0.7rem;
+  bottom: 0.2rem;
+  left: 0.7rem;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
 
-  .site-header__actions {
-    width: 100%;
-    justify-content: space-between;
+.site-header__actions {
+  grid-area: actions;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+@media (max-width: 860px) {
+  .site-header__inner {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'brand actions'
+      'nav nav';
+    padding-bottom: 0.35rem;
   }
 
   .site-header__nav {
-    flex: 1;
-    justify-content: flex-start;
-  }
-}
-
-@media (max-width: 760px) {
-  .site-header {
-    position: sticky;
-    gap: 0.8rem;
-    padding-top: max(0.85rem, var(--page-block-start));
-    padding-bottom: 0.85rem;
-  }
-
-  .site-header__brand {
-    padding-right: 4.25rem;
-  }
-
-  .site-header__eyebrow {
-    font-size: 0.66rem;
-  }
-
-  .site-header__name {
-    font-size: 1.35rem;
-  }
-
-  .site-header__actions {
-    display: block;
-    width: 100%;
-  }
-
-  .site-header__nav {
-    display: flex;
-    flex-wrap: nowrap;
-    justify-content: flex-start;
+    margin-inline: -0.7rem;
     overflow-x: auto;
-    padding-bottom: 0.05rem;
     scrollbar-width: none;
   }
 
   .site-header__nav::-webkit-scrollbar {
     display: none;
   }
+}
 
-  .site-header__nav a {
-    flex: 0 0 auto;
-    padding: 0.55rem 0.64rem;
-    font-size: 0.86rem;
-    text-align: center;
+@media (max-width: 520px) {
+  .site-header__inner {
+    column-gap: 0.5rem;
   }
 
-  .site-header__label-full {
+  .site-header__brand {
+    font-size: 1.05rem;
+  }
+
+  .site-header__actions :deep(.theme-toggle__label),
+  .site-header__actions :deep(.theme-toggle__chevron) {
     display: none;
   }
 
-  .site-header__label-short {
-    display: inline;
-  }
-
-  :deep(.theme-control) {
-    position: absolute;
-    top: max(0.85rem, var(--page-block-start));
-    right: var(--page-inline-end);
-  }
-
-  :deep(.theme-toggle) {
-    min-height: 2.55rem;
-    padding: 0.55rem 0.75rem;
-    border-radius: 0.9rem;
+  .site-header__actions :deep(.theme-toggle) {
+    min-height: 2.75rem;
+    padding-inline: 0.75rem;
   }
 }
 </style>
