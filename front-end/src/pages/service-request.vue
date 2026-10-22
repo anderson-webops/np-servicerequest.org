@@ -1,15 +1,5 @@
 <script setup lang="ts">
 import { useBoardSubmission } from '~/composables/useBoardSubmission'
-import { boardNotificationPreferenceOptions } from '~/utils/board'
-import {
-  boardContactMethodOptions,
-  getBoardContactValueAutocomplete,
-  getBoardContactValueInputMode,
-  getBoardContactValueLabel,
-  getBoardContactValuePlaceholder,
-  getBoardContactValueType,
-  normalizeBoardContactMethod,
-} from '~/utils/contact'
 
 definePageMeta({
   layout: 'home',
@@ -23,28 +13,17 @@ useSeoMeta({
 
 const { loadBootstrap, securityError, status, submit }
   = useBoardSubmission('service')
-const contactMethod = ref(normalizeBoardContactMethod('email'))
-const notificationPreference = ref<'none' | 'email'>('none')
 
 onMounted(() => {
   void loadBootstrap()
 })
-
-watch(
-  () => status.success,
-  (nextSuccess) => {
-    if (nextSuccess) {
-      contactMethod.value = 'email'
-      notificationPreference.value = 'none'
-    }
-  },
-)
 </script>
 
 <template>
   <BoardSubmissionPage
     draft-key="service-request"
     kind="service-request"
+    note-placeholder="Text first or evenings."
     pending-label="Posting service request..."
     :security-error="securityError"
     :status="status"
@@ -53,115 +32,53 @@ watch(
     title="Request a service project"
     @submit="submit"
   >
-    <label class="field">
-      <span>Your name</span>
-      <input
-        autocomplete="name"
-        name="name"
-        placeholder="Jane Smith"
-        required
-        type="text"
-      >
-    </label>
+    <fieldset class="form-section">
+      <legend>The project</legend>
 
-    <label class="field">
-      <span>Contact method</span>
-      <select v-model="contactMethod" name="contact_method" required>
-        <option
-          v-for="option in boardContactMethodOptions"
-          :key="option.value"
-          :value="option.value"
-        >
-          {{ option.label }}
-        </option>
-      </select>
-    </label>
+      <div class="field-grid">
+        <label class="field">
+          <span class="field__label">Project type</span>
+          <select name="project_type" required>
+            <option value="">Select one</option>
+            <option>Cleanup</option>
+            <option>Repair</option>
+            <option>Accessibility</option>
+            <option>Moving help</option>
+            <option>Setup or teardown</option>
+            <option>Other</option>
+          </select>
+        </label>
 
-    <label class="field">
-      <span>{{ getBoardContactValueLabel(contactMethod) }}</span>
-      <input
-        :autocomplete="getBoardContactValueAutocomplete(contactMethod)"
-        :inputmode="getBoardContactValueInputMode(contactMethod)"
-        :placeholder="getBoardContactValuePlaceholder(contactMethod)"
-        :type="getBoardContactValueType(contactMethod)"
-        name="contact_value"
-        required
-      >
-    </label>
+        <label class="field">
+          <span class="field__label">Timing</span>
+          <input
+            name="timing"
+            placeholder="Saturday morning or next week"
+            required
+            type="text"
+          >
+        </label>
 
-    <label class="field field--wide">
-      <span>Contact note (optional)</span>
-      <input
-        name="contact_note"
-        placeholder="Text first or evenings."
-        type="text"
-      >
-    </label>
+        <label class="field field--wide">
+          <span class="field__label">Location or neighborhood</span>
+          <input
+            autocomplete="street-address"
+            name="location"
+            required
+            type="text"
+          >
+        </label>
 
-    <label class="field">
-      <span>Reply notifications</span>
-      <select v-model="notificationPreference" name="notification_preference">
-        <option
-          v-for="option in boardNotificationPreferenceOptions"
-          :key="option.value"
-          :value="option.value"
-        >
-          {{ option.label }}
-        </option>
-      </select>
-    </label>
-
-    <label v-if="notificationPreference === 'email'" class="field">
-      <span>{{ contactMethod === 'email' ? 'Notification email (optional)' : 'Notification email' }}</span>
-      <input
-        autocomplete="email"
-        name="notification_email"
-        :placeholder="contactMethod === 'email' ? 'Optional reply email' : 'jane@email.com'"
-        :required="contactMethod === 'phone'"
-        type="email"
-      >
-    </label>
-
-    <label class="field">
-      <span>Project type</span>
-      <select name="project_type" required>
-        <option value="">Select one</option>
-        <option>Cleanup</option>
-        <option>Repair</option>
-        <option>Accessibility</option>
-        <option>Moving help</option>
-        <option>Setup or teardown</option>
-        <option>Other</option>
-      </select>
-    </label>
-
-    <label class="field">
-      <span>Location or neighborhood</span>
-      <input
-        autocomplete="street-address"
-        name="location"
-        required
-        type="text"
-      >
-    </label>
-
-    <label class="field field--wide">
-      <span>Timing</span>
-      <input
-        name="timing"
-        placeholder="Saturday morning or next week"
-        required
-        type="text"
-      >
-    </label>
-
-    <label class="field field--wide">
-      <span>Project details</span>
-      <textarea
-        name="details"
-        required
-        rows="6"
-      />
-    </label>
+        <label class="field field--wide">
+          <span class="field__label">Project details</span>
+          <textarea
+            name="details"
+            placeholder="What needs doing, how many people, and anything to bring."
+            required
+            rows="6"
+          />
+        </label>
+      </div>
+    </fieldset>
   </BoardSubmissionPage>
 </template>
