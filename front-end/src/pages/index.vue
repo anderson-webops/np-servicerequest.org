@@ -3,7 +3,6 @@ import type {
   AntiBotChallenge,
   BoardBootstrapResponse,
   BoardClaimManagementResponse,
-  BoardContactResponse,
   BoardItem,
   BoardItemCounts,
   BoardItemsPagination,
@@ -14,21 +13,16 @@ import type { BoardFormErrorState } from '~/utils/boardUi'
 import type { SubmissionKind } from '~/utils/submissions'
 import {
   isAntiBotChallenge,
-  isAntiBotChallengeExpired,
   markAntiBotChallengeObserved,
-  waitForAntiBotChallengeMinimumAge,
 } from '~/utils/antiBot'
 import { withApiQuery } from '~/utils/api'
 import { boardSortOptions, getBoardEndpoint, rememberBoardDeleteToken } from '~/utils/board'
 import {
-  formatBoardDate,
   getBoardApiErrorState,
   getBoardDetailPath,
-  getContactActionLabel,
-  getRevealKey,
 } from '~/utils/boardUi'
 import { consumePendingManagementClaim } from '~/utils/managementLink'
-import { formatRelativeTime, formatReplyCount, getPostType, postTypeLinks } from '~/utils/postTypes'
+import { formatRelativeTime, getPostType, postTypeLinks } from '~/utils/postTypes'
 import { submissionKinds } from '~/utils/submissions'
 
 type BoardFilter = 'all' | SubmissionKind
@@ -81,10 +75,6 @@ const managementNotice = ref('')
 const managementPending = ref(false)
 const managementError = ref<BoardFormErrorState | null>(null)
 
-const revealItemContacts = reactive<Record<string, string>>({})
-const revealItemContactVisibility = reactive<Record<string, boolean>>({})
-const revealErrors = reactive<Record<string, BoardFormErrorState | null>>({})
-const revealPending = reactive<Record<string, boolean>>({})
 
 const boardFilters = [
   { key: 'all' as const, label: 'All posts' },
@@ -160,33 +150,6 @@ function parseBoardSort(value: string): BoardSortOrder {
   return boardSortOptions.some(option => option.value === value)
     ? value as BoardSortOrder
     : 'recent-activity'
-}
-
-function ensureRevealState(key: string) {
-  if (!(key in revealPending))
-    revealPending[key] = false
-
-  if (!(key in revealErrors))
-    revealErrors[key] = null
-}
-
-function isItemContactVisible(itemId: string) {
-  return Boolean(
-    revealItemContactVisibility[itemId] && revealItemContacts[itemId],
-  )
-}
-
-function getItemContactActionLabel(item: BoardItem) {
-  if (revealPending[item.id])
-    return 'Revealing...'
-
-  if (isItemContactVisible(item.id)) {
-    return item.kind === submissionKinds.itemLending
-      ? 'Hide lender contact'
-      : 'Hide contact'
-  }
-
-  return getContactActionLabel(item.kind)
 }
 
 async function loadBootstrap() {
@@ -273,37 +236,6 @@ async function loadBoardItems() {
   }
 }
 
-async function ensureAntiBotReady() {
-  if (
-    !antiBotChallenge.value
-    || isAntiBotChallengeExpired(antiBotChallenge.value)
-  ) {
-    await loadBootstrap()
-  }
-
-  if (!antiBotChallenge.value)
-    throw new Error('Missing anti-bot challenge.')
-
-  await waitForAntiBotChallengeMinimumAge(antiBotChallenge.value)
-}
-
-async function protectedPost<T>(
-  endpoint: string,
-  body: Record<string, string>,
-) {
-  await ensureAntiBotReady()
-
-  return $fetch<T>(endpoint, {
-    body: {
-      ...body,
-      challengeIssuedAt: String(antiBotChallenge.value?.issuedAt || ''),
-      challengeToken: antiBotChallenge.value?.token || '',
-    },
-    credentials: 'include',
-    method: 'POST',
-  })
-}
-
 async function claimBoardManagementLink(
   itemId: string,
   managementToken: string,
@@ -358,47 +290,16 @@ async function claimBoardManagementLink(
   }
 }
 
-async function revealItemContact(item: BoardItem) {
-  const key = getRevealKey(item.id)
-  ensureRevealState(key)
-
-  if (revealItemContacts[item.id]) {
-    revealItemContactVisibility[item.id] = !isItemContactVisible(item.id)
-    revealErrors[key] = null
-    return
-  }
-
-  const endpoint = getBoardEndpoint(
-    runtimeConfig.public.apiBaseUrl,
-    `items/${item.id}/contact`,
-  )
-  revealPending[key] = true
-  revealErrors[key] = null
-
-  try {
-    const response = await protectedPost<BoardContactResponse>(endpoint, {
-      'bot-field': '',
-    })
-
-    applyServerContext(response)
-    revealItemContacts[item.id] = response.contact
-    revealItemContactVisibility[item.id] = true
-  }
-  catch (error) {
-    revealErrors[key] = getBoardApiErrorState(
-      error,
-      endpoint,
-      'We could not reveal that contact right now.',
-      applyServerContext,
-    )
-  }
-  finally {
-    revealPending[key] = false
-  }
-}
-
 function getResolutionBadgeLabel(item: BoardItem) {
   return item.resolutionStatus === 'fulfilled' ? 'Fulfilled' : 'Closed'
+}
+
+// A card shows at most four things: title, type, place, and age or status.
+function getItemPlace(item: BoardItem) {
+  if (item.distanceMiles != null)
+    return `${item.distanceMiles.toFixed(1)} mi away`
+
+  return item.attributes.find(attribute => attribute.label === 'Where' || attribute.label === 'Neighborhood')?.value || ''
 }
 
 function syncBoardStateFromRoute() {
@@ -854,13 +755,11 @@ watch(
         </p>
       </div>
 
-      <div v-if="!boardUiReady" class="board-grid" role="status">
+      <div v-if="!boardUiReady" class="board-list" role="status">
         <span class="sr-only">Loading the live board...</span>
-        <div v-for="index in 4" :key="index" aria-hidden="true" class="board-card board-card--skeleton">
-          <span class="skeleton skeleton--short" />
+        <div v-for="index in 6" :key="index" aria-hidden="true" class="board-row board-row--skeleton">
           <span class="skeleton skeleton--title" />
-          <span class="skeleton" />
-          <span class="skeleton" />
+          <span class="skeleton skeleton--short" />
         </div>
       </div>
 
@@ -891,95 +790,25 @@ watch(
         </button>
       </div>
 
-      <div v-else class="board-grid">
-        <article
-          v-for="item in boardItems"
-          :key="item.id"
-          class="board-card"
-          :class="[getPostType(item.kind).tone, { 'board-card--resolved': item.resolutionStatus !== 'open' }]"
-        >
-          <div class="board-card__top">
-            <span class="badge badge--kind">
-              <span aria-hidden="true" :class="getPostType(item.kind).icon" />
-              {{ item.kindLabel }}
+      <ul v-else class="board-list">
+        <li v-for="item in boardItems" :key="item.id">
+          <NuxtLink
+            class="board-row"
+            :class="[getPostType(item.kind).tone, { 'board-row--resolved': item.resolutionStatus !== 'open' }]"
+            prefetch-on="interaction"
+            :to="getBoardDetailPath(item.id)"
+          >
+            <span class="board-row__title">{{ item.title }}</span>
+            <span class="board-row__meta">
+              <span class="board-row__type">{{ getPostType(item.kind).tag }}</span>
+              <span v-if="getItemPlace(item)" class="board-row__place">{{ getItemPlace(item) }}</span>
+              <span v-if="item.resolutionStatus !== 'open'">{{ getResolutionBadgeLabel(item) }}</span>
+              <time v-else :datetime="item.createdAt">{{ formatRelativeTime(item.createdAt) }}</time>
             </span>
-            <span
-              v-if="item.resolutionStatus !== 'open'"
-              class="badge"
-              :class="item.resolutionStatus === 'fulfilled' ? 'badge--success' : 'badge--muted'"
-            >{{ getResolutionBadgeLabel(item) }}</span>
-            <time
-              class="board-card__time"
-              :datetime="item.createdAt"
-              :title="formatBoardDate(item.createdAt)"
-            >{{ formatRelativeTime(item.createdAt) }}</time>
-          </div>
-
-          <h3 class="board-card__title">
-            <NuxtLink prefetch-on="interaction" :to="getBoardDetailPath(item.id)">
-              {{ item.title }}
-            </NuxtLink>
-          </h3>
-
-          <p class="board-card__byline">
-            <span>{{ item.author.displayName }}</span>
-            <span v-if="item.author.hasAccount" class="badge badge--muted">Member</span>
-            <span aria-hidden="true">·</span>
-            <span>{{ formatReplyCount(item.interactionCount) }}</span>
-            <template v-if="item.distanceMiles != null">
-              <span aria-hidden="true">·</span>
-              <span>{{ item.distanceMiles.toFixed(1) }} mi away</span>
-            </template>
-          </p>
-
-          <p class="board-card__summary">
-            <span class="sr-only">{{ item.summaryLabel }}: </span>{{ item.summary }}
-          </p>
-
-          <dl v-if="item.attributes.length" class="board-card__facts">
-            <div
-              v-for="attribute in item.attributes"
-              :key="`${item.id}-${attribute.label}`"
-            >
-              <dt>{{ attribute.label }}</dt>
-              <dd>{{ attribute.value }}</dd>
-            </div>
-          </dl>
-
-          <div class="board-card__actions">
-            <NuxtLink
-              class="button button--secondary button--small"
-              prefetch-on="interaction"
-              :to="getBoardDetailPath(item.id)"
-            >
-              Open post
-            </NuxtLink>
-            <button
-              class="button button--quiet button--small"
-              :disabled="revealPending[item.id]"
-              type="button"
-              @click="revealItemContact(item)"
-            >
-              {{ getItemContactActionLabel(item) }}
-            </button>
-          </div>
-          <p
-            v-if="revealErrors[item.id]"
-            class="inline-note inline-note--error"
-            role="alert"
-          >
-            {{ revealErrors[item.id]?.message }}
-            {{ revealErrors[item.id]?.detail }}
-          </p>
-          <p
-            v-if="isItemContactVisible(item.id)"
-            class="inline-note inline-note--success"
-            role="status"
-          >
-            Contact: {{ revealItemContacts[item.id] }}
-          </p>
-        </article>
-      </div>
+            <span aria-hidden="true" class="i-carbon-chevron-right board-row__chevron" />
+          </NuxtLink>
+        </li>
+      </ul>
 
       <nav
         v-if="boardUiReady && !boardError && boardPagination.totalPages > 1"
@@ -1239,119 +1068,96 @@ watch(
   display: none;
 }
 
-.board-grid {
+.board-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
-  gap: 1rem;
-  align-items: start;
-}
-
-.board-card {
-  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 21rem), 1fr));
   gap: 0.6rem;
-  min-width: 0;
-  padding: 1.1rem 1.2rem 1rem;
-  border: 1px solid var(--card-border);
-  border-top: 3px solid var(--kind, var(--card-border));
-  border-radius: var(--radius-lg);
-  background: var(--site-surface-strong);
-  transition: box-shadow 160ms ease;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.board-card:hover {
-  box-shadow: var(--site-shadow);
-}
-
-.board-card--resolved {
-  border-top-color: var(--card-border);
-}
-
-.board-card__top {
-  display: flex;
-  flex-wrap: wrap;
+.board-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.4rem;
-}
-
-.board-card__time {
-  margin-left: auto;
-  color: var(--site-subtle);
-  font-size: var(--text-xs);
-}
-
-.board-card__title {
-  font-size: var(--text-lg);
-  font-weight: 700;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-}
-
-.board-card__title a {
+  gap: 0.2rem 0.75rem;
+  height: 100%;
+  padding: 0.85rem 0.9rem 0.85rem 1rem;
+  border: 1px solid var(--card-border);
+  border-left: 4px solid var(--kind, var(--card-border));
+  border-radius: var(--radius-md);
+  background: var(--site-surface-strong);
   color: var(--site-heading);
   text-decoration: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
-.board-card__title a:hover,
-.board-card__title a:focus-visible {
-  text-decoration: underline;
+a.board-row:hover,
+a.board-row:focus-visible {
+  border-color: var(--field-border);
+  border-left-color: var(--kind);
+  box-shadow: var(--site-shadow);
+  color: var(--site-heading);
 }
 
-.board-card__byline {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.2rem 0.45rem;
-  color: var(--site-subtle);
-  font-size: var(--text-sm);
+.board-row--resolved {
+  border-left-color: var(--card-border);
+  opacity: 0.75;
 }
 
-.board-card__summary {
+.board-row__title {
   display: -webkit-box;
   overflow: hidden;
-  color: var(--site-text);
+  font-weight: 700;
+  line-height: 1.35;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow-wrap: anywhere;
 }
 
-.board-card__facts {
+.board-row__meta {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem 1.25rem;
-  margin: 0;
-  padding-top: 0.6rem;
-  border-top: 1px solid var(--divider);
+  white-space: nowrap;
+  grid-column: 1;
+  gap: 0 0.4rem;
+  min-width: 0;
+  color: var(--site-subtle);
   font-size: var(--text-sm);
 }
 
-.board-card__facts div {
-  min-width: 0;
+.board-row__meta > * + *::before {
+  content: '·';
+  margin-right: 0.4rem;
 }
 
-.board-card__facts dt {
+.board-row__meta > * {
+  flex: none;
+}
+
+.board-row__meta > .board-row__place {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.board-row__type {
+  color: var(--kind);
+  font-weight: 700;
+}
+
+.board-row__chevron {
+  grid-column: 2;
+  grid-row: 1 / span 2;
   color: var(--site-subtle);
-  font-size: var(--text-xs);
-  font-weight: 600;
 }
 
-.board-card__facts dd {
-  margin: 0;
-  color: var(--site-heading);
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-
-.board-card__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 0.2rem;
-}
-
-.board-card--skeleton {
-  gap: 0.75rem;
-  border-top-color: var(--card-border);
+.board-row--skeleton {
+  gap: 0.6rem;
+  grid-template-columns: 1fr;
 }
 
 .skeleton {
@@ -1363,12 +1169,12 @@ watch(
 }
 
 .skeleton--short {
-  width: 35%;
+  width: 45%;
 }
 
 .skeleton--title {
-  width: 70%;
-  height: 1.3rem;
+  width: 75%;
+  height: 1.1rem;
 }
 
 .board-empty {

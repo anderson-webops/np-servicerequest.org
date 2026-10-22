@@ -79,6 +79,32 @@ with seeded posts in every category.
 - **Self-explanatory over instructional.** No new taglines or how-to copy;
   layout, labels, and ordering carry the flow.
 
+## Card Content Budget
+
+Each board card is limited to four pieces of information, with the most
+important words first:
+
+1. **Title**: what is needed or offered.
+2. **Type**: Service, Borrow, or Lend, shown as a coloured word.
+3. **Place**: the location or neighbourhood, or the distance when sorting by
+   nearby.
+4. **Age or status**: for example "2 hours ago", or "Fulfilled".
+
+The whole card links to the post page. That page holds everything else: the
+author, reply count, details, attributes, contact, and actions.
+
+Why four:
+
+- Working memory holds about four chunks (range 3–5), not Miller's 7±2.
+  Source: Cowan, "The magical number 4 in short-term memory", *Behavioral and
+  Brain Sciences* 24 (2001).
+- People scanning a list take in about the first two words of each item.
+  Source: Nielsen Norman Group, "First 2 Words: A Signal for the Scanning Eye".
+  Titles therefore lead each card, and the type word leads the second line.
+- On an average page, users read at most 28% of the words, and 20% is more
+  likely. Source: Nielsen Norman Group, "How Little Do Users Read?" (2008).
+  Extra text on a card mostly goes unread.
+
 ## Information Architecture
 
 | Area | Before | After |
@@ -96,9 +122,10 @@ with seeded posts in every category.
   rings, 3:1 form borders, reduced-motion handling.
 - `SiteHeader.vue` + `NewPostMenu.vue`: browse vs. create split, keyboard- and
   Escape-dismissable "New post" disclosure menu.
-- `index.vue`: compact hero with post tiles; single-row board toolbar; filter
-  tabs; compact card grid with relative time and type badges; skeleton
-  loading; neutral pagination labels.
+- `index.vue`: a compact hero with post tiles, a single-row board toolbar,
+  and filter tabs. Each board card is one link limited to four pieces of
+  information (see Card Content Budget). Loading shows skeleton placeholders,
+  and the pagination labels no longer assume date order.
 - `BoardSubmissionPage.vue` + `BoardContactFields.vue`: grouped fieldsets,
   shared contact block, disclosure next to contact fields, focused result
   panel linking to the new post, recent-posts rail.

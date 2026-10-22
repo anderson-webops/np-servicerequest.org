@@ -6,6 +6,7 @@ export interface PostTypeLink {
   kind: SubmissionKind
   label: string
   shortLabel: string
+  tag: string
   tone: string
   to: string
 }
@@ -18,6 +19,7 @@ export const postTypeLinks: PostTypeLink[] = [
     kind: submissionKinds.service,
     label: 'Request a service project',
     shortLabel: 'Service project',
+    tag: 'Service',
     tone: 'kind-service',
     to: '/service-request',
   },
@@ -26,6 +28,7 @@ export const postTypeLinks: PostTypeLink[] = [
     kind: submissionKinds.itemRequest,
     label: 'Borrow an item',
     shortLabel: 'Borrow',
+    tag: 'Borrow',
     tone: 'kind-borrow',
     to: '/item-request',
   },
@@ -34,6 +37,7 @@ export const postTypeLinks: PostTypeLink[] = [
     kind: submissionKinds.itemLending,
     label: 'Lend an item',
     shortLabel: 'Lend',
+    tag: 'Lend',
     tone: 'kind-lend',
     to: '/item-lending',
   },
