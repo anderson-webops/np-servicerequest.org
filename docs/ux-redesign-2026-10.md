@@ -93,17 +93,26 @@ important words first:
 The whole card links to the post page. That page holds everything else: the
 author, reply count, details, attributes, contact, and actions.
 
-Why four:
+This is one identity anchor (the title) plus three supporting facts. That is
+a conservative design target, not a hard cognitive cutoff:
 
-- Working memory holds about four chunks (range 3–5), not Miller's 7±2.
+- Working memory holds about 3–5 independent chunks, averaging about four.
+  Capacity falls as items get more complex. Miller's 7±2 is not a UI limit.
   Source: Cowan, "The magical number 4 in short-term memory", *Behavioral and
   Brain Sciences* 24 (2001).
-- People scanning a list take in about the first two words of each item.
-  Source: Nielsen Norman Group, "First 2 Words: A Signal for the Scanning Eye".
-  Titles therefore lead each card, and the type word leads the second line.
-- On an average page, users read at most 28% of the words, and 20% is more
-  likely. Source: Nielsen Norman Group, "How Little Do Users Read?" (2008).
-  Extra text on a card mostly goes unread.
+- A visible screen acts as external memory. Users can therefore scan many more
+  than four cards in a regular list; the four-chunk limit applies within a
+  card, not to the list as a whole.
+- Attention concentrates near the top of a page and at the start of each line:
+  in Nielsen Norman Group eye tracking, about 74% of viewing time fell in the
+  first two screenfuls. Titles lead each card, and the type word leads the
+  second line.
+- The common claim that "users read only about 20% of words" is an indirect
+  time-budget estimate (Nielsen Norman Group, 2008), not a measured limit. It
+  supports cutting card text, but not any exact count.
+
+Cards carry no buttons. The single action is opening the post. Facts people
+need to compare posts use the same fields, in the same order, on every card.
 
 ## Information Architecture
 
