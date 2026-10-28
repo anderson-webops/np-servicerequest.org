@@ -16,7 +16,7 @@ This repo is based on the local `vitesse-nuxt` monorepo template, which itself w
 From the repo root:
 
 ```bash
-npm install
+npm ci
 npm run dev
 npm run server
 ```
@@ -28,6 +28,20 @@ Useful root commands:
 - `npm run lint`: lint both workspaces
 - `npm run test:e2e`: build the site and run the Playwright browser suite
 - `npm run smoke:backend-runtime`: exercise the built production-only Node runtime locally
+- `npm run audit`: check all root and workspace dependencies, including development tools
+- `npm run audit:production`: check the production dependency graph
+
+Release checks require both audits to pass at every severity, along with the
+signature, dependency-graph, native-install, application, and runtime gates.
+Root overrides apply to the whole monorepo; workspace-specific overrides are
+not used. The guarded `deepmerge` replacement and its upstream replacement
+criteria are documented in [`vendor/deepmerge/README.md`](vendor/deepmerge/README.md).
+
+Nuxt's `unimport` dependency is temporarily pinned to `7.0.1`: npm advertises
+provenance for `7.0.2`, but its attestation endpoint returns 404. The preceding
+patch has verifiable provenance; `7.0.2` only changes declaration-class export
+deduplication. Remove this scoped pin after registry verification is restored
+and the application checks pass. Signature and provenance checks remain required.
 
 ## Front-End
 
