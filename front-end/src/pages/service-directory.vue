@@ -2,7 +2,6 @@
 import {
   areaSpecificServiceSites,
   nationwideServiceSites,
-  serviceDirectoryAudienceLabels,
 } from '~/utils/serviceDirectory'
 
 definePageMeta({
@@ -19,19 +18,12 @@ useSeoMeta({
 <template>
   <div class="service-directory-page">
     <section class="service-directory-page__hero">
-      <NuxtLink
-        class="service-directory-page__back"
-        prefetch-on="interaction"
-        to="/#live-board"
-      >
-        Back to live board
-      </NuxtLink>
 
       <h1>Service directory</h1>
 
       <div class="service-directory-page__actions">
         <NuxtLink prefetch-on="interaction" to="/service-search">
-          Open live service search
+          Local search
         </NuxtLink>
       </div>
     </section>
@@ -47,25 +39,14 @@ useSeoMeta({
           :key="site.id"
           class="directory-card"
         >
-          <p class="directory-card__eyebrow">
-            {{ serviceDirectoryAudienceLabels[site.audience] }}
-          </p>
-          <h3>{{ site.name }}</h3>
+          <h3><a :href="site.opportunityUrl" rel="noreferrer" target="_blank">{{ site.name }}</a></h3>
           <p class="directory-card__coverage">
             {{ site.coverageLabel }}
           </p>
           <p class="directory-card__summary">
             {{ site.summary }}
           </p>
-          <ul class="directory-card__tags">
-            <li v-for="tag in site.tags" :key="tag">
-              {{ tag }}
-            </li>
-          </ul>
           <div class="directory-card__actions">
-            <a :href="site.opportunityUrl" rel="noreferrer" target="_blank">
-              Open opportunities
-            </a>
             <a :href="site.sourceUrl" rel="noreferrer" target="_blank">
               Official source
             </a>
@@ -85,25 +66,14 @@ useSeoMeta({
           :key="site.id"
           class="directory-card"
         >
-          <p class="directory-card__eyebrow">
-            {{ serviceDirectoryAudienceLabels[site.audience] }}
-          </p>
-          <h3>{{ site.name }}</h3>
+          <h3><a :href="site.opportunityUrl" rel="noreferrer" target="_blank">{{ site.name }}</a></h3>
           <p class="directory-card__coverage">
             {{ site.coverageLabel }}
           </p>
           <p class="directory-card__summary">
             {{ site.summary }}
           </p>
-          <ul class="directory-card__tags">
-            <li v-for="tag in site.tags" :key="tag">
-              {{ tag }}
-            </li>
-          </ul>
           <div class="directory-card__actions">
-            <a :href="site.opportunityUrl" rel="noreferrer" target="_blank">
-              Open opportunities
-            </a>
             <a :href="site.sourceUrl" rel="noreferrer" target="_blank">
               Official source
             </a>
@@ -130,15 +100,6 @@ useSeoMeta({
   padding-block: var(--page-hero-space);
 }
 
-.service-directory-page__back {
-  width: fit-content;
-  text-decoration: none;
-  color: var(--site-link);
-  font-weight: 700;
-}
-
-.service-directory-page__back:hover,
-.service-directory-page__back:focus-visible,
 .service-directory-page__actions a:hover,
 .service-directory-page__actions a:focus-visible,
 .directory-cta__link:hover,
@@ -299,5 +260,46 @@ useSeoMeta({
   .directory-card__actions a {
     width: 100%;
   }
+}
+
+.service-directory-page__hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  max-width: none;
+  gap: 0.5rem;
+}
+
+.service-directory-page__actions a {
+  min-height: 2.75rem;
+  padding: 0.5rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--site-link);
+  font-size: var(--text-sm);
+}
+
+.directory-card {
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.directory-card h3 a {
+  color: var(--site-heading);
+  text-decoration: none;
+}
+
+.directory-card__actions a {
+  min-height: 2.75rem;
+  padding: 0.5rem 0;
+  background: transparent;
+  color: var(--site-link);
+}
+
+.directory-card h3,
+.finder-card h3 {
+  font-size: var(--text-lg);
+  line-height: 1.3;
 }
 </style>

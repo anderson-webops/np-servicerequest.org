@@ -10,6 +10,7 @@ export interface FormErrorState {
 
 export interface FormStatus {
   error: FormErrorState | null
+  itemId: string | null
   pending: boolean
   success: boolean
 }
@@ -21,6 +22,7 @@ export function useBoardSubmission(kind: keyof typeof submissionKinds) {
   const securityError = ref<FormErrorState | null>(null)
   const status = reactive<FormStatus>({
     error: null,
+    itemId: null,
     pending: false,
     success: false,
   })
@@ -116,6 +118,7 @@ export function useBoardSubmission(kind: keyof typeof submissionKinds) {
     status.pending = true
     status.success = false
     status.error = null
+    status.itemId = null
 
     const payload = Object.fromEntries(
       Array.from(new FormData(form).entries()).map(([key, value]) => [key, typeof value === 'string' ? value : '']),
@@ -140,6 +143,7 @@ export function useBoardSubmission(kind: keyof typeof submissionKinds) {
         rememberBoardDeleteToken(response.boardItem.id, response.deleteToken)
 
       form.reset()
+      status.itemId = response.boardItem?.id || null
       status.success = true
       return response
     }

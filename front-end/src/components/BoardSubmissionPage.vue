@@ -7,10 +7,12 @@ import type { BoardActivitySummary, BoardItem, BoardItemsResponse } from '~/util
 import type { SubmissionKind } from '~/utils/submissions'
 import { getBoardEndpoint } from '~/utils/board'
 import { getBoardDetailPath } from '~/utils/boardUi'
+import { formatRelativeTime, formatReplyCount, getPostType } from '~/utils/postTypes'
 
 const props = defineProps<{
   draftKey?: string
   kind: SubmissionKind
+  notePlaceholder: string
   pendingLabel: string
   securityError: FormErrorState | null
   status: FormStatus
@@ -24,6 +26,7 @@ const emit = defineEmits<{
 }>()
 
 const formElement = ref<HTMLFormElement | null>(null)
+const resultElement = ref<HTMLElement | null>(null)
 const draftSaved = ref(false)
 const draftRestored = ref(false)
 const runtimeConfig = useRuntimeConfig()
@@ -44,42 +47,25 @@ const categoryCopy = computed(() => {
   if (props.kind === 'service-request') {
     return {
       empty: 'No public service projects are waiting yet.',
-      label: 'Service projects',
-      postNoun: 'service project',
+      label: 'Recent service projects',
     }
   }
 
   if (props.kind === 'item-request') {
     return {
       empty: 'No public borrow requests are waiting yet.',
-      label: 'Borrow requests',
-      postNoun: 'borrow request',
+      label: 'Recent borrow requests',
     }
   }
 
   return {
     empty: 'No public lending offers are available yet.',
-    label: 'Lending offers',
-    postNoun: 'lending offer',
+    label: 'Recent lending offers',
   }
 })
 
-const activityStats = computed(() => [
-  {
-    label: 'Open',
-    value: activitySummary.value.open,
-  },
-  {
-    label: 'Answered',
-    value: activitySummary.value.answered,
-  },
-  {
-    label: 'No replies',
-    value: activitySummary.value.needsFirstReply,
-  },
-])
-
-const recentItem = computed(() => recentItems.value[0] || null)
+const postType = computed(() => getPostType(props.kind))
+const boardFilterPath = computed(() => `/?filter=${props.kind}#live-board`)
 
 const draftStorageKey = computed(() =>
   props.draftKey ? `np_sr_submission_draft:${props.draftKey}` : '',
@@ -293,6 +279,20 @@ onMounted(async () => {
   }
 })
 
+async function focusResult() {
+  await nextTick()
+  resultElement.value?.focus()
+  resultElement.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
+watch(
+  () => [props.status.success, props.status.error] as const,
+  ([nextSuccess, nextError]) => {
+    if (nextSuccess || nextError)
+      void focusResult()
+  },
+)
+
 watch(
   () => props.status.success,
   (nextSuccess, previousSuccess) => {
@@ -308,66 +308,60 @@ watch(
 </script>
 
 <template>
-  <div class="submission-page">
-    <section class="submission-page__hero">
-      <NuxtLink
-        class="submission-page__back"
-        prefetch-on="interaction"
-        to="/#live-board"
-      >
-        Back to live board
-      </NuxtLink>
+  <div class="submission-page container" :class="postType.tone">
+    <header class="page-header submission-page__header">
+      <h1>
+        <span aria-hidden="true" class="submission-page__icon"><span :class="postType.icon" /></span>
+        {{ title }}
+      </h1>
+    </header>
 
-      <h1>{{ title }}</h1>
-    </section>
-
-    <section class="submission-page__panel">
+    <div class="submission-page__layout">
       <form
         ref="formElement"
-        class="submission-page__form"
+        class="submission-page__form surface"
         :aria-busy="status.pending"
         @change="persistDraft"
         @input="persistDraft"
         @submit.prevent="emit('submit', $event)"
       >
         <div
-          v-if="draftSaved || draftRestored"
-          class="submission-page__draft"
+          v-if="status.success"
+          ref="resultElement"
+          class="notice notice--success submission-page__result"
+          role="status"
+          tabindex="-1"
         >
-          <p>
-            {{
-              draftRestored
-                ? 'Draft restored from this browser.'
-                : 'Draft saved in this browser.'
-            }}
-          </p>
-          <button
-            class="submission-page__draft-clear"
-            type="button"
-            @click="clearDraftAndResetForm"
-          >
-            Clear draft
-          </button>
+          <span aria-hidden="true" class="i-carbon-checkmark-filled submission-page__result-icon" />
+          <div>
+            <p>{{ successText }}</p>
+            <NuxtLink
+              v-if="status.itemId"
+              class="submission-page__result-link"
+              prefetch-on="interaction"
+              :to="getBoardDetailPath(status.itemId)"
+            >
+              View your post
+            </NuxtLink>
+          </div>
         </div>
-
-        <p v-if="status.success" class="success-note" role="status">
-          {{ successText }}
-        </p>
-        <div v-if="status.error" class="error-panel" role="alert">
-          <p class="error-note">
+        <div
+          v-if="status.error"
+          ref="resultElement"
+          class="notice notice--error"
+          role="alert"
+          tabindex="-1"
+        >
+          <p class="notice__title">
             {{ status.error.message }}
           </p>
-          <p class="error-note-detail">
-            {{ status.error.detail }}
-          </p>
+          <p>{{ status.error.detail }}</p>
         </div>
-        <div v-if="securityError" class="error-panel" role="alert">
-          <p class="error-note">
+        <div v-if="securityError" class="notice notice--error" role="alert">
+          <p class="notice__title">
             {{ securityError.message }}
           </p>
-          <p class="error-note-detail">
-            {{ securityError.detail }}
-          </p>
+          <p>{{ securityError.detail }}</p>
         </div>
 
         <p class="sr-only">
@@ -375,457 +369,222 @@ watch(
             <input name="bot-field" type="text"></label>
         </p>
 
-        <div class="field-grid">
-          <slot />
+        <slot />
+
+        <BoardContactFields :note-placeholder="notePlaceholder" :reset-on="status.success" />
+
+        <div class="submission-page__submit">
+          <button class="button button--primary submission-page__submit-button" :disabled="status.pending" type="submit">
+            {{ status.pending ? pendingLabel : submitLabel }}
+          </button>
+          <p v-if="draftSaved || draftRestored" class="submission-page__draft">
+            {{ draftRestored ? 'Draft restored from this browser.' : 'Draft saved in this browser.' }}
+            <button class="button button--quiet button--small" type="button" @click="clearDraftAndResetForm">
+              Clear draft
+            </button>
+          </p>
         </div>
-
-        <p class="submission-page__rail-note">
-          Posts are public. Other visitors can reveal your contact details.
-        </p>
-
-        <button class="submit-button" :disabled="status.pending" type="submit">
-          {{ status.pending ? pendingLabel : submitLabel }}
-        </button>
       </form>
-    </section>
 
-    <aside class="submission-page__rail" aria-label="Board activity">
-      <section class="submission-page__activity" aria-labelledby="submission-activity-heading">
-        <div class="submission-page__activity-head">
+      <aside class="submission-page__rail" aria-labelledby="submission-activity-heading">
+        <div class="submission-page__activity">
           <h2 id="submission-activity-heading">
             {{ categoryCopy.label }}
           </h2>
-          <span v-if="activityPending" class="submission-page__live-dot" aria-label="Loading category activity" />
-        </div>
 
-        <div class="submission-page__stat-grid">
-          <div v-for="stat in activityStats" :key="stat.label" class="submission-page__stat">
-            <strong>{{ activityLoaded ? stat.value : '—' }}</strong>
-            <span>{{ stat.label }}</span>
-          </div>
-        </div>
+          <p v-if="activityError" class="submission-page__rail-note submission-page__rail-note--error" role="status">
+            {{ activityError.message }}
+          </p>
+          <p v-else-if="!activityLoaded" class="submission-page__rail-note" role="status">
+            {{ activityPending ? 'Loading recent posts...' : '' }}
+          </p>
+          <p v-else-if="!recentItems.length" class="submission-page__rail-note">
+            {{ categoryCopy.empty }}
+          </p>
+          <ul v-else class="submission-page__recent">
+            <li v-for="recent in recentItems" :key="recent.id">
+              <NuxtLink :to="getBoardDetailPath(recent.id)" prefetch-on="interaction">
+                {{ recent.title }}
+              </NuxtLink>
+              <span>
+                {{ formatRelativeTime(recent.createdAt) }} · {{ formatReplyCount(recent.interactionCount) }}
+              </span>
+            </li>
+          </ul>
 
-        <p class="submission-page__activity-total">
-          {{ activityLoaded ? activitySummary.total : '—' }} total public {{ categoryCopy.label.toLowerCase() }}
-        </p>
-
-        <p v-if="activityError" class="submission-page__rail-note submission-page__rail-note--error" role="status">
-          {{ activityError.message }}
-        </p>
-        <p v-else-if="recentItem" class="submission-page__rail-note">
-          Recent {{ categoryCopy.postNoun }}:
-          <NuxtLink :to="getBoardDetailPath(recentItem.id)" prefetch-on="interaction">
-            {{ recentItem.title }}
+          <p v-if="activityLoaded && activitySummary.total" class="submission-page__rail-note">
+            {{ activitySummary.open }} open · {{ activitySummary.needsFirstReply }} without replies
+          </p>
+          <NuxtLink
+            v-if="activityLoaded && activitySummary.total"
+            class="submission-page__all"
+            prefetch-on="interaction"
+            :to="boardFilterPath"
+          >
+            See all on the board
+            <span aria-hidden="true" class="i-carbon-arrow-right" />
           </NuxtLink>
-        </p>
-        <p v-else class="submission-page__rail-note">
-          {{ activityLoaded ? categoryCopy.empty : 'Loading current board activity...' }}
-        </p>
-      </section>
-    </aside>
+        </div>
+      </aside>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .submission-page {
-  display: grid;
-  grid-template-columns: minmax(0, 56rem) minmax(19rem, 27rem);
-  gap: var(--page-section-gap) clamp(2rem, 5vw, 5rem);
-  align-items: start;
-  padding-top: 0;
-  padding-right: var(--page-inline-end);
-  padding-bottom: 2.75rem;
-  padding-left: var(--page-inline-start);
+  padding-bottom: 1rem;
 }
 
-.submission-page__hero {
-  display: grid;
-  grid-column: 1;
-  gap: var(--page-hero-gap);
-  min-width: 0;
-  max-width: none;
-  padding-block: var(--page-hero-space);
-}
-
-.submission-page__back {
-  width: fit-content;
-  text-decoration: none;
-  color: var(--site-link);
-  font-weight: 700;
-}
-
-.submission-page__back:hover,
-.submission-page__back:focus-visible {
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-}
-
-.eyebrow {
-  margin: 0;
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--site-muted);
-}
-
-.submission-page h1,
-.submission-page h2 {
-  margin: 0;
-  font-family: 'DM Serif Display', serif;
-  font-weight: 400;
-  letter-spacing: -0.03em;
-  color: var(--site-heading);
-}
-
-.submission-page h1 {
-  font-size: var(--page-hero-title-size);
-  line-height: 0.92;
-  max-width: var(--page-hero-title-max);
-  overflow-wrap: anywhere;
-  text-wrap: balance;
-}
-
-.submission-page__lede,
-.submission-page__tips,
-.submission-page__examples,
-.submission-page__flow,
-.submission-page__activity,
-.submission-page__rail-note {
-  color: var(--site-text);
-  line-height: 1.7;
-}
-
-.submission-page__lede {
-  max-width: var(--page-hero-copy-max);
-  margin: 0;
-  font-size: 1.02rem;
-}
-
-.submission-page__panel {
-  grid-column: 1;
-  display: grid;
-  gap: 0.95rem;
-  align-items: start;
-  max-width: none;
-}
-
-.submission-page__rail {
-  display: grid;
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  gap: 1rem;
-  min-width: 0;
-  padding-top: var(--page-hero-space);
-  position: sticky;
-  top: 6.5rem;
-}
-
-.submission-page__tips,
-.submission-page__activity,
-.submission-page__flow,
-.submission-page__form {
-  min-width: 0;
-  padding: var(--page-surface-padding);
-  border-radius: var(--page-surface-radius);
-  background: var(--site-surface);
-  border: 1px solid var(--site-border);
-  box-shadow: var(--site-shadow);
-}
-
-.submission-page__tips {
-  display: grid;
-  gap: 0.7rem;
-  background: color-mix(in srgb, var(--site-surface-soft) 82%, transparent);
-}
-
-.submission-page__examples {
-  margin: 0;
-  padding-left: 1.15rem;
-}
-
-.submission-page__activity,
-.submission-page__flow {
-  display: grid;
-  gap: 0.85rem;
-  background: color-mix(in srgb, var(--site-surface-strong) 88%, transparent);
-}
-
-.submission-page__activity-head {
+.submission-page__header h1 {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 0.75rem;
 }
 
-.submission-page__activity h2 {
-  font-size: clamp(1.75rem, 3vw, 2.4rem);
-  line-height: 0.98;
+.submission-page__icon {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--kind) 14%, transparent);
+  color: var(--kind);
+  font-size: 1.35rem;
 }
 
-.submission-page__live-dot {
-  width: 0.78rem;
-  height: 0.78rem;
-  border-radius: 999px;
-  background: var(--site-link);
-  box-shadow: 0 0 0 0.38rem var(--site-focus-ring);
-}
-
-.submission-page__stat-grid {
+.submission-page__layout {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.6rem;
-}
-
-.submission-page__stat {
-  display: grid;
-  gap: 0.12rem;
-  min-width: 0;
-  padding: 0.85rem 0.75rem;
-  border-radius: 1rem;
-  background: var(--site-elevated);
-  border: 1px solid var(--site-border);
-}
-
-.submission-page__stat strong {
-  color: var(--site-heading);
-  font-size: 1.7rem;
-  line-height: 1;
-}
-
-.submission-page__stat span {
-  color: var(--site-muted);
-  font-size: 0.76rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.submission-page__rail-note,
-.submission-page__activity-total,
-.submission-page__flow p {
-  margin: 0;
-  font-size: 0.95rem;
-}
-
-.submission-page__activity-total {
-  color: var(--site-subtle);
-  font-weight: 700;
-}
-
-.submission-page__rail-note a {
-  color: var(--site-link);
-  font-weight: 700;
-  text-decoration-thickness: 0.08em;
-  text-underline-offset: 0.18em;
-}
-
-.submission-page__rail-note--error {
-  color: var(--site-error-text);
+  grid-template-columns: minmax(0, 46rem) minmax(16rem, 22rem);
+  justify-content: space-between;
+  gap: 1.5rem clamp(1.5rem, 4vw, 3.5rem);
+  align-items: start;
 }
 
 .submission-page__form {
   display: grid;
-  gap: 1rem;
+  gap: 1.1rem;
+  min-width: 0;
+  padding: clamp(0.85rem, 2vw, 1.25rem);
+}
+
+.submission-page__result {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.submission-page__result-icon {
+  flex: none;
+  margin-top: 0.2rem;
+  font-size: 1.25rem;
+}
+
+.submission-page__result-link {
+  display: inline-block;
+  margin-top: 0.35rem;
+  color: inherit;
+  font-weight: 700;
+}
+
+.submission-page__submit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--divider);
+}
+
+.submission-page__submit-button {
+  min-height: 3rem;
+  padding-inline: 1.5rem;
+  font-size: var(--text-md);
 }
 
 .submission-page__draft {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.85rem 1rem;
-  border-radius: 1rem;
-  background: var(--site-surface-soft);
-  border: 1px solid var(--site-border);
+  gap: 0.25rem;
   color: var(--site-subtle);
+  font-size: var(--text-sm);
 }
 
-.submission-page__draft p {
+.submission-page__rail {
+  position: sticky;
+  top: 5.5rem;
+  min-width: 0;
+}
+
+.submission-page__activity {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1.25rem;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--site-surface-soft) 80%, transparent);
+}
+
+.submission-page__activity h2 {
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+
+.submission-page__recent {
+  display: grid;
+  gap: 0.75rem;
   margin: 0;
-}
-
-.submission-page__draft-clear {
   padding: 0;
-  border: 0;
-  background: none;
-  color: var(--site-link);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
+  list-style: none;
 }
 
-.submission-page__draft-clear:hover,
-.submission-page__draft-clear:focus-visible {
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-}
-
-:deep(.field-grid) {
+.submission-page__recent li {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.95rem;
+  gap: 0.1rem;
 }
 
-:deep(.field) {
-  display: grid;
-  gap: 0.45rem;
+.submission-page__recent a {
+  color: var(--site-heading);
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
-:deep(.field--wide) {
-  grid-column: 1 / -1;
+.submission-page__recent span,
+.submission-page__rail-note {
+  color: var(--site-subtle);
+  font-size: var(--text-sm);
 }
 
-:deep(.field span) {
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: var(--site-text);
+.submission-page__rail-note:empty {
+  display: none;
 }
 
-:deep(.field input),
-:deep(.field textarea),
-:deep(.field select) {
-  width: 100%;
-  border: 1px solid var(--site-border-strong);
-  border-radius: 1rem;
-  background: var(--site-input-bg);
-  color: var(--site-input-text);
-  padding: 0.92rem 1rem;
-  font: inherit;
-  transition:
-    border-color 180ms ease,
-    box-shadow 180ms ease,
-    background-color 180ms ease;
-}
-
-:deep(.field textarea) {
-  resize: vertical;
-  min-height: 8rem;
-}
-
-:deep(.field input:focus-visible),
-:deep(.field textarea:focus-visible),
-:deep(.field select:focus-visible) {
-  outline: none;
-  border-color: var(--site-focus);
-  box-shadow: 0 0 0 4px var(--site-focus-ring);
-  background: var(--site-elevated-strong);
-}
-
-.submit-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 3.1rem;
-  width: fit-content;
-  padding: 0.88rem 1.2rem;
-  border: 0;
-  border-radius: 999px;
-  background: var(--site-button-bg);
-  color: var(--site-button-text);
-  font-size: 0.96rem;
-  font-weight: 700;
-  touch-action: manipulation;
-  box-shadow: 0 16px 30px var(--site-focus-ring);
-  transition:
-    transform 180ms ease,
-    box-shadow 180ms ease,
-    background-color 180ms ease,
-    color 180ms ease;
-}
-
-.submit-button:hover,
-.submit-button:focus-visible {
-  transform: translateY(-1px);
-  background: var(--site-button-bg-hover);
-}
-
-.submit-button:disabled {
-  opacity: 0.68;
-  cursor: wait;
-  transform: none;
-}
-
-.success-note,
-.error-panel {
-  margin: 0;
-  padding: 0.9rem 1rem;
-  border-radius: 1rem;
-  line-height: 1.55;
-}
-
-.success-note {
-  background: var(--site-success-bg);
-  color: var(--site-success-text);
-}
-
-.error-panel {
-  background: var(--site-error-bg);
+.submission-page__rail-note--error {
   color: var(--site-error-text);
 }
 
-.error-note,
-.error-note-detail {
-  margin: 0;
+.submission-page__all {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: fit-content;
+  font-size: var(--text-sm);
+  font-weight: 700;
 }
 
-.error-note-detail {
-  margin-top: 0.35rem;
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-@media (max-width: 1080px) {
-  .submission-page {
-    grid-template-columns: 1fr;
-  }
-
-  .submission-page__hero,
-  .submission-page__panel,
-  .submission-page__rail {
-    grid-column: 1;
-    grid-row: auto;
+@media (max-width: 960px) {
+  .submission-page__layout {
+    grid-template-columns: minmax(0, 46rem);
   }
 
   .submission-page__rail {
     position: static;
-    padding-top: 0;
-    max-width: 50rem;
-  }
-
-  .submission-page__panel {
-    max-width: 50rem;
   }
 }
 
-@media (max-width: 760px) {
-  .submission-page__tips,
-  .submission-page__activity,
-  .submission-page__flow,
-  .submission-page__form {
-    padding: 1.2rem;
-  }
-
-  .submission-page__draft {
-    align-items: flex-start;
-  }
-
-  :deep(.field-grid) {
-    grid-template-columns: 1fr;
-  }
-
-  .submit-button {
+@media (max-width: 640px) {
+  .submission-page__submit-button {
     width: 100%;
   }
 }

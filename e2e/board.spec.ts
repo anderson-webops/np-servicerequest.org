@@ -81,6 +81,7 @@ test('browser location stays out of shareable board URLs and request URLs', asyn
   await context.grantPermissions(['geolocation'])
   await context.setGeolocation({ latitude: 33.749, longitude: -84.388 })
   await page.goto('/')
+  await page.getByText('Filter and sort', { exact: true }).click()
 
   const nearbyRequestPromise = page.waitForRequest(request =>
     request.url().includes('/api/board/items')
@@ -121,6 +122,7 @@ test('browser location stays out of shareable board URLs and request URLs', asyn
   expect(page.url()).not.toMatch(/[?&](?:lat|lng)=/)
 
   await page.reload()
+  await page.getByText('Filter and sort', { exact: true }).click()
   await expect(page.getByRole('combobox', { name: 'Sort' })).toHaveValue('nearby')
   await expect(page.getByRole('button', { name: 'Refresh location' })).toBeVisible()
   expect(page.url()).not.toMatch(/[?&](?:lat|lng)=/)
@@ -155,6 +157,7 @@ test('legacy coordinate links are scrubbed before page analytics and not reused'
   })
 
   await page.goto('/?filter=service-request&lat=33.749&lat=34&lng=-84.388&sort=nearby#live-board')
+  await page.getByText('Filter and sort', { exact: true }).click()
   await expect(page.getByRole('combobox', { name: 'Sort' })).toHaveValue('recent-activity')
   expect(page.url()).not.toMatch(/[?&](?:lat|lng)=/)
   expect(page.url()).not.toContain('sort=nearby')
@@ -166,6 +169,7 @@ test('legacy coordinate links are scrubbed before page analytics and not reused'
 test('denied geolocation leaves nearby sorting inactive and the URL clean', async ({ context, page }) => {
   await context.grantPermissions([])
   await page.goto('/')
+  await page.getByText('Filter and sort', { exact: true }).click()
   await page.getByRole('combobox', { name: 'Sort' }).selectOption('nearby')
   await expect(page.getByText('Could not read your current location. Nearby sorting needs browser location access.')).toBeVisible()
   await expect(page.getByRole('combobox', { name: 'Sort' })).toHaveValue('recent-activity')
@@ -176,6 +180,7 @@ test('service-search sends browser coordinates in a request body', async ({ cont
   await context.grantPermissions(['geolocation'])
   await context.setGeolocation({ latitude: 33.749, longitude: -84.388 })
   await page.goto('/service-search')
+  await page.getByText('Refine search', { exact: true }).click()
 
   const nearbyRequestPromise = page.waitForRequest(request =>
     request.url().includes('/api/service-directory/search')
@@ -387,6 +392,7 @@ test('the separate admin page rejects a bad key, accepts the admin key, and hidi
   await submissionCard.getByRole('button', { name: 'Reject + hide' }).click()
   await expect(submissionCard).toHaveCount(0)
 
+  await page.getByText('Filter reviews', { exact: true }).click()
   await page.getByRole('button', { name: /Rejected/ }).click()
 
   const rejectedCard = page.locator('.admin-card').filter({ hasText: title }).first()
@@ -398,4 +404,53 @@ test('the separate admin page rejects a bad key, accepts the admin key, and hidi
 
   const hiddenResponse = await request.get(`${apiBaseUrl}/board/items/${boardItemId}`)
   expect(hiddenResponse.status()).toBe(404)
+})
+
+test('compact content leads on mobile and header search works across pages', async ({ page, request }) => {
+  const title = `Compact ladder ${Date.now()}`
+  await createSubmission(request, 'item-request', {
+    contact_method: 'email',
+    contact_value: 'compact-fixture@example.com',
+    details: 'A ladder for one weekend.',
+    duration: 'One weekend',
+    item_needed: title,
+    name: 'Board Neighbor',
+    neighborhood: 'Atlanta, GA',
+    pickup_plan: 'I can pick it up',
+  })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/?filter=item-request&sort=newest')
+  await expect(page.getByRole('link', { name: new RegExp(title) })).toBeInViewport({ ratio: 1 })
+  await expect(page.getByRole('searchbox')).toHaveCount(0)
+  const searchButton = page.getByRole('button', { name: 'Search posts', exact: true })
+  const searchBounds = await searchButton.boundingBox()
+  const newPostBounds = await page.getByRole('banner').getByRole('button', { name: /New/ }).boundingBox()
+  expect(searchBounds!.x).toBeGreaterThan(newPostBounds!.x + newPostBounds!.width)
+  await searchButton.click()
+  const searchBox = page.getByRole('searchbox', { name: 'Search the live board' })
+  await expect(searchBox).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog', { name: 'Search posts' })).not.toBeVisible()
+  await expect(searchButton).toBeFocused()
+
+  await searchButton.click()
+  await searchBox.fill(title)
+  await searchBox.press('Enter')
+  await expect(page).toHaveURL(/q=/)
+  let url = new URL(page.url())
+  expect(url.searchParams.get('q')).toBe(title)
+  expect(url.searchParams.get('filter')).toBe('item-request')
+  expect(url.searchParams.get('sort')).toBe('newest')
+  expect(url.searchParams.has('page')).toBe(false)
+  await expect(page.getByRole('link', { name: new RegExp(title) })).toBeInViewport({ ratio: 1 })
+
+  await page.goto('/help')
+  await page.getByRole('button', { name: 'Search posts', exact: true }).click()
+  await page.getByRole('searchbox').fill(title)
+  await page.getByRole('button', { name: 'Submit search' }).click()
+  await expect(page).toHaveURL(/q=/)
+  url = new URL(page.url())
+  expect(url.pathname).toBe('/')
+  expect(url.searchParams.get('q')).toBe(title)
+  await expect(page.getByRole('link', { name: new RegExp(title) })).toBeVisible()
 })

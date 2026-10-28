@@ -20,6 +20,7 @@ import { isAntiBotChallenge, isAntiBotChallengeExpired, markAntiBotChallengeObse
 import { boardReportReasonOptions, forgetBoardDeleteToken, getBoardEndpoint, getStoredBoardDeleteToken, rememberBoardDeleteToken } from '~/utils/board'
 import { formatBoardDate, getBoardApiErrorState, getBoardDetailPath, getContactActionLabel, getInteractionDeleteKey, getReplyActionLabel, getRevealKey } from '~/utils/boardUi'
 import { consumePendingManagementClaim } from '~/utils/managementLink'
+import { formatRelativeTime, formatReplyCount, getPostType } from '~/utils/postTypes'
 import {
   boardContactMethodOptions,
   getBoardContactValueAutocomplete,
@@ -50,6 +51,7 @@ const managementNotice = ref('')
 const managementPending = ref(false)
 const managementError = ref<BoardFormErrorState | null>(null)
 const openReply = ref(false)
+const replyMessageElement = ref<HTMLTextAreaElement | null>(null)
 const confirmDelete = ref(false)
 const confirmDeleteInteractionKey = ref<string | null>(null)
 const storedDeleteToken = ref('')
@@ -353,7 +355,7 @@ function getResolvedNote(currentItem: BoardItem) {
 }
 
 function getResolutionBadgeLabel(currentItem: BoardItem) {
-  return currentItem.resolutionStatus === 'fulfilled' ? 'fulfilled' : 'closed'
+  return currentItem.resolutionStatus === 'fulfilled' ? 'Fulfilled' : 'Closed'
 }
 
 function toggleItemReportForm() {
@@ -782,6 +784,13 @@ function openReplyForm() {
     return
 
   openReply.value = !openReply.value
+
+  if (openReply.value) {
+    void nextTick(() => {
+      replyMessageElement.value?.focus({ preventScroll: true })
+      replyMessageElement.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }
 }
 
 watch(viewer, () => {
@@ -858,16 +867,38 @@ watch(routeManagementToken, (nextToken, previousToken) => {
 </script>
 
 <template>
-  <div class="post-page">
-    <section class="post-page__hero">
-      <NuxtLink class="post-page__back" prefetch-on="interaction" to="/#live-board">
-        Back to live board
-      </NuxtLink>
+  <div class="post-page container" :class="item ? getPostType(item.kind).tone : undefined">
+    <header class="page-header post-page__header">
+
+      <div v-if="item" class="post-page__badges">
+        <span class="badge badge--kind">
+          <span aria-hidden="true" :class="getPostType(item.kind).icon" />
+          {{ item.kindLabel }}
+        </span>
+        <span
+          v-if="item.resolutionStatus !== 'open'"
+          class="badge"
+          :class="item.resolutionStatus === 'fulfilled' ? 'badge--success' : 'badge--muted'"
+        >{{ getResolutionBadgeLabel(item) }}</span>
+      </div>
 
       <h1>
         {{ pageHeading }}
       </h1>
 
+      <p v-if="item" class="post-page__byline">
+        <span>{{ item.author.displayName }}</span>
+        <span v-if="item.author.hasAccount" class="badge badge--muted">Member</span>
+        <span aria-hidden="true">·</span>
+        <time :datetime="item.createdAt" :title="formatBoardDate(item.createdAt)">
+          Posted {{ formatRelativeTime(item.createdAt) }}
+        </time>
+        <span aria-hidden="true">·</span>
+        <span>{{ formatReplyCount(item.interactionCount) }}</span>
+      </p>
+    </header>
+
+    <div class="post-page__notices">
       <p v-if="securityError" class="inline-note inline-note--error" role="alert">
         {{ securityError.message }} {{ securityError.detail }}
       </p>
@@ -880,253 +911,95 @@ watch(routeManagementToken, (nextToken, previousToken) => {
       <p v-if="managementPending" class="inline-note" role="status">
         Claiming management access...
       </p>
-    </section>
+    </div>
 
-    <section class="post-page__body">
-      <div v-if="!itemLoaded || itemPending" class="board-empty board-empty--loading" role="status">
-        Loading this board post...
-      </div>
+    <div v-if="!itemLoaded || itemPending" class="post-page__empty" role="status">
+      Loading this board post...
+    </div>
 
-      <div v-else-if="itemError" class="board-empty board-empty--error" role="alert">
-        <p>{{ itemError.message }}</p>
-        <p>{{ itemError.detail }}</p>
-      </div>
+    <div v-else-if="itemError" class="post-page__empty inline-note--error" role="alert">
+      <p>{{ itemError.message }}</p>
+      <p>{{ itemError.detail }}</p>
+    </div>
 
-      <article v-else-if="item" class="board-card">
-        <header class="board-card__header">
-          <div>
-            <p class="board-card__kind">
-              {{ item.kindLabel }}
-            </p>
-          </div>
-
-          <div class="board-card__meta">
-            <span>{{ formatBoardDate(item.createdAt) }}</span>
-            <span>{{ item.interactionCount }} replies</span>
-          </div>
-        </header>
-
-        <div class="board-card__author">
-          <strong>{{ item.author.displayName }}</strong>
-          <span v-if="item.author.hasAccount" class="board-card__badge">account-backed</span>
-          <span v-if="item.resolutionStatus !== 'open'" class="board-card__badge board-card__badge--resolved">{{ getResolutionBadgeLabel(item) }}</span>
-        </div>
-
-        <p class="board-card__summary-label">
-          {{ item.summaryLabel }}
-        </p>
-        <p class="board-card__summary">
-          {{ item.summary }}
-        </p>
-
-        <dl v-if="item.attributes.length" class="board-card__attributes">
-          <div v-for="attribute in item.attributes" :key="`${item.id}-${attribute.label}`">
-            <dt>{{ attribute.label }}</dt>
-            <dd>{{ attribute.value }}</dd>
-          </div>
-        </dl>
-
-        <div class="board-card__utility">
-          <div class="board-card__action-group">
-            <p class="board-card__utility-label">
-              Public actions
-            </p>
-            <div class="board-card__actions">
-              <button
-                class="secondary-button"
-                :disabled="revealItemPending"
-                type="button"
-                @click="revealCurrentItemContact"
-              >
-                {{ getItemContactActionLabel(item) }}
-              </button>
-              <button
-                v-if="canReplyToItem(item)"
-                class="secondary-button secondary-button--dark"
-                type="button"
-                @click="openReplyForm"
-              >
-                {{ openReply ? 'Hide reply form' : getReplyActionLabel(item.kind) }}
-              </button>
-            </div>
-          </div>
-
-          <div
-            v-if="canResolveItem(item) || canDeleteItem(item)"
-            class="board-card__action-group board-card__action-group--owner"
-          >
-            <p class="board-card__utility-label">
-              Owner tools
-            </p>
-            <div class="board-card__actions">
-              <button
-                v-if="canResolveItem(item) && item.resolutionStatus !== 'fulfilled'"
-                class="secondary-button"
-                :disabled="resolvePending"
-                type="button"
-                @click="updateBoardResolution('fulfilled')"
-              >
-                {{ getResolutionActionLabel('fulfilled') }}
-              </button>
-              <button
-                v-if="canResolveItem(item) && item.resolutionStatus !== 'closed'"
-                class="secondary-button"
-                :disabled="resolvePending"
-                type="button"
-                @click="updateBoardResolution('closed')"
-              >
-                {{ getResolutionActionLabel('closed') }}
-              </button>
-              <button
-                v-if="canResolveItem(item) && item.resolutionStatus !== 'open'"
-                class="secondary-button"
-                :disabled="resolvePending"
-                type="button"
-                @click="updateBoardResolution('open')"
-              >
-                {{ getResolutionActionLabel('open') }}
-              </button>
-              <button
-                v-if="canDeleteItem(item)"
-                class="secondary-button secondary-button--danger"
-                :disabled="deletePending"
-                type="button"
-                @click="deleteBoardPost"
-              >
-                {{ getDeleteActionLabel() }}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div class="board-card__report">
-          <p class="board-card__utility-label">
-            Safety and moderation
+    <div v-else-if="item" class="post-page__layout">
+      <div class="post-page__main">
+        <article class="post-details surface" aria-labelledby="post-details-heading">
+          <h2 id="post-details-heading" class="post-details__label">
+            {{ item.summaryLabel }}
+          </h2>
+          <p class="post-details__summary">
+            {{ item.summary }}
           </p>
-          <button
-            class="inline-action"
-            type="button"
-            @click="toggleItemReportForm"
-          >
-            {{ itemReportOpen ? "Hide report form" : "Report post" }}
-          </button>
 
-          <form
-            v-if="itemReportOpen"
-            class="report-form"
-            :aria-busy="itemReportPending"
-            @submit.prevent="submitItemReport"
-          >
-            <label class="field">
-              <span>Reason</span>
-              <select v-model="itemReportReason">
-                <option
-                  v-for="option in boardReportReasonOptions"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ option.label }}
-                </option>
-              </select>
-            </label>
+          <dl v-if="item.attributes.length" class="post-details__facts">
+            <div v-for="attribute in item.attributes" :key="`${item.id}-${attribute.label}`">
+              <dt>{{ attribute.label }}</dt>
+              <dd>{{ attribute.value }}</dd>
+            </div>
+          </dl>
 
-            <label class="field field--wide">
-              <span>Details (optional)</span>
-              <textarea
-                v-model="itemReportDetails"
-                rows="3"
-              />
-            </label>
+          <p v-if="item.resolutionStatus !== 'open'" class="inline-note">
+            {{ getResolvedNote(item) }}
+          </p>
+        </article>
 
-            <button
-              class="submit-button submit-button--slim"
-              :disabled="itemReportPending"
-              type="submit"
-            >
-              {{ itemReportPending ? "Sending report..." : "Send report" }}
-            </button>
-          </form>
-        </div>
+        <section class="post-thread" aria-labelledby="post-thread-heading">
+          <h2 id="post-thread-heading" class="post-thread__heading">
+            Responses
+            <span class="badge badge--muted">{{ item.interactionCount }}</span>
+          </h2>
 
-        <p v-if="item.resolutionStatus !== 'open'" class="board-card__resolved-note">
-          {{ getResolvedNote(item) }}
-        </p>
-
-        <p v-if="deleteError" class="inline-note inline-note--error" role="alert">
-          {{ deleteError.message }} {{ deleteError.detail }}
-        </p>
-        <p v-if="resolveError" class="inline-note inline-note--error" role="alert">
-          {{ resolveError.message }} {{ resolveError.detail }}
-        </p>
-        <p v-if="revealItemError" class="inline-note inline-note--error" role="alert">
-          {{ revealItemError.message }} {{ revealItemError.detail }}
-        </p>
-        <p v-if="revealItemContact && revealItemContactVisible" class="inline-note inline-note--success" role="status">
-          Contact: {{ revealItemContact }}
-        </p>
-        <p v-if="itemReportError" class="inline-note inline-note--error" role="alert">
-          {{ itemReportError.message }} {{ itemReportError.detail }}
-        </p>
-        <p v-if="itemReportNotice" class="inline-note inline-note--success" role="status">
-          {{ itemReportNotice }}
-        </p>
-
-        <section class="board-thread">
-          <div class="board-thread__header">
-            <p class="board-card__thread-label">
-              Board responses
-            </p>
-            <p class="board-thread__hint">
-              Replies stay public here unless someone deliberately reveals direct contact.
-            </p>
-          </div>
-
-          <div v-if="item.interactions.length" class="thread-list">
-            <article v-for="interaction in item.interactions" :key="interaction.id" class="thread-item">
+          <ol v-if="item.interactions.length" class="thread-list">
+            <li v-for="interaction in item.interactions" :key="interaction.id" class="thread-item">
               <div class="thread-item__header">
-                <div>
-                  <strong>{{ interaction.author.displayName }}</strong>
-                  <span v-if="interaction.author.hasAccount" class="board-card__badge">account-backed</span>
-                </div>
-                <span>{{ formatBoardDate(interaction.createdAt) }}</span>
+                <strong>{{ interaction.author.displayName }}</strong>
+                <span v-if="interaction.author.hasAccount" class="badge badge--muted">Member</span>
+                <time :datetime="interaction.createdAt" :title="formatBoardDate(interaction.createdAt)">
+                  {{ formatRelativeTime(interaction.createdAt) }}
+                </time>
               </div>
-              <p>{{ interaction.message }}</p>
-              <button
-                class="thread-item__contact"
-                :disabled="revealPending[getRevealKey(item.id, interaction.id)]"
-                type="button"
-                @click="revealInteractionContact(interaction.id)"
-              >
-                {{ getInteractionContactActionLabel(interaction.id) }}
-              </button>
-              <button
-                v-if="canDeleteInteraction(interaction)"
-                class="thread-item__contact thread-item__contact--danger"
-                :disabled="deleteInteractionPending[getInteractionDeleteKey(item.id, interaction.id)]"
-                type="button"
-                @click="deleteBoardInteraction(interaction.id)"
-              >
-                {{ getDeleteInteractionActionLabel(interaction.id) }}
-              </button>
-              <button
-                class="thread-item__contact"
-                type="button"
-                @click="toggleInteractionReportForm(interaction.id)"
-              >
-                {{
-                  reportInteractionOpen[interaction.id]
-                    ? "Hide report form"
-                    : "Report reply"
-                }}
-              </button>
+              <p class="thread-item__message">
+                {{ interaction.message }}
+              </p>
+              <div class="thread-item__actions">
+                <button
+                  class="button button--quiet button--small"
+                  :disabled="revealPending[getRevealKey(item.id, interaction.id)]"
+                  type="button"
+                  @click="revealInteractionContact(interaction.id)"
+                >
+                  {{ getInteractionContactActionLabel(interaction.id) }}
+                </button>
+                <button
+                  v-if="canDeleteInteraction(interaction)"
+                  class="button button--quiet button--small thread-item__danger"
+                  :disabled="deleteInteractionPending[getInteractionDeleteKey(item.id, interaction.id)]"
+                  type="button"
+                  @click="deleteBoardInteraction(interaction.id)"
+                >
+                  {{ getDeleteInteractionActionLabel(interaction.id) }}
+                </button>
+                <button
+                  class="button button--quiet button--small thread-item__report"
+                  type="button"
+                  @click="toggleInteractionReportForm(interaction.id)"
+                >
+                  {{
+                    reportInteractionOpen[interaction.id]
+                      ? "Hide report form"
+                      : "Report reply"
+                  }}
+                </button>
+              </div>
               <form
                 v-if="reportInteractionOpen[interaction.id]"
-                class="report-form report-form--thread"
+                class="report-form"
                 :aria-busy="reportInteractionPending[interaction.id]"
                 @submit.prevent="submitInteractionReport(interaction.id)"
               >
                 <label class="field">
-                  <span>Reason</span>
+                  <span class="field__label">Reason</span>
                   <select v-model="reportInteractionReason[interaction.id]">
                     <option
                       v-for="option in boardReportReasonOptions"
@@ -1138,8 +1011,8 @@ watch(routeManagementToken, (nextToken, previousToken) => {
                   </select>
                 </label>
 
-                <label class="field field--wide">
-                  <span>Details (optional)</span>
+                <label class="field">
+                  <span class="field__label">Details <span class="field__optional">(optional)</span></span>
                   <textarea
                     v-model="reportInteractionDetails[interaction.id]"
                     rows="3"
@@ -1147,7 +1020,7 @@ watch(routeManagementToken, (nextToken, previousToken) => {
                 </label>
 
                 <button
-                  class="submit-button submit-button--slim"
+                  class="button button--secondary button--small"
                   :disabled="reportInteractionPending[interaction.id]"
                   type="submit"
                 >
@@ -1173,15 +1046,15 @@ watch(routeManagementToken, (nextToken, previousToken) => {
               <p v-if="isInteractionContactVisible(interaction.id)" class="inline-note inline-note--success" role="status">
                 Contact: {{ revealInteractionContacts[getRevealKey(item.id, interaction.id)] }}
               </p>
-            </article>
-          </div>
+            </li>
+          </ol>
 
-          <p v-else class="board-card__thread-empty">
+          <p v-else class="post-thread__empty">
             No responses yet.
           </p>
           <button
             v-if="item.interactionPage?.hasMore"
-            class="submit-button submit-button--slim"
+            class="button button--secondary"
             :disabled="interactionsPending"
             type="button"
             @click="loadMoreInteractions"
@@ -1191,636 +1064,499 @@ watch(routeManagementToken, (nextToken, previousToken) => {
           <p v-if="interactionsError" class="inline-note inline-note--error" role="alert">
             {{ interactionsError.message }} {{ interactionsError.detail }}
           </p>
+
+          <section
+            v-if="openReply && canReplyToItem(item)"
+            class="reply-panel surface"
+            aria-labelledby="reply-heading"
+          >
+            <h3 id="reply-heading">
+              {{ getReplyActionLabel(item.kind) }}
+            </h3>
+
+            <form
+              class="reply-form"
+              :aria-busy="replyStatus.pending"
+              @submit.prevent="submitBoardReply"
+            >
+              <p class="sr-only">
+                <label>Do not fill this field if you are human. <input v-model="replyDraft['bot-field']" name="bot-field" type="text"></label>
+              </p>
+
+              <label class="field">
+                <span class="field__label">Message</span>
+                <textarea ref="replyMessageElement" v-model="replyDraft.message" required rows="5" />
+              </label>
+
+              <p class="form-section__note">
+                Replies are public. Other visitors can reveal your contact details.
+              </p>
+
+              <div class="field-grid">
+                <label class="field field--wide">
+                  <span class="field__label">Your name</span>
+                  <input v-model="replyDraft.name" :required="!viewer" autocomplete="name" placeholder="Jane Smith" type="text">
+                </label>
+
+                <label class="field">
+                  <span class="field__label">Contact method</span>
+                  <select v-model="replyDraft.contact_method" :required="!viewer">
+                    <option v-for="option in boardContactMethodOptions" :key="option.value" :value="option.value">
+                      {{ option.label }}
+                    </option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span class="field__label">
+                    {{ getBoardContactValueLabel(replyDraft.contact_method) }}
+                    <span v-if="viewer" class="field__optional">(optional when signed in)</span>
+                  </span>
+                  <input
+                    v-model="replyDraft.contact_value"
+                    :autocomplete="getBoardContactValueAutocomplete(replyDraft.contact_method)"
+                    :inputmode="getBoardContactValueInputMode(replyDraft.contact_method)"
+                    :placeholder="getBoardContactValuePlaceholder(replyDraft.contact_method)"
+                    :required="!viewer"
+                    :type="getBoardContactValueType(replyDraft.contact_method)"
+                  >
+                </label>
+
+                <label class="field field--wide">
+                  <span class="field__label">Contact note <span class="field__optional">(optional)</span></span>
+                  <input v-model="replyDraft.contact_note" placeholder="Text first or evenings." type="text">
+                </label>
+              </div>
+
+              <p v-if="replyStatus.error" class="inline-note inline-note--error" role="alert">
+                {{ replyStatus.error.message }} {{ replyStatus.error.detail }}
+              </p>
+              <p v-if="replyStatus.success" class="inline-note inline-note--success" role="status">
+                Your response is now on the board.
+              </p>
+
+              <button class="button button--primary reply-form__submit" :disabled="replyStatus.pending" type="submit">
+                {{ replyStatus.pending ? 'Posting response...' : 'Post board response' }}
+              </button>
+            </form>
+          </section>
         </section>
-      </article>
+      </div>
 
-      <section
-        v-if="item && openReply && canReplyToItem(item)"
-        class="reply-panel"
-      >
-        <div class="reply-panel__header">
-          <h2>{{ getReplyActionLabel(item.kind) }}</h2>
-        </div>
+      <aside class="post-page__sidebar" aria-label="Post actions">
+        <div class="post-actions surface">
+          <button
+            v-if="canReplyToItem(item)"
+            :aria-expanded="openReply"
+            class="button button--primary button--block"
+            type="button"
+            @click="openReplyForm"
+          >
+            {{ openReply ? 'Hide reply form' : getReplyActionLabel(item.kind) }}
+          </button>
+          <button
+            class="button button--secondary button--block"
+            :disabled="revealItemPending"
+            type="button"
+            @click="revealCurrentItemContact"
+          >
+            {{ getItemContactActionLabel(item) }}
+          </button>
 
-        <form
-          class="reply-form"
-          :aria-busy="replyStatus.pending"
-          @submit.prevent="submitBoardReply"
-        >
-          <p class="sr-only">
-            <label>Do not fill this field if you are human. <input v-model="replyDraft['bot-field']" name="bot-field" type="text"></label>
+          <p v-if="revealItemContact && revealItemContactVisible" class="inline-note inline-note--success" role="status">
+            Contact: {{ revealItemContact }}
+          </p>
+          <p v-if="revealItemError" class="inline-note inline-note--error" role="alert">
+            {{ revealItemError.message }} {{ revealItemError.detail }}
           </p>
 
-          <div class="field-grid">
-            <label class="field">
-              <span>Your name</span>
-              <input v-model="replyDraft.name" :required="!viewer" autocomplete="name" placeholder="Jane Smith" type="text">
-            </label>
-
-            <label class="field">
-              <span>Contact method</span>
-              <select v-model="replyDraft.contact_method" :required="!viewer">
-                <option v-for="option in boardContactMethodOptions" :key="option.value" :value="option.value">
-                  {{ option.label }}
-                </option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>{{ viewer ? `${getBoardContactValueLabel(replyDraft.contact_method)} (optional when signed in)` : getBoardContactValueLabel(replyDraft.contact_method) }}</span>
-              <input
-                v-model="replyDraft.contact_value"
-                :autocomplete="getBoardContactValueAutocomplete(replyDraft.contact_method)"
-                :inputmode="getBoardContactValueInputMode(replyDraft.contact_method)"
-                :placeholder="getBoardContactValuePlaceholder(replyDraft.contact_method)"
-                :required="!viewer"
-                :type="getBoardContactValueType(replyDraft.contact_method)"
-              >
-            </label>
-
-            <label class="field field--wide">
-              <span>Contact note (optional)</span>
-              <input v-model="replyDraft.contact_note" placeholder="Text first or evenings." type="text">
-            </label>
-
-            <label class="field field--wide">
-              <span>Message</span>
-              <textarea v-model="replyDraft.message" required rows="5" />
-            </label>
+          <div
+            v-if="canResolveItem(item) || canDeleteItem(item)"
+            class="post-actions__group"
+          >
+            <h2>Manage your post</h2>
+            <button
+              v-if="canResolveItem(item) && item.resolutionStatus !== 'fulfilled'"
+              class="button button--secondary button--block"
+              :disabled="resolvePending"
+              type="button"
+              @click="updateBoardResolution('fulfilled')"
+            >
+              {{ getResolutionActionLabel('fulfilled') }}
+            </button>
+            <button
+              v-if="canResolveItem(item) && item.resolutionStatus !== 'closed'"
+              class="button button--secondary button--block"
+              :disabled="resolvePending"
+              type="button"
+              @click="updateBoardResolution('closed')"
+            >
+              {{ getResolutionActionLabel('closed') }}
+            </button>
+            <button
+              v-if="canResolveItem(item) && item.resolutionStatus !== 'open'"
+              class="button button--secondary button--block"
+              :disabled="resolvePending"
+              type="button"
+              @click="updateBoardResolution('open')"
+            >
+              {{ getResolutionActionLabel('open') }}
+            </button>
+            <button
+              v-if="canDeleteItem(item)"
+              class="button button--danger button--block"
+              :disabled="deletePending"
+              type="button"
+              @click="deleteBoardPost"
+            >
+              {{ getDeleteActionLabel() }}
+            </button>
+            <p v-if="deleteError" class="inline-note inline-note--error" role="alert">
+              {{ deleteError.message }} {{ deleteError.detail }}
+            </p>
+            <p v-if="resolveError" class="inline-note inline-note--error" role="alert">
+              {{ resolveError.message }} {{ resolveError.detail }}
+            </p>
           </div>
 
-          <p v-if="replyStatus.error" class="inline-note inline-note--error" role="alert">
-            {{ replyStatus.error.message }} {{ replyStatus.error.detail }}
-          </p>
-          <p v-if="replyStatus.success" class="inline-note inline-note--success" role="status">
-            Your response is now on the board.
-          </p>
+          <div class="post-actions__report">
+            <button
+              :aria-expanded="itemReportOpen"
+              class="button button--quiet button--small"
+              type="button"
+              @click="toggleItemReportForm"
+            >
+              <span aria-hidden="true" class="i-carbon-flag" />
+              {{ itemReportOpen ? "Hide report form" : "Report post" }}
+            </button>
 
-          <button class="submit-button submit-button--slim" :disabled="replyStatus.pending" type="submit">
-            {{ replyStatus.pending ? 'Posting response...' : 'Post board response' }}
-          </button>
-        </form>
-      </section>
-    </section>
+            <form
+              v-if="itemReportOpen"
+              class="report-form"
+              :aria-busy="itemReportPending"
+              @submit.prevent="submitItemReport"
+            >
+              <label class="field">
+                <span class="field__label">Reason</span>
+                <select v-model="itemReportReason">
+                  <option
+                    v-for="option in boardReportReasonOptions"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span class="field__label">Details <span class="field__optional">(optional)</span></span>
+                <textarea
+                  v-model="itemReportDetails"
+                  rows="3"
+                />
+              </label>
+
+              <button
+                class="button button--secondary button--small"
+                :disabled="itemReportPending"
+                type="submit"
+              >
+                {{ itemReportPending ? "Sending report..." : "Send report" }}
+              </button>
+            </form>
+            <p v-if="itemReportError" class="inline-note inline-note--error" role="alert">
+              {{ itemReportError.message }} {{ itemReportError.detail }}
+            </p>
+            <p v-if="itemReportNotice" class="inline-note inline-note--success" role="status">
+              {{ itemReportNotice }}
+            </p>
+          </div>
+        </div>
+      </aside>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.post-page {
+.post-page__header {
+  max-width: var(--content-narrow);
+}
+
+.post-page__badges,
+.post-page__byline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+}
+
+.post-page__byline {
+  color: var(--site-subtle);
+  font-size: var(--text-sm);
+}
+
+.post-page__notices {
   display: grid;
-  gap: var(--page-section-gap);
-  padding-right: var(--page-inline-end);
-  padding-bottom: 2.75rem;
-  padding-left: var(--page-inline-start);
+  gap: 0.6rem;
+  margin-bottom: 1rem;
 }
 
-.post-page__hero,
-.post-page__body {
+.post-page__notices:empty {
+  display: none;
+}
+
+.post-page__empty {
   display: grid;
-  gap: var(--page-hero-gap);
-}
-
-.post-page__hero {
-  max-width: var(--page-hero-max);
-  padding-block: var(--page-hero-space);
-}
-
-.post-page__back {
-  width: fit-content;
-  color: var(--site-link);
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.post-page__back:hover,
-.post-page__back:focus-visible {
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-}
-
-.eyebrow {
-  margin: 0;
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--site-muted);
-}
-
-.post-page h1,
-.board-card__header h2,
-.reply-panel__header h2 {
-  margin: 0;
-  font-family: 'DM Serif Display', serif;
-  font-weight: 400;
-  letter-spacing: -0.03em;
-  color: var(--site-heading);
-}
-
-.post-page h1 {
-  max-width: var(--page-hero-title-max);
-  font-size: var(--page-hero-title-size);
-  line-height: 0.92;
-  overflow-wrap: anywhere;
-  text-wrap: balance;
-}
-
-.post-page__lede,
-.board-card__summary,
-.board-card__contact-note,
-.board-card__resolved-note,
-.board-card__thread-empty,
-.thread-item p {
-  color: var(--site-text);
-  line-height: 1.7;
-}
-
-.post-page__lede {
-  max-width: var(--page-hero-copy-max);
-  margin: 0;
-  font-size: 1.02rem;
-}
-
-.board-empty {
-  padding: 1.4rem 1.5rem;
-  border-radius: 1.4rem;
-  background: var(--site-surface-soft);
-  border: 1px dashed var(--site-border-dashed);
+  gap: 0.5rem;
+  padding: 1.5rem;
+  border: 1px dashed var(--field-border);
+  border-radius: var(--radius-lg);
   color: var(--site-subtle);
 }
 
-.board-empty p {
-  margin: 0;
-}
-
-.board-empty p + p {
-  margin-top: 0.55rem;
-}
-
-.board-card {
+.post-page__layout {
   display: grid;
-  gap: 1rem;
-  padding: var(--page-surface-padding);
-  border-radius: var(--page-surface-radius);
-  background: var(--site-surface);
-  border: 1px solid var(--site-border);
-  box-shadow: var(--site-shadow);
-}
-
-.board-card__header {
-  display: flex;
+  grid-template-columns: minmax(0, 46rem) minmax(15rem, 20rem);
   justify-content: space-between;
-  gap: 1rem;
-  align-items: flex-start;
+  gap: 1.5rem clamp(1.5rem, 4vw, 3.5rem);
+  align-items: start;
 }
 
-.board-card__header > div,
-.thread-item__header > div {
+.post-page__main {
+  display: grid;
+  gap: 2rem;
   min-width: 0;
 }
 
-.board-card__kind,
-.board-card__thread-label,
-.board-card__summary-label {
-  margin: 0;
-  font-size: 0.76rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--site-muted);
-}
-
-.board-card__header h2 {
-  margin-top: 0.35rem;
-  font-size: 2rem;
-  line-height: 1;
-  overflow-wrap: anywhere;
-  text-wrap: balance;
-}
-
-.reply-panel__header h2 {
-  font-size: 1.95rem;
-  line-height: 0.98;
-}
-
-.board-card__meta {
-  display: grid;
-  gap: 0.35rem;
-  justify-items: end;
-  color: var(--site-subtle);
-  font-size: 0.88rem;
-}
-
-.board-card__author {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.65rem;
-  align-items: center;
-  color: var(--site-text-strong);
-}
-
-.board-card__badge {
-  display: inline-flex;
-  padding: 0.32rem 0.62rem;
-  border-radius: 0.8rem;
-  background: var(--site-accent-soft);
-  color: var(--site-link);
-  font-size: 0.76rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.board-card__badge--resolved {
-  background: var(--site-success-bg);
-  color: var(--site-success-text);
-}
-
-.board-card__summary-label {
-  margin-bottom: -0.4rem;
-}
-
-.board-card__summary {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.board-card__attributes {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 0.8rem;
-  margin: 0;
-}
-
-.board-card__attributes div {
-  padding: 0.9rem 0.95rem;
-  border-radius: 1rem;
-  background: var(--site-elevated);
-}
-
-.board-card__attributes dt {
-  margin: 0;
-  font-size: 0.75rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--site-muted);
-}
-
-.board-card__attributes dd {
-  margin: 0.4rem 0 0;
-  color: var(--site-heading);
-  line-height: 1.55;
-  overflow-wrap: anywhere;
-}
-
-.board-card__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-
-.board-card__utility {
+.post-details {
   display: grid;
   gap: 1rem;
-  padding-top: 0.4rem;
-  border-top: 1px solid var(--site-border);
+  padding: clamp(1.1rem, 3vw, 1.75rem);
+  border-top: 3px solid var(--kind, var(--card-border));
 }
 
-.board-card__action-group {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.board-card__utility-label {
-  margin: 0;
-  font-size: 0.76rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--site-muted);
-}
-
-.board-card__report {
-  display: grid;
-  gap: 0.85rem;
-  padding: 1rem;
-  border-radius: 1.15rem;
-  background: color-mix(in srgb, var(--site-surface-soft) 82%, transparent);
-  border: 1px solid var(--site-border);
-}
-
-.board-card__contact-note,
-.board-card__resolved-note {
-  margin: 0;
-}
-
-.submit-button,
-.secondary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 2.95rem;
-  padding: 0.88rem 1.2rem;
-  border: 0;
-  border-radius: 1rem;
-  text-decoration: none;
-  font-size: 0.96rem;
-  font-weight: 700;
-  touch-action: manipulation;
-  transition:
-    transform 180ms ease,
-    box-shadow 180ms ease,
-    background-color 180ms ease,
-    color 180ms ease,
-    border-color 180ms ease;
-}
-
-.secondary-button {
-  background: transparent;
-  color: var(--site-heading);
-  border: 1px solid var(--site-border-strong);
-}
-
-.secondary-button:hover,
-.secondary-button:focus-visible {
-  transform: translateY(-1px);
-  background: var(--site-elevated);
-}
-
-.secondary-button:disabled,
-.submit-button:disabled {
-  opacity: 0.68;
-  cursor: wait;
-  transform: none;
-}
-
-.submit-button,
-.secondary-button--dark {
-  background: var(--site-button-bg);
-  color: var(--site-button-text);
-  box-shadow: 0 16px 30px var(--site-focus-ring);
-}
-
-.submit-button:hover,
-.submit-button:focus-visible,
-.secondary-button--dark:hover,
-.secondary-button--dark:focus-visible {
-  transform: translateY(-1px);
-  background: var(--site-button-bg-hover);
-}
-
-.secondary-button--danger {
-  border-color: rgba(181, 95, 82, 0.3);
-  color: var(--site-error-text);
-  background: var(--site-error-bg);
-  box-shadow: none;
-}
-
-.secondary-button--danger:hover,
-.secondary-button--danger:focus-visible {
-  background: rgba(181, 95, 82, 0.24);
-}
-
-.inline-note {
-  margin-top: 1rem;
-  padding: 0.9rem 1rem;
-  border-radius: 1rem;
-  line-height: 1.55;
-}
-
-.inline-note--success {
-  background: var(--site-success-bg);
-  color: var(--site-success-text);
-}
-
-.inline-note--error {
-  background: var(--site-error-bg);
-  color: var(--site-error-text);
-}
-
-.inline-action {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--site-link);
-  font: inherit;
-  font-weight: 700;
-  justify-self: flex-start;
-  cursor: pointer;
-}
-
-.inline-action:hover,
-.inline-action:focus-visible {
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-}
-
-.board-thread {
-  display: grid;
-  gap: 0.9rem;
-  padding-top: 0.4rem;
-  border-top: 1px solid var(--site-border);
-}
-
-.board-thread__header,
-.reply-panel__header {
-  display: grid;
-  gap: 0.45rem;
-  max-width: var(--page-hero-copy-max);
-}
-
-.board-thread__hint,
-.reply-panel__lede {
-  margin: 0;
+.post-details__label {
   color: var(--site-subtle);
-  line-height: 1.65;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.post-details__summary {
+  color: var(--site-heading);
+  font-size: var(--text-lg);
+  line-height: 1.6;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.post-details__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 1rem;
+  margin: 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--divider);
+}
+
+.post-details__facts dt {
+  color: var(--site-subtle);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.post-details__facts dd {
+  margin: 0.15rem 0 0;
+  color: var(--site-heading);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.post-thread {
+  display: grid;
+  gap: 1rem;
+  justify-items: start;
+}
+
+.post-thread > * {
+  width: 100%;
+}
+
+.post-thread > .button {
+  width: auto;
+}
+
+.post-thread__heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+.post-thread__empty {
+  color: var(--site-subtle);
 }
 
 .thread-list {
   display: grid;
-  gap: 0.9rem;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .thread-item {
-  padding: 1.05rem 1.1rem;
-  border-radius: 1.15rem;
-  background: color-mix(in srgb, var(--site-surface-soft) 82%, transparent);
-  border: 1px solid var(--site-border);
   display: grid;
-  gap: 0.65rem;
+  gap: 0.5rem;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.thread-item:first-child {
+  padding-top: 0;
 }
 
 .thread-item__header {
   display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: flex-start;
-  color: var(--site-subtle);
-  font-size: 0.88rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
 }
 
 .thread-item__header strong {
   color: var(--site-heading);
 }
 
-.thread-item p {
-  margin: 0;
+.thread-item__header time {
+  color: var(--site-subtle);
+  font-size: var(--text-sm);
+}
+
+.thread-item__message {
+  white-space: pre-line;
   overflow-wrap: anywhere;
 }
 
-.thread-item__contact {
-  padding: 0;
-  background: none;
-  border: 0;
-  color: var(--site-link);
-  font-weight: 700;
-  justify-self: flex-start;
-  cursor: pointer;
+.thread-item__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-left: -0.65rem;
 }
 
-.thread-item__contact:hover,
-.thread-item__contact:focus-visible {
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
+.thread-item__report {
+  color: var(--site-subtle);
 }
 
-.thread-item__contact--danger {
+.thread-item__danger {
   color: var(--site-error-text);
 }
 
 .reply-panel {
   display: grid;
   gap: 1rem;
-  padding: var(--page-surface-padding);
-  border-radius: var(--page-surface-radius);
-  background: color-mix(in srgb, var(--site-surface-soft) 82%, transparent);
-  border: 1px solid var(--site-border);
+  padding: clamp(1.1rem, 3vw, 1.75rem);
+}
+
+.reply-panel h3 {
+  font-size: var(--text-lg);
+  font-weight: 700;
 }
 
 .reply-form {
   display: grid;
-  gap: 0.9rem;
+  gap: 1rem;
+}
+
+.reply-form__submit {
+  justify-self: start;
+}
+
+.post-page__sidebar {
+  position: sticky;
+  top: 5.5rem;
+  min-width: 0;
+}
+
+.post-actions {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1.1rem;
+}
+
+.post-actions__group {
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 0.9rem;
+  margin-top: 0.3rem;
+  border-top: 1px solid var(--divider);
+}
+
+.post-actions__group h2 {
+  color: var(--site-subtle);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.post-actions__report {
+  display: grid;
+  gap: 0.6rem;
+  justify-items: start;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--divider);
+}
+
+.post-actions__report > .button {
+  margin-left: -0.4rem;
+  color: var(--site-subtle);
+}
+
+.post-actions__report > * {
+  max-width: 100%;
 }
 
 .report-form {
   display: grid;
-  gap: 0.9rem;
-  padding: 1rem;
-  border-radius: 1.2rem;
-  background: var(--site-elevated);
-  border: 1px solid var(--site-border);
-}
-
-.report-form--thread {
-  margin-top: 0.35rem;
-}
-
-.field-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.95rem;
-}
-
-.field {
-  display: grid;
-  gap: 0.45rem;
-}
-
-.field--wide {
-  grid-column: 1 / -1;
-}
-
-.field span {
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: var(--site-text);
-}
-
-.field input,
-.field textarea,
-.field select {
+  gap: 0.75rem;
   width: 100%;
-  border: 1px solid var(--site-border-strong);
-  border-radius: 1rem;
-  background: var(--site-input-bg);
-  color: var(--site-input-text);
-  padding: 0.92rem 1rem;
-  font: inherit;
-  transition:
-    border-color 180ms ease,
-    box-shadow 180ms ease,
-    background-color 180ms ease;
+  padding: 0.9rem;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  background: var(--site-surface-soft);
 }
 
-.field textarea {
-  resize: vertical;
-  min-height: 8rem;
+.report-form .button {
+  justify-self: start;
 }
 
-.field input:focus-visible,
-.field textarea:focus-visible,
-.field select:focus-visible {
-  outline: none;
-  border-color: var(--site-focus);
-  box-shadow: 0 0 0 4px var(--site-focus-ring);
-  background: var(--site-elevated-strong);
-}
-
-.submit-button {
-  width: fit-content;
-}
-
-.submit-button--slim {
-  min-height: 2.95rem;
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-@media (max-width: 860px) {
-  .field-grid {
-    grid-template-columns: 1fr;
+@media (max-width: 900px) {
+  .post-page__layout {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .board-card__header,
-  .thread-item__header {
-    flex-direction: column;
-    align-items: flex-start;
+  /* Read the post, then act, then the thread. */
+  .post-page__main {
+    display: contents;
   }
 
-  .board-card__meta {
-    justify-items: start;
+  .post-details {
+    order: 1;
+  }
+
+  .post-page__sidebar {
+    position: static;
+    order: 2;
+  }
+
+  .post-thread {
+    order: 3;
   }
 }
 
-@media (max-width: 760px) {
-  .post-page h1 {
-    max-width: 100%;
-  }
-
-  .board-card {
-    padding: 1.2rem;
-  }
-
-  .reply-panel {
-    padding: 1.2rem;
-  }
-
-  .board-card__actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .submit-button,
-  .secondary-button {
-    width: 100%;
+@media (max-width: 640px) {
+  .reply-form__submit {
+    justify-self: stretch;
   }
 }
 </style>

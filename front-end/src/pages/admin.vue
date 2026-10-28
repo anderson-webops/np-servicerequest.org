@@ -800,22 +800,11 @@ watch(
 <template>
   <div class="admin-page">
     <section class="admin-page__hero">
-      <NuxtLink
-        class="admin-page__back"
-        prefetch-on="interaction"
-        to="/#live-board"
-      >
-        Back to live board
-      </NuxtLink>
 
       <h1>Admin review</h1>
     </section>
 
     <section class="admin-page__panel">
-      <div class="admin-page__copy">
-        <h2>Admin access</h2>
-        <p>Sessions expire after eight hours.</p>
-      </div>
 
       <div class="admin-panel">
         <p
@@ -853,6 +842,7 @@ watch(
           <button class="submit-button" :disabled="authPending" type="submit">
             {{ authPending ? "Checking key…" : "Sign in with admin key" }}
           </button>
+          <p class="admin-session-note">Sessions expire after eight hours.</p>
         </form>
 
         <div v-else-if="hasHydrated" class="admin-panel__session">
@@ -878,7 +868,8 @@ watch(
         <h2>Review queue</h2>
       </div>
 
-      <div class="admin-review__filters">
+      <details class="admin-review__filters inline-options">
+        <summary>Filter reviews</summary>
         <div
           class="filter-strip"
           role="group"
@@ -916,7 +907,7 @@ watch(
             <strong>{{ filter.count }}</strong>
           </button>
         </div>
-      </div>
+      </details>
 
       <p v-if="refreshPending" class="inline-note" role="status">
         Refreshing admin review results…
@@ -979,6 +970,8 @@ watch(
             </span>
           </p>
 
+          <details class="inline-options">
+            <summary>Submission details</summary>
           <dl class="admin-card__fields">
             <div
               v-for="entry in submission.fieldEntries"
@@ -988,6 +981,7 @@ watch(
               <dd>{{ entry.value }}</dd>
             </div>
           </dl>
+          </details>
 
           <label class="field field--wide">
             <span>Admin notes</span>
@@ -1202,19 +1196,6 @@ watch(
   gap: var(--page-hero-gap);
 }
 
-.admin-page__back {
-  width: fit-content;
-  color: var(--site-link);
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.admin-page__back:hover,
-.admin-page__back:focus-visible {
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-}
-
 .eyebrow {
   margin: 0;
   font-size: 0.82rem;
@@ -1274,7 +1255,7 @@ watch(
 
 .admin-page__panel {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 1.2rem;
   align-items: start;
 }
@@ -1766,5 +1747,15 @@ watch(
     align-items: flex-start;
     flex-direction: column;
   }
+}
+
+.admin-session-note {
+  margin: 0;
+  color: var(--site-subtle);
+  font-size: var(--text-sm);
+}
+
+.admin-panel .field input {
+  border-color: var(--field-border);
 }
 </style>

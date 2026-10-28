@@ -12,7 +12,7 @@
 <style scoped>
 .not-found {
   max-width: 42rem;
-  padding-top: 5rem;
+  padding-top: 1.25rem;
   padding-right: var(--page-inline-end);
   padding-bottom: 4rem;
   padding-left: var(--page-inline-start);
@@ -30,7 +30,7 @@
 .not-found h1 {
   margin: 0;
   font-family: 'DM Serif Display', serif;
-  font-size: clamp(2.15rem, 4.4vw, 3.35rem);
+  font-size: var(--text-2xl);
   font-weight: 400;
   line-height: 0.95;
   letter-spacing: -0.03em;

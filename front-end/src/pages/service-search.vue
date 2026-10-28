@@ -10,9 +10,7 @@ import { withApiQuery } from '~/utils/api'
 import {
   findKnownPlace,
   getServiceDirectoryEndpoint,
-  nationwideServiceSites,
   searchAreaSpecificSites,
-  serviceDirectoryAudienceLabels,
 } from '~/utils/serviceDirectory'
 
 definePageMeta({
@@ -235,64 +233,10 @@ function changeProviderPage(nextPage: number) {
 <template>
   <div class="service-directory-page">
     <section class="service-directory-page__hero">
-      <NuxtLink
-        class="service-directory-page__back"
-        prefetch-on="interaction"
-        to="/service-directory"
-      >
-        Back to service directory
-      </NuxtLink>
 
       <h1>Service opportunities</h1>
-    </section>
-
-    <section class="directory-section">
-      <div class="section-heading">
-        <h2>Nationwide platforms</h2>
-      </div>
-
-      <div class="nationwide-grid">
-        <article
-          v-for="site in nationwideServiceSites"
-          :key="site.id"
-          class="directory-card"
-        >
-          <div class="directory-card__meta">
-            <span>{{ serviceDirectoryAudienceLabels[site.audience] }}</span>
-          </div>
-
-          <h3>{{ site.name }}</h3>
-          <p class="directory-card__coverage">
-            {{ site.coverageLabel }}
-          </p>
-          <p class="directory-card__summary">
-            {{ site.summary }}
-          </p>
-
-          <ul class="directory-card__tags">
-            <li v-for="tag in site.tags" :key="tag">
-              {{ tag }}
-            </li>
-          </ul>
-
-          <div class="directory-card__actions">
-            <a :href="site.opportunityUrl" rel="noreferrer" target="_blank">
-              Open opportunities
-            </a>
-            <a :href="site.sourceUrl" rel="noreferrer" target="_blank">
-              Official source
-            </a>
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <section class="directory-section directory-section--finder">
-      <div class="section-heading">
-        <h2>Local service websites</h2>
-      </div>
-
-      <div class="finder-layout">
+      <details class="inline-options service-search-options">
+        <summary><span class="i-carbon-filter" aria-hidden="true" />Refine search</summary>
         <aside class="finder-panel">
           <label class="field field--wide">
             <span>Current location or metro</span>
@@ -363,9 +307,6 @@ function changeProviderPage(nextPage: number) {
             </button>
           </div>
 
-          <p v-if="searchModeLabel" class="finder-panel__note">
-            {{ searchModeLabel }}
-          </p>
           <p
             v-if="geoError"
             class="inline-note inline-note--error"
@@ -374,12 +315,23 @@ function changeProviderPage(nextPage: number) {
             {{ geoError }}
           </p>
         </aside>
+      </details>
+    </section>
+
+    <section class="directory-section directory-section--finder">
+      <div class="section-heading">
+        <h2>Local service websites</h2>
+      </div>
+
+      <div class="finder-layout finder-layout--content">
+
 
         <div class="finder-results">
           <div class="finder-results__summary">
             <span>{{ areaResults.length }} local directory result<span
               v-if="areaResults.length !== 1"
             >s</span></span>
+            <span v-if="searchModeLabel">{{ searchModeLabel }}<span v-if="activeOrigin"> · {{ radiusMiles }} miles</span></span>
           </div>
 
           <div v-if="!areaResults.length" class="finder-empty">
@@ -393,19 +345,13 @@ function changeProviderPage(nextPage: number) {
               :key="site.id"
               class="finder-card"
             >
-              <div class="directory-card__meta">
-                <span>{{ serviceDirectoryAudienceLabels[site.audience] }}</span>
-              </div>
 
-              <h3>{{ site.name }}</h3>
+              <h3><a :href="site.opportunityUrl" rel="noreferrer" target="_blank">{{ site.name }}</a></h3>
               <p class="directory-card__coverage">
                 {{ site.coverageLabel }}
               </p>
               <p class="directory-card__summary">
                 {{ site.summary }}
-              </p>
-              <p class="finder-card__match">
-                {{ site.matchReason }}
               </p>
               <p
                 v-if="site.distanceMiles != null"
@@ -414,16 +360,8 @@ function changeProviderPage(nextPage: number) {
                 Approx. {{ site.distanceMiles.toFixed(1) }} miles away.
               </p>
 
-              <ul class="directory-card__tags">
-                <li v-for="area in site.serviceAreas" :key="area">
-                  {{ area }}
-                </li>
-              </ul>
 
               <div class="directory-card__actions">
-                <a :href="site.opportunityUrl" rel="noreferrer" target="_blank">
-                  Open site
-                </a>
                 <a :href="site.sourceUrl" rel="noreferrer" target="_blank">
                   Official source
                 </a>
@@ -480,57 +418,38 @@ function changeProviderPage(nextPage: number) {
             :key="result.id"
             class="finder-card"
           >
-            <div class="directory-card__meta">
-              <span>Live {{ result.provider }}</span>
-              <span
-                class="directory-badge"
-                :data-status="
-                  result.locationType === 'REMOTE' ? 'partner' : 'available'
-                "
-              >
-                {{ result.locationType }}
-              </span>
-            </div>
 
-            <h3>{{ result.title }}</h3>
+            <h3><a :href="result.opportunityUrl" rel="noreferrer" target="_blank">{{ result.title }}</a></h3>
             <p class="directory-card__coverage">
               {{ result.organizationName }}
-            </p>
-            <p class="directory-card__summary">
-              {{ result.summary }}
-            </p>
-            <p class="finder-card__match">
-              {{ result.matchReason }}
             </p>
             <p class="finder-card__distance">
               {{ result.locationLabel }}
               <span v-if="result.distanceMiles != null">
                 · {{ result.distanceMiles.toFixed(1) }} miles away</span>
+              <span v-if="result.locationType === 'REMOTE' && !result.locationLabel.toLowerCase().includes('remote')"> · Remote</span>
+              <span v-if="result.locationType === 'HYBRID' && !result.locationLabel.toLowerCase().includes('hybrid')"> · Hybrid</span>
+              <span v-if="result.isRecurring"> · Recurring</span>
             </p>
+            <details class="inline-options opportunity-details">
+              <summary>Details</summary>
+              <p class="directory-card__summary">
+                {{ result.summary }}
+              </p>
+              <p class="finder-card__match">
+                {{ result.matchReason }}
+              </p>
+              <p v-if="result.areasOfFocus.length || result.functionTags.length" class="directory-card__summary">
+                {{ [...result.areasOfFocus, ...result.functionTags].join(', ') }}
+              </p>
+              <div class="directory-card__actions">
+                <a :href="result.applyUrl" rel="noreferrer" target="_blank">
+                  Apply / learn more
+                </a>
+              </div>
+            </details>
 
-            <ul class="directory-card__tags">
-              <li
-                v-for="tag in [
-                  ...result.areasOfFocus,
-                  ...result.functionTags,
-                ].slice(0, 5)"
-                :key="tag"
-              >
-                {{ tag }}
-              </li>
-              <li v-if="result.isRecurring">
-                recurring
-              </li>
-            </ul>
 
-            <div class="directory-card__actions">
-              <a :href="result.opportunityUrl" rel="noreferrer" target="_blank">
-                Open listing
-              </a>
-              <a :href="result.applyUrl" rel="noreferrer" target="_blank">
-                Apply / learn more
-              </a>
-            </div>
           </article>
         </div>
 
@@ -541,7 +460,7 @@ function changeProviderPage(nextPage: number) {
             type="button"
             @click="changeProviderPage(providerPagination.page - 1)"
           >
-            Newer results
+            Previous page
           </button>
           <button
             class="secondary-button secondary-button--dark"
@@ -549,7 +468,7 @@ function changeProviderPage(nextPage: number) {
             type="button"
             @click="changeProviderPage(providerPagination.page + 1)"
           >
-            More results
+            Next page
           </button>
         </div>
       </div>
@@ -581,19 +500,6 @@ function changeProviderPage(nextPage: number) {
   max-width: var(--page-hero-max);
   min-width: 0;
   padding-block: var(--page-hero-space);
-}
-
-.service-directory-page__back {
-  width: fit-content;
-  text-decoration: none;
-  color: var(--site-link);
-  font-weight: 700;
-}
-
-.service-directory-page__back:hover,
-.service-directory-page__back:focus-visible {
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
 }
 
 .eyebrow {
@@ -915,5 +821,65 @@ function changeProviderPage(nextPage: number) {
     align-items: flex-start;
     flex-direction: column;
   }
+}
+
+.finder-layout--content {
+  display: block;
+}
+
+.service-search-options {
+  max-width: 34rem;
+}
+
+.service-search-options .finder-panel {
+  margin-top: 0.5rem;
+  padding: 0.85rem;
+}
+
+.opportunity-details {
+  font-size: var(--text-sm);
+}
+
+.directory-card h3 a,
+.finder-card h3 a {
+  color: var(--site-heading);
+  text-decoration: none;
+}
+
+.directory-card,
+.finder-card {
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.directory-card__actions a {
+  min-height: 2.75rem;
+  padding: 0.5rem 0;
+  background: transparent;
+  color: var(--site-link);
+}
+
+.service-directory-page__hero {
+  max-width: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: start;
+  gap: 0.5rem;
+}
+
+.service-search-options[open] {
+  flex-basis: 100%;
+  max-width: none;
+}
+
+.service-search-options[open] .finder-panel {
+  max-width: 34rem;
+}
+
+.directory-card h3,
+.finder-card h3 {
+  font-size: var(--text-lg);
+  line-height: 1.3;
 }
 </style>
