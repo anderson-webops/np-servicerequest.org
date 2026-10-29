@@ -42,6 +42,11 @@ useSeoMeta({
 const runtimeConfig = useRuntimeConfig()
 const route = useRoute()
 const router = useRouter()
+const boardOptionsPanelId = useId()
+const boardOptionsDialog = ref<HTMLDialogElement | null>(null)
+const boardOptionsTrigger = ref<HTMLButtonElement | null>(null)
+const boardOptionsOpen = ref(false)
+const boardOptionsPosition = ref({ left: '1rem', top: '6rem' })
 
 const hasHydrated = ref(false)
 const antiBotChallenge = ref<AntiBotChallenge | null>(null)
@@ -549,6 +554,59 @@ function handleBoardSortChange(event: Event) {
   setBoardSort(nextSort)
 }
 
+function positionBoardOptions() {
+  if (!boardOptionsDialog.value?.open || !boardOptionsTrigger.value)
+    return
+
+  const trigger = boardOptionsTrigger.value.getBoundingClientRect()
+  const panel = boardOptionsDialog.value.getBoundingClientRect()
+  const gutter = 16
+  boardOptionsPosition.value = {
+    left: `${Math.max(gutter, Math.min(trigger.right - panel.width, window.innerWidth - panel.width - gutter))}px`,
+    top: `${Math.max(gutter, Math.min(trigger.bottom + 8, window.innerHeight - panel.height - gutter))}px`,
+  }
+}
+
+function openBoardOptions() {
+  boardOptionsDialog.value?.showModal()
+  boardOptionsOpen.value = true
+  positionBoardOptions()
+  boardOptionsDialog.value?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.focus({ preventScroll: true })
+}
+
+function closeBoardOptions() {
+  boardOptionsDialog.value?.close()
+}
+
+function handleBoardOptionsBackdrop(event: MouseEvent) {
+  if (!boardOptionsDialog.value || event.target !== boardOptionsDialog.value)
+    return
+
+  const panel = boardOptionsDialog.value.getBoundingClientRect()
+  if (event.clientX < panel.left || event.clientX > panel.right || event.clientY < panel.top || event.clientY > panel.bottom)
+    closeBoardOptions()
+}
+
+function handleBoardOptionsKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Tab')
+    return
+
+  const controls = boardOptionsDialog.value?.querySelectorAll<HTMLElement>('button:not(:disabled), select:not(:disabled)')
+  const first = controls?.[0]
+  const last = controls?.[controls.length - 1]
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last?.focus()
+  }
+  else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first?.focus()
+  }
+}
+
+useEventListener('resize', positionBoardOptions)
+useEventListener('scroll', positionBoardOptions, { capture: true, passive: true })
+
 onMounted(() => {
   hasHydrated.value = true
   restoreBoardOrigin()
@@ -598,69 +656,101 @@ watch(
             <span v-else-if="boardPending && boardUiReady"> · Refreshing...</span>
           </p>
         </div>
-        <details class="board-options inline-options">
-          <summary><span class="i-carbon-filter" aria-hidden="true" />Filter and sort</summary>
-          <div class="board-options__panel">
-            <div
-              class="board-filters"
-              role="group"
-              aria-label="Board filters"
-            >
-              <button
-                v-for="filter in boardFilters"
-                :key="filter.key"
-                :aria-pressed="boardFilter === filter.key"
-                :disabled="boardPending"
-                class="board-filter"
-                type="button"
-                @click="setBoardFilter(filter.key)"
-              >
-                <span>{{ filter.label }}</span>
-                <span class="board-filter__count">{{ displayBoardCounts[filter.key] }}</span>
+        <div class="board-options">
+          <button
+            ref="boardOptionsTrigger"
+            class="button button--quiet board-options__trigger"
+            type="button"
+            aria-haspopup="dialog"
+            :aria-controls="boardOptionsPanelId"
+            :aria-expanded="boardOptionsOpen"
+            @click="openBoardOptions"
+          >
+            <span class="i-carbon-filter" aria-hidden="true" />
+            Filter and sort
+          </button>
+          <dialog
+            :id="boardOptionsPanelId"
+            ref="boardOptionsDialog"
+            class="board-options__dialog"
+            :aria-labelledby="`${boardOptionsPanelId}-heading`"
+            :style="boardOptionsPosition"
+            @click="handleBoardOptionsBackdrop"
+            @close="boardOptionsOpen = false"
+            @keydown="handleBoardOptionsKeydown"
+          >
+            <div class="board-options__header">
+              <h2 :id="`${boardOptionsPanelId}-heading`">Filter and sort</h2>
+              <button class="button button--quiet board-options__close" type="button" aria-label="Close filters" @click="closeBoardOptions">
+                <span class="i-carbon-close" aria-hidden="true" />
               </button>
             </div>
-
-            <div class="board-toolbar__options">
-              <label class="board-sort">
-                <span>Sort</span>
-                <select
-                  class="input"
-                  :value="boardSort"
-                  name="board_sort"
-                  @change="handleBoardSortChange"
-                >
-                  <option
-                    v-for="option in boardSortOptions"
-                    :key="option.value"
-                    :value="option.value"
-                  >
-                    {{ option.label }}
-                  </option>
-                </select>
-              </label>
-
-              <div class="board-location">
+            <div class="board-options__panel">
+              <div
+                class="board-filters"
+                role="group"
+                aria-label="Post type"
+              >
                 <button
-                  class="button button--quiet"
-                  :disabled="boardGeoPending"
+                  v-for="filter in boardFilters"
+                  :key="filter.key"
+                  :aria-pressed="boardFilter === filter.key"
+                  :disabled="boardPending"
+                  class="board-filter"
                   type="button"
-                  @click="enableBoardNearbySort"
+                  @click="setBoardFilter(filter.key)"
                 >
-                  <span aria-hidden="true" :class="boardOrigin ? 'i-carbon-location-filled' : 'i-carbon-location'" />
-                  {{ boardGeoPending ? "Locating..." : boardOrigin ? "Refresh location" : "Use my location" }}
-                </button>
-                <button
-                  v-if="boardOrigin"
-                  class="button button--quiet"
-                  type="button"
-                  @click="clearBoardOrigin"
-                >
-                  Clear location
+                  <span class="board-filter__check i-carbon-checkmark" :class="{ 'board-filter__check--hidden': boardFilter !== filter.key }" aria-hidden="true" />
+                  <span>{{ filter.label }}</span>
+                  <span class="board-filter__count">{{ displayBoardCounts[filter.key] }}</span>
                 </button>
               </div>
+
+              <div class="board-toolbar__options">
+                <label class="board-sort">
+                  <span>Sort</span>
+                  <select
+                    class="input"
+                    :value="boardSort"
+                    name="board_sort"
+                    @change="handleBoardSortChange"
+                  >
+                    <option
+                      v-for="option in boardSortOptions"
+                      :key="option.value"
+                      :value="option.value"
+                    >
+                      {{ option.label }}
+                    </option>
+                  </select>
+                </label>
+
+                <div class="board-location">
+                  <button
+                    class="button button--quiet"
+                    :disabled="boardGeoPending"
+                    type="button"
+                    @click="enableBoardNearbySort"
+                  >
+                    <span aria-hidden="true" :class="boardOrigin ? 'i-carbon-location-filled' : 'i-carbon-location'" />
+                    {{ boardGeoPending ? "Locating..." : boardOrigin ? "Refresh location" : "Use my location" }}
+                  </button>
+                  <button
+                    v-if="boardOrigin"
+                    class="button button--quiet"
+                    type="button"
+                    @click="clearBoardOrigin"
+                  >
+                    Clear location
+                  </button>
+                </div>
+                <p v-if="boardGeoError" class="inline-note inline-note--error board-options__error" role="alert">
+                  {{ boardGeoError }}
+                </p>
+              </div>
             </div>
-          </div>
-        </details>
+          </dialog>
+        </div>
       </div>
 
       <button v-if="boardSearch" class="board-query button button--quiet" type="button" @click="clearBoardSearch">
@@ -669,13 +759,6 @@ watch(
       </button>
 
       <div class="board-notices">
-        <p
-          v-if="boardGeoError"
-          class="inline-note inline-note--error"
-          role="alert"
-        >
-          {{ boardGeoError }}
-        </p>
         <p
           v-if="securityError"
           class="inline-note inline-note--error"
@@ -822,56 +905,149 @@ watch(
 
 .board-options {
   flex: none;
-  max-width: 27rem;
+}
+
+.board-options__trigger {
+  min-height: 2.25rem;
+  padding: 0.4rem 0.6rem;
+  border-color: var(--card-border);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+}
+
+.board-options__dialog {
+  position: fixed;
+  width: min(20rem, calc(100% - 2rem));
+  max-width: none;
+  max-height: calc(100dvh - 2rem);
+  margin: 0;
+  padding: 0.75rem;
+  overflow: auto;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-md);
+  background: linear-gradient(var(--site-surface-strong), var(--site-surface-strong)), var(--site-bg-start);
+  color: var(--site-text);
+  box-shadow: var(--site-shadow);
+}
+
+.board-options__dialog::backdrop {
+  background: rgb(0 0 0 / 10%);
+}
+
+.board-options__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.board-options__header h2 {
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.board-options__close {
+  min-height: 2rem;
+  width: 2rem;
+  padding: 0;
+  border-radius: var(--radius-sm);
 }
 
 .board-options__panel {
   display: grid;
-  gap: 0.8rem;
-  padding-top: 0.75rem;
+  gap: 0.625rem;
 }
 
-.board-toolbar__options,
-.board-location,
 .board-filters {
+  display: grid;
+  gap: 0.125rem;
+}
+
+.board-location {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+}
+
+.board-location .button {
+  min-height: 2.25rem;
+  padding: 0.35rem 0.4rem;
+  font-weight: 600;
 }
 
 .board-toolbar__options {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.5rem;
+  padding-top: 0.625rem;
+  border-top: 1px solid var(--divider);
 }
 
 .board-sort {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.625rem;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.board-sort .input {
+  min-width: 0;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: 400;
 }
 
 .board-filter {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.4rem;
-  min-height: 2.75rem;
-  padding: 0.4rem 0.7rem;
-  border: 1px solid var(--field-border);
+  gap: 0.5rem;
+  min-height: 2.25rem;
+  padding: 0.3rem 0.5rem;
+  border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--site-text);
   font: inherit;
   font-size: var(--text-sm);
+  text-align: left;
   cursor: pointer;
 }
 
+.board-filter:hover:not(:disabled),
+.board-filter:focus-visible,
 .board-filter[aria-pressed='true'] {
-  background: var(--site-button-bg);
-  color: var(--site-button-text);
+  background: var(--site-accent-soft);
+  color: var(--site-heading);
+}
+
+.board-filter[aria-pressed='true'] {
+  font-weight: 700;
+}
+
+.board-filter:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.board-filter__check--hidden {
+  visibility: hidden;
 }
 
 .board-filter__count {
+  color: var(--site-subtle);
   font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.board-options__error {
+  font-size: var(--text-sm);
 }
 
 .board-query {
@@ -1027,12 +1203,6 @@ a.board-row:focus-visible {
   }
 
   .board-options {
-    max-width: 100%;
-    width: 100%;
-  }
-
-  .board-options > summary {
-    width: fit-content;
     margin-left: auto;
   }
 
