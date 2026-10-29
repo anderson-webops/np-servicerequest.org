@@ -136,6 +136,10 @@ async function open(target, options = {}) {
     target = Buffer.from(encodedArguments.join(" "), "utf16le").toString("base64");
   } else {
     command = "xdg-open";
+    if (!process.versions.electron && process.platform !== "android") {
+      command = "/bin/sh";
+      cliArguments.push("-c", await import('../chunks/xdg-open.cjs').then((module) => module.xdgOpenScript()), "xdg-open");
+    }
     if (!options.wait) {
       childProcessOptions.stdio = "ignore";
       childProcessOptions.detached = true;

@@ -16,7 +16,9 @@ async function listHtmlFiles(directory) {
       if (entry.isDirectory())
         return listHtmlFiles(entryPath)
 
-      return entry.isFile() && entry.name.endsWith('.html') ? [entryPath] : []
+      return entry.isFile() && entry.name.endsWith('.html')
+        ? [entryPath]
+        : []
     }),
   )
   return files.flat()

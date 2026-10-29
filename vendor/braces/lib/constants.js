@@ -1,4 +1,4 @@
-'use strict'
+'use strict';
 
 module.exports = {
   MAX_LENGTH: 10000,
@@ -56,5 +56,5 @@ module.exports = {
   CHAR_TAB: '\t', /* \t */
   CHAR_UNDERSCORE: '_', /* _ */
   CHAR_VERTICAL_LINE: '|', /* | */
-  CHAR_ZERO_WIDTH_NOBREAK_SPACE: '\uFEFF', /* \uFEFF */
-}
+  CHAR_ZERO_WIDTH_NOBREAK_SPACE: '\uFEFF' /* \uFEFF */
+};

@@ -29,7 +29,9 @@ async function listHtmlFiles(directory) {
     const entryPath = path.join(directory, entry.name)
     if (entry.isDirectory())
       return listHtmlFiles(entryPath)
-    return entry.isFile() && entry.name.endsWith('.html') ? [entryPath] : []
+    return entry.isFile() && entry.name.endsWith('.html')
+      ? [entryPath]
+      : []
   }))
   return nested.flat()
 }
@@ -51,7 +53,9 @@ assert.ok(htmlFiles.length > 0, 'Static output contains no HTML pages')
 
 for (const htmlPath of htmlFiles) {
   const html = await readFile(htmlPath, 'utf8')
-  const scripts = [...html.matchAll(/<script\b[^>]*>/giu)].map(match => match[0])
+  const scripts = [
+    ...html.matchAll(/<script\b[^>]*>/giu),
+  ].map(match => match[0])
   assert.ok(scripts.every(script => !/\bsrc="https:\/\/analytics\./iu.test(script)), `${htmlPath} includes a remote analytics script`)
 
   for (const asset of assets) {

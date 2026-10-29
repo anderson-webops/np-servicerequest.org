@@ -30,7 +30,9 @@ async function reservePort() {
   const address = server.address()
   assert.ok(address && typeof address !== 'string')
   const port = address.port
-  await new Promise((resolveClose, reject) => server.close(error => error ? reject(error) : resolveClose()))
+  await new Promise((resolveClose, reject) => server.close(error => error
+    ? reject(error)
+    : resolveClose()))
   return port
 }
 

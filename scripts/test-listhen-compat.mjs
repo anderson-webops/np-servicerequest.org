@@ -48,6 +48,31 @@ async function withListener(listen, https, callback) {
   }
 }
 
+test('both entrypoints use their trusted bundled browser helper without shared temporary execution', async () => {
+  await mkdir(scratchRoot, { recursive: true })
+  for (const entrypoint of ['commonjs', 'esm']) {
+    const directory = await mkdtemp(join(scratchRoot, 'listhen-open-'))
+    scratchDirectories.push(directory)
+    const result = spawnSync(process.execPath, [
+      join(projectRoot, 'scripts/fixtures/listhen-browser.mjs'),
+      entrypoint,
+    ], {
+      cwd: projectRoot,
+      env: {
+        PATH: process.env.PATH,
+        TMPDIR: directory,
+        HOME: directory,
+        NODE_ENV: 'test',
+      },
+      encoding: 'utf8',
+      timeout: 20_000,
+    })
+    assert.equal(result.signal, null)
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /Trusted browser launcher selected/u)
+  }
+})
+
 test('local listhen fork preserves HTTP and certificate modes without node-forge', async () => {
   const esm = await import('listhen')
   const commonjs = require('listhen')
@@ -66,7 +91,10 @@ test('local listhen fork preserves HTTP and certificate modes without node-forge
   assert.ok(Object.entries(lockfile.packages).every(([path, entry]) =>
     !/(?:^|\/)node_modules\/node-forge$/u.test(path) && !entry.dependencies?.['node-forge']))
 
-  const cli = spawnSync(process.execPath, [join(projectRoot, 'vendor/listhen/bin/listhen.mjs'), '--help'], { encoding: 'utf8' })
+  const cli = spawnSync(process.execPath, [
+    join(projectRoot, 'vendor/listhen/bin/listhen.mjs'),
+    '--help',
+  ], { encoding: 'utf8' })
   assert.equal(cli.status, 0, cli.stderr)
   assert.match(`${cli.stdout}\n${cli.stderr}`, /listhen|Usage/iu)
 
@@ -80,7 +108,10 @@ test('local listhen fork preserves HTTP and certificate modes without node-forge
   const directory = await mkdtemp(join(scratchRoot, 'listhen-compat-'))
   scratchDirectories.push(directory)
   let certificate
-  await withListener(esm.listen, { domains: ['localhost', '127.0.0.1', '::1'], validityDays: 1 }, async (listener) => {
+  await withListener(esm.listen, {
+    domains: ['localhost', '127.0.0.1', '::1'],
+    validityDays: 1,
+  }, async (listener) => {
     assert.deepEqual(await getSecureResponse(listener.url), { status: 200, body: 'ok' })
     const issued = new X509Certificate(listener.https.cert)
     assert.equal(issued.checkHost('localhost'), 'localhost')
@@ -93,7 +124,11 @@ test('local listhen fork preserves HTTP and certificate modes without node-forge
     certificate = listener.https
   })
 
-  await withListener(esm.listen, { domains: ['localhost'], signingKeyPassphrase: 'synthetic-test-only', passphrase: 'synthetic-test-only' }, async (listener) => {
+  await withListener(esm.listen, {
+    domains: ['localhost'],
+    signingKeyPassphrase: 'synthetic-test-only',
+    passphrase: 'synthetic-test-only',
+  }, async (listener) => {
     assert.deepEqual(await getSecureResponse(listener.url), { status: 200, body: 'ok' })
   })
 

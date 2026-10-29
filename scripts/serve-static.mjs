@@ -60,7 +60,9 @@ async function resolveStaticPath(urlPathname) {
     ? resolve(rootDirectory, '200.html')
     : resolve(rootDirectory, 'index.html')
 
-  return await canRead(spaFallback) ? spaFallback : null
+  return await canRead(spaFallback)
+    ? spaFallback
+    : null
 }
 
 const server = createServer(async (request, response) => {
@@ -75,7 +77,9 @@ const server = createServer(async (request, response) => {
 
   const extension = extname(filePath)
   response.writeHead(200, {
-    'cache-control': extension === '.html' ? 'no-store' : 'public, max-age=3600',
+    'cache-control': extension === '.html'
+      ? 'no-store'
+      : 'public, max-age=3600',
     'content-type': contentTypes.get(extension) || 'application/octet-stream',
   })
   createReadStream(filePath).pipe(response)

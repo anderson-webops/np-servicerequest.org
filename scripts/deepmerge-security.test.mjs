@@ -26,7 +26,10 @@ test('prototype keys cannot poison source, target, nested or array results', () 
     merge({ session: undefined }, { session: payload }).session,
     merge({ session: payload }, {}).session,
     merge([], [payload])[0],
-    merge.all([Object.create(null), payload]),
+    merge.all([
+      Object.create(null),
+      payload,
+    ]),
   ]
   for (const result of results) {
     assert.equal(Object.getPrototypeOf(result), Object.prototype)
@@ -51,17 +54,42 @@ test('forbidden keys are omitted before invoking getters or custom merge hooks',
 
 test('ordinary merges preserve arrays, symbols, options, and input values', () => {
   const identity = Symbol('identity')
-  const target = { extensions: ['.mjs'], nested: { first: 1 }, [identity]: 'original' }
-  const source = { extensions: ['.js'], nested: { second: 2 }, [identity]: 'updated' }
+  const target = {
+    extensions: ['.mjs'],
+    nested: { first: 1 },
+    [identity]: 'original',
+  }
+  const source = {
+    extensions: ['.js'],
+    nested: { second: 2 },
+    [identity]: 'updated',
+  }
   const result = merge(target, source)
-  assert.deepEqual(result, { extensions: ['.mjs', '.js'], nested: { first: 1, second: 2 }, [identity]: 'updated' })
+  assert.deepEqual(result, {
+    extensions: ['.mjs', '.js'],
+    nested: { first: 1, second: 2 },
+    [identity]: 'updated',
+  })
   assert.deepEqual(target.extensions, ['.mjs'])
   assert.notEqual(result.nested, target.nested)
   assert.equal(merge({}, source, { clone: false }).nested, source.nested)
-  assert.deepEqual(merge(target, source, { arrayMerge: (_target, value) => value }).extensions, ['.js'])
-  assert.deepEqual(merge({ nested: { first: 1 } }, { nested: { second: 2 } }, {
-    customMerge: key => key === 'nested' ? (left, right) => ({ total: left.first + right.second }) : undefined,
-  }), { nested: { total: 3 } })
-  assert.deepEqual(merge.all([{ first: 1 }, { second: 2 }]), { first: 1, second: 2 })
+  assert.deepEqual(merge(target, source, {
+    arrayMerge: (_target, value) => value,
+  }).extensions, ['.js'])
+  assert.deepEqual(merge({
+    nested: { first: 1 },
+  }, {
+    nested: { second: 2 },
+  }, {
+    customMerge: key => key === 'nested'
+      ? (left, right) => ({ total: left.first + right.second })
+      : undefined,
+  }), {
+    nested: { total: 3 },
+  })
+  assert.deepEqual(merge.all([
+    { first: 1 },
+    { second: 2 },
+  ]), { first: 1, second: 2 })
   assert.throws(() => merge.all({}), /first argument should be an array/)
 })

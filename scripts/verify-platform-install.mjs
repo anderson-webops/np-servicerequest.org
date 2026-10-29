@@ -7,7 +7,9 @@ import { fileURLToPath } from 'node:url'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const frontendManifest = JSON.parse(await readFile(path.join(repositoryRoot, 'front-end/package.json'), 'utf8'))
-const npmCommand = process.platform === 'win32' ? 'npm.cmd' : path.join(path.dirname(process.execPath), 'npm')
+const npmCommand = process.platform === 'win32'
+  ? 'npm.cmd'
+  : path.join(path.dirname(process.execPath), 'npm')
 
 function run(command, args, cwd, cacheDirectory) {
   return new Promise((resolveRun, reject) => {
@@ -56,7 +58,11 @@ async function verifyTarget(libc) {
       cp(path.join(repositoryRoot, '.npmrc'), path.join(temporaryRoot, '.npmrc')),
       cp(path.join(repositoryRoot, 'front-end/package.json'), path.join(temporaryRoot, 'front-end/package.json')),
       cp(path.join(repositoryRoot, 'back-end/package.json'), path.join(temporaryRoot, 'back-end/package.json')),
-      cp(path.join(repositoryRoot, 'vendor'), path.join(temporaryRoot, 'vendor'), { recursive: true }),
+      cp(path.join(repositoryRoot, 'back-end/vendor'), path.join(temporaryRoot, 'back-end/vendor'), { recursive: true }),
+      cp(path.join(repositoryRoot, 'vendor'), path.join(temporaryRoot, 'vendor'), {
+        recursive: true,
+        filter: source => !source.split(path.sep).includes('node_modules'),
+      }),
     ])
     await run(
       npmCommand,
@@ -78,7 +84,9 @@ async function verifyTarget(libc) {
       if (dependency === '@esbuild/linux-arm64')
         return true
 
-      return dependency.includes('linux-arm64') && dependency.endsWith(libc === 'musl' ? '-musl' : '-gnu')
+      return dependency.includes('linux-arm64') && dependency.endsWith(libc === 'musl'
+        ? '-musl'
+        : '-gnu')
     })
     const missing = []
 

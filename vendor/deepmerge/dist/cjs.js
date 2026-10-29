@@ -78,11 +78,20 @@ function propertyIsUnsafe(target, key) {
 			&& Object.propertyIsEnumerable.call(target, key)) // and also unsafe if they're nonenumerable.
 }
 
+function setOwnProperty(target, key, value) {
+	Object.defineProperty(target, key, {
+		value: value,
+		enumerable: true,
+		configurable: true,
+		writable: true
+	});
+}
+
 function mergeObject(target, source, options) {
 	var destination = {};
 	if (options.isMergeableObject(target)) {
 		getKeys(target).forEach(function(key) {
-			destination[key] = cloneUnlessOtherwiseSpecified(target[key], options);
+			setOwnProperty(destination, key, cloneUnlessOtherwiseSpecified(target[key], options));
 		});
 	}
 	getKeys(source).forEach(function(key) {
@@ -91,9 +100,9 @@ function mergeObject(target, source, options) {
 		}
 
 		if (propertyIsOnObject(target, key) && options.isMergeableObject(source[key])) {
-			destination[key] = getMergeFunction(key, options)(target[key], source[key], options);
+			setOwnProperty(destination, key, getMergeFunction(key, options)(target[key], source[key], options));
 		} else {
-			destination[key] = cloneUnlessOtherwiseSpecified(source[key], options);
+			setOwnProperty(destination, key, cloneUnlessOtherwiseSpecified(source[key], options));
 		}
 	});
 	return destination

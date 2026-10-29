@@ -38,7 +38,9 @@ for (const identity of [health, readiness, release]) {
   assert.equal(identity.revision, expectedRevision)
 }
 assert.equal(readiness.status, 'ready')
-assert.deepEqual(readiness.dependencies, [{ name: 'submissions-data', status: 'ready' }])
+assert.deepEqual(readiness.dependencies, [
+  { name: 'submissions-data', status: 'ready' },
+])
 
 const csp = homeResponse.headers.get('content-security-policy') || ''
 assert.match(csp, /default-src 'self'/)
@@ -79,7 +81,12 @@ const pathStyleResponse = await fetchWithTimeout(
   '/posts/00000000-0000-4000-8000-000000000000',
 )
 assert.equal(pathStyleResponse.status, 200)
-for (const hiddenPath of ['/.env', '/%2eenv', '/.git/config', '/%2egit/config']) {
+for (const hiddenPath of [
+  '/.env',
+  '/%2eenv',
+  '/.git/config',
+  '/%2egit/config',
+]) {
   const hiddenPathResponse = await fetchWithTimeout(hiddenPath)
   assert.equal(hiddenPathResponse.status, 404)
   assert.doesNotMatch(await hiddenPathResponse.text(), /ANTI_BOT|BOARD_ADMIN|SMTP_/u)

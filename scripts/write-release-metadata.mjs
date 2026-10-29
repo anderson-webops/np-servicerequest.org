@@ -90,6 +90,8 @@ export async function writeReleaseMetadata(environment = process.env, git = runG
   process.stdout.write(`Wrote release metadata for ${declaredVersion} (${revision}).\n`)
 }
 
-const invokedPath = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : ''
+const invokedPath = process.argv[1]
+  ? pathToFileURL(path.resolve(process.argv[1])).href
+  : ''
 if (import.meta.url === invokedPath)
   await writeReleaseMetadata()
