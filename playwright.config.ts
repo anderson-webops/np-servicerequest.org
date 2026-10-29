@@ -12,6 +12,7 @@ export default defineConfig({
   workers: 1,
   use: {
     baseURL: 'http://127.0.0.1:3333',
+    channel: env.PLAYWRIGHT_CHANNEL,
     trace: 'retain-on-failure',
   },
   webServer: [
