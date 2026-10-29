@@ -77,3 +77,10 @@ test('iterable AST nodes cannot bypass recursive walker guards', () => {
     })
   }
 })
+
+test('shallow alternatives and ranges share a cumulative expansion budget', () => {
+  assert.equal(braces.expand('{a,b}'.repeat(12)).length, 4096)
+  assert.throws(() => braces.expand('{a,b}'.repeat(14)), /cumulative output budget/u)
+  assert.throws(() => braces.expand(`${'{a,b}'.repeat(9)}${'x'.repeat(2100)}`), /cumulative output budget/u)
+  assert.throws(() => braces.expand('{1..50000}', { rangeLimit: false }), /range limit/u)
+})

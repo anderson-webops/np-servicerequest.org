@@ -139,3 +139,11 @@ test('local listhen fork preserves HTTP and certificate modes without node-forge
     isTest: true,
   }))
 })
+
+test('browser opening never executes a helper from shared temporary storage', async () => {
+  for (const file of ['listhen.tqe5I1Rl.mjs', 'listhen.DAqrw83w.cjs']) {
+    const bundle = await readFile(join(projectRoot, 'vendor/listhen/dist/shared', file), 'utf8')
+    assert.doesNotMatch(bundle, /tmpdir\(\).*xdg-open|writeFileSync\(.*xdg-open/su)
+    assert.match(bundle, /command = "xdg-open"/u)
+  }
+})

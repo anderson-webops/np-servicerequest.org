@@ -1,4 +1,6 @@
 import { Buffer } from 'node:buffer'
+import { lstat, readdir } from 'node:fs/promises'
+import { join } from 'node:path'
 import { env } from 'node:process'
 
 import { listJsonDirectory, readJsonFile, removeFileIfExists, resolveDataPath, writeJsonFile } from './data.js'
@@ -166,6 +168,15 @@ const defaultPageSize = 12
 const maxPageSize = 24
 const defaultRadiusMiles = 40
 const maxRadiusMiles = 250
+const maxSearchQueryLength = 160
+const maxSearchQueryTokens = 12
+
+export class ServiceDirectoryValidationError extends Error {
+  constructor() {
+    super('Search query is too long.')
+    this.name = 'ServiceDirectoryValidationError'
+  }
+}
 const defaultInitialSyncDays = 45
 const defaultSyncTtlMinutes = 360
 const defaultMinimumRefreshMinutes = 15
@@ -174,9 +185,16 @@ const maxFeedPages = 25
 const maxFeedListingsPerPage = 500
 const maxListingsPerSync = 250
 const maxProviderResponseBytes = 2 * 1024 * 1024
+const maxStoredListings = 1000
+const maxStoredListingBytes = 64 * 1024
+const maxStoredTotalBytes = 16 * 1024 * 1024
+const listingPruneIntervalMs = 5 * 60 * 1000
 const foregroundSyncWaitMs = 3_000
 const publicSyncError = 'Live service listings are temporarily unavailable.'
 let idealistSyncPromise: Promise<void> | null = null
+let idealistPrunePromise: Promise<void> | null = null
+let lastPrunedDirectory: string | null = null
+let lastPrunedAt = 0
 
 function getIdealistApiKey() {
   return env.IDEALIST_API_KEY
@@ -490,6 +508,7 @@ async function fetchIdealistListingDetail(listingId: string) {
 }
 
 async function listStoredIdealistListings() {
+  await pruneStoredIdealistListings()
   const listings = await listJsonDirectory<IdealistStoredListing>(getIdealistListingDirectoryPath())
   const now = Date.now()
 
@@ -497,6 +516,79 @@ async function listStoredIdealistListings() {
     const updatedAt = Date.parse(listing.sourceUpdatedAt)
     return Number.isFinite(updatedAt) && updatedAt <= now + 5 * 60 * 1000
   })
+}
+
+async function pruneStoredIdealistListings(force = false) {
+  const directory = getIdealistListingDirectoryPath()
+
+  if (idealistPrunePromise)
+    await idealistPrunePromise
+
+  if (!force && lastPrunedDirectory === directory && Date.now() - lastPrunedAt < listingPruneIntervalMs)
+    return
+
+  idealistPrunePromise = (async () => {
+    let directoryType
+    try {
+      directoryType = await lstat(directory)
+    }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT')
+        return
+      throw error
+    }
+
+    if (!directoryType.isDirectory() || directoryType.isSymbolicLink())
+      throw new Error('Idealist listing cache must be a real directory.')
+
+    const entries = await readdir(directory, { withFileTypes: true })
+    const retained: Array<{ name: string, size: number, modifiedAt: number }> = []
+
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith('.json'))
+        continue
+
+      const listingPath = join(directory, entry.name)
+      let metadata
+      try {
+        metadata = await lstat(listingPath)
+      }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT')
+          continue
+        throw error
+      }
+
+      if (!metadata.isFile() || metadata.isSymbolicLink())
+        throw new Error('Idealist listing cache contains a nonregular entry.')
+
+      if (metadata.size > maxStoredListingBytes) {
+        await removeFileIfExists(listingPath)
+        continue
+      }
+
+      retained.push({ name: entry.name, size: metadata.size, modifiedAt: metadata.mtimeMs })
+    }
+
+    retained.sort((left, right) => right.modifiedAt - left.modifiedAt || left.name.localeCompare(right.name))
+
+    let retainedBytes = 0
+    for (const [index, listing] of retained.entries()) {
+      if (index >= maxStoredListings || retainedBytes + listing.size > maxStoredTotalBytes)
+        await removeFileIfExists(join(directory, listing.name))
+      else
+        retainedBytes += listing.size
+    }
+  })()
+
+  try {
+    await idealistPrunePromise
+    lastPrunedDirectory = directory
+    lastPrunedAt = Date.now()
+  }
+  finally {
+    idealistPrunePromise = null
+  }
 }
 
 async function syncIdealistListings() {
@@ -568,8 +660,14 @@ async function syncIdealistListings() {
           continue
         }
 
-        await writeJsonFile(getIdealistListingFilePath(listingId), normalizeIdealistListing(detail))
+        const normalized = normalizeIdealistListing(detail)
+        if (Buffer.byteLength(`${JSON.stringify(normalized, null, 2)}\n`) > maxStoredListingBytes)
+          continue
+
+        await writeJsonFile(getIdealistListingFilePath(listingId), normalized)
       }
+
+      await pruneStoredIdealistListings(true)
 
       await writeIdealistState({
         cursorSince: since,
@@ -579,6 +677,7 @@ async function syncIdealistListings() {
       })
     }
     catch (error) {
+      lastPrunedAt = 0
       await writeIdealistState({
         ...previousState,
         lastAttemptedAt: new Date().toISOString(),
@@ -718,7 +817,15 @@ export async function searchServiceDirectory(params: ServiceDirectorySearchParam
     throw new Error(`Unsupported service directory provider: ${provider}`)
 
   const query = (params.query || '').trim()
+
+  if (query.length > maxSearchQueryLength)
+    throw new ServiceDirectoryValidationError()
+
   const queryTokens = normalizeSearchText([query]).split(' ').filter(Boolean)
+
+  if (queryTokens.length > maxSearchQueryTokens)
+    throw new ServiceDirectoryValidationError()
+
   const page = Math.max(params.page || 1, 1)
   const pageSize = Math.min(Math.max(params.pageSize || defaultPageSize, 1), maxPageSize)
   const radiusMiles = Math.min(Math.max(params.radiusMiles || defaultRadiusMiles, 1), maxRadiusMiles)

@@ -118,9 +118,12 @@ export function validateAntiBotPayload(payload: unknown, action = 'board') {
     throw new BotProtectionError('The anti-bot challenge is invalid.')
 }
 
-export function consumeRateLimit(key: string, options: { limit: number, windowMs: number }) {
+export function consumeRateLimit(key: string, options: { limit: number, windowMs: number, overflowIdentity?: string }) {
   if (!Number.isSafeInteger(options.limit) || options.limit < 1 || !Number.isSafeInteger(options.windowMs) || options.windowMs < 1)
     throw new TypeError('Rate-limit options must be positive safe integers.')
+
+  if (options.overflowIdentity !== undefined && !options.overflowIdentity)
+    throw new TypeError('A rate-limit overflow identity must be nonempty.')
 
   const now = Date.now()
   const windowStart = now - options.windowMs
@@ -140,10 +143,13 @@ export function consumeRateLimit(key: string, options: { limit: number, windowMs
       requestBuckets.set(key, bucket)
     }
     else {
-      const policyKey = `${options.limit}:${options.windowMs}`
+      const policyKey = `${options.limit}:${options.windowMs}:${options.overflowIdentity ?? key}`
       bucket = overflowBuckets.get(policyKey)
 
       if (!bucket) {
+        if (overflowBuckets.size >= rateLimitBucketLimit)
+          throw new RateLimitError('Too many requests. Please slow down and try again soon.', options.windowMs)
+
         bucket = {
           lastSeenAt: now,
           timestamps: [],
@@ -167,7 +173,9 @@ export function consumeRateLimit(key: string, options: { limit: number, windowMs
 }
 
 function pruneRateLimitBuckets(now: number) {
-  if (now - lastRateLimitPruneAt < 60_000 && requestBuckets.size < rateLimitBucketLimit)
+  const pruneIntervalMs = requestBuckets.size >= rateLimitBucketLimit ? 1000 : 60_000
+
+  if (now - lastRateLimitPruneAt < pruneIntervalMs)
     return
 
   lastRateLimitPruneAt = now

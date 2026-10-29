@@ -2,7 +2,7 @@ import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { env } from 'node:process'
 
-import { normalizeStructuredContact } from './contact.js'
+import { isEmailAddress, normalizeStructuredContact } from './contact.js'
 import { ensurePrivateDirectory, removeFileIfExists, writeJsonFile } from './data.js'
 
 const defaultSubmissionsDirectory = resolve(tmpdir(), 'np-servicerequest', 'submissions')
@@ -140,13 +140,16 @@ function validatePayload(kind: SubmissionKind, payload: Record<string, string>) 
   if (notificationPreference && !['none', 'email'].includes(notificationPreference))
     throw new SubmissionValidationError('Choose a valid notification preference.')
 
+  if (notificationEmail && !isEmailAddress(notificationEmail))
+    throw new SubmissionValidationError('Enter a valid email address for reply notifications.')
+
   if (notificationPreference === 'email') {
     const emailToValidate = notificationEmail || contact.managementEmail
 
     if (!emailToValidate)
       throw new SubmissionValidationError('Enter an email address for reply notifications.')
 
-    if (!emailToValidate.includes('@') || /\s/.test(emailToValidate))
+    if (!isEmailAddress(emailToValidate))
       throw new SubmissionValidationError('Enter a valid email address for reply notifications.')
   }
 

@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { env } from 'node:process'
 import { afterEach, beforeEach, test } from 'node:test'
 
 import { createApp } from './app.js'
-import { searchServiceDirectory } from './service-directory.js'
+import { searchServiceDirectory, ServiceDirectoryValidationError } from './service-directory.js'
 import { readJsonFile, writeJsonFile } from './data.js'
 
 const originalFetch = globalThis.fetch
@@ -48,6 +48,86 @@ test('service directory search reports when Idealist is not configured', async (
   assert.equal(response.provider.syncState, 'unconfigured')
   assert.equal(response.results.length, 0)
   assert.match(response.provider.message, /not configured/i)
+})
+
+test('Idealist cache prunes the oldest listings and oversized files before search', async () => {
+  const listingDirectory = join(dataDirectory, '_service-directory', 'idealist', 'listings')
+  await mkdir(listingDirectory, { recursive: true })
+  const updatedAt = new Date().toISOString()
+
+  for (let offset = 0; offset < 1005; offset += 50) {
+    await Promise.all(Array.from({ length: Math.min(50, 1005 - offset) }, (_, index) => {
+      const id = `listing-${offset + index}`
+      return writeFile(join(listingDirectory, `${id}.json`), JSON.stringify({ id, sourceUpdatedAt: updatedAt, locationType: 'REMOTE', title: id }))
+    }))
+  }
+
+  await utimes(join(listingDirectory, 'listing-0.json'), new Date(0), new Date(0))
+  await writeFile(join(listingDirectory, 'oversized.json'), 'x'.repeat(65 * 1024))
+
+  const response = await searchServiceDirectory({ provider: 'idealist' })
+  const files = await readdir(listingDirectory)
+  assert.equal(response.provider.listingCount, 1000)
+  assert.equal(files.length, 1000)
+  assert.equal(files.includes('listing-0.json'), false)
+  assert.equal(files.includes('oversized.json'), false)
+})
+
+test('Idealist cache stays within a cumulative byte budget', async () => {
+  const listingDirectory = join(dataDirectory, '_service-directory', 'idealist', 'listings')
+  await mkdir(listingDirectory, { recursive: true })
+  const payload = JSON.stringify({
+    locationType: 'REMOTE',
+    searchText: 'x'.repeat(60 * 1024),
+    sourceUpdatedAt: new Date().toISOString(),
+    title: 'Synthetic listing',
+  })
+
+  for (let offset = 0; offset < 300; offset += 50) {
+    await Promise.all(Array.from({ length: 50 }, (_, index) =>
+      writeFile(join(listingDirectory, `listing-${offset + index}.json`), payload)))
+  }
+
+  await searchServiceDirectory({ provider: 'idealist' })
+  const files = await readdir(listingDirectory)
+  const sizes = await Promise.all(files.map(async file => (await stat(join(listingDirectory, file))).size))
+  assert.ok(files.length < 300)
+  assert.ok(sizes.reduce((total, size) => total + size, 0) <= 16 * 1024 * 1024)
+})
+
+test('service directory rejects excessive query length and token fan-out before loading listings', async () => {
+  await assert.rejects(
+    searchServiceDirectory({ query: 'a'.repeat(161) }),
+    ServiceDirectoryValidationError,
+  )
+  await assert.rejects(
+    searchServiceDirectory({ query: Array.from({ length: 13 }, (_, index) => `word${index}`).join(' ') }),
+    ServiceDirectoryValidationError,
+  )
+
+  const response = await searchServiceDirectory({ query: Array.from({ length: 12 }, (_, index) => `word${index}`).join(' ') })
+  assert.equal(response.query.query.split(' ').length, 12)
+})
+
+test('public service directory rejects excessive search work with a bounded response', async () => {
+  const server = createApp().listen(0, '127.0.0.1')
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once('listening', resolve)
+      server.once('error', reject)
+    })
+    const address = server.address()
+    assert.ok(address && typeof address === 'object')
+    const endpoint = `http://127.0.0.1:${address.port}/api/service-directory/search`
+    const response = await originalFetch(`${endpoint}?query=${'a'.repeat(161)}`)
+    assert.equal(response.status, 400)
+    assert.deepEqual(await response.json(), { message: 'Search query is too long.' })
+  }
+  finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close(error => error ? reject(error) : resolve())
+    })
+  }
 })
 
 test('location-bearing public search accepts a same-origin POST without URL coordinates', async () => {

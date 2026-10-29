@@ -71,7 +71,7 @@ import {
   RequestOriginError,
   validateAntiBotPayload,
 } from './security.js'
-import { searchServiceDirectory } from './service-directory.js'
+import { searchServiceDirectory, ServiceDirectoryValidationError } from './service-directory.js'
 import { resolveReleaseIdentity } from './release-identity.js'
 import {
   AccountValidationError,
@@ -227,6 +227,11 @@ function parseMaybeFloat(value: unknown) {
 }
 
 function handleApiError(response: express.Response, error: unknown) {
+  if (error instanceof ServiceDirectoryValidationError) {
+    response.status(400).json({ message: error.message })
+    return true
+  }
+
   if (error instanceof AdminSubmissionValidationError) {
     response.status(400).json({
       message: error.message,
@@ -323,6 +328,10 @@ async function assertAdminRequest(request: express.Request) {
     const adminKey = request.get('x-admin-key') || ''
 
     if (adminKey && !request.get('origin')) {
+      consumeRateLimit(`admin:header:${getRateLimitClientId(request)}`, {
+        limit: 120,
+        windowMs: 1000 * 60 * 15,
+      })
       assertValidAdminKey(adminKey)
       return
     }
@@ -799,6 +808,7 @@ export function createApp(options?: AppOptions) {
       consumeRateLimit(`submission:${kind}:${getRateLimitClientId(request)}`, {
         limit: 6,
         windowMs: 1000 * 60 * 15,
+        overflowIdentity: `submission:${getRateLimitClientId(request)}`,
       })
       validateAntiBotPayload(request.body)
 
@@ -937,6 +947,7 @@ export function createApp(options?: AppOptions) {
       consumeRateLimit(`interaction:${request.params.itemId}:${getRateLimitClientId(request)}`, {
         limit: 10,
         windowMs: 1000 * 60 * 15,
+        overflowIdentity: `interaction:${getRateLimitClientId(request)}`,
       })
       validateAntiBotPayload(request.body)
 
@@ -1064,6 +1075,7 @@ export function createApp(options?: AppOptions) {
       consumeRateLimit(`resolution:item:${request.params.itemId}:${getRateLimitClientId(request)}`, {
         limit: 12,
         windowMs: 1000 * 60 * 60,
+        overflowIdentity: `resolution:item:${getRateLimitClientId(request)}`,
       })
       validateAntiBotPayload(request.body)
 

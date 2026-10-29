@@ -75,12 +75,16 @@ export default defineNuxtConfig({
           : [
             {
               'defer': true,
-              'src': `https://${dedicatedAnalyticsDomain}/script.js`,
+              'src': '/vendor/analytics/dedicated-script.js',
+              'integrity': 'sha384-OtlpAaPAGbsps9PCG+6V4bw+yXs7LvYsI2LPzOVB1F1d8lHiMWzK+xiSMoAPPahp',
+              'data-host-url': `https://${dedicatedAnalyticsDomain}`,
               'data-website-id': dedicatedAnalyticsWebsiteId,
             },
             {
               'defer': true,
-              'src': `https://${centralAnalyticsDomain}/script.js`,
+              'src': '/vendor/analytics/central-script.js',
+              'integrity': 'sha384-GCqIGuvWYg7O3NiELYWxOf/L6jh0MEUd1RXYXHaLbqZSLt7OY1ZAY8QSonb76YUk',
+              'data-host-url': `https://${centralAnalyticsDomain}`,
               'data-website-id': centralAnalyticsWebsiteId,
             },
           ]),

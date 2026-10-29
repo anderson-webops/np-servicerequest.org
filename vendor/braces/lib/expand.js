@@ -1,115 +1,145 @@
-'use strict';
+'use strict'
 
-const fill = require('fill-range');
-const assertDepth = require('./assert-depth');
-const stringify = require('./stringify');
-const utils = require('./utils');
+const { Buffer } = require('node:buffer')
+const fill = require('fill-range')
+const assertDepth = require('./assert-depth')
+const { MAX_EXPANSION_ITEMS, MAX_EXPANSION_BYTES } = require('./constants')
+const stringify = require('./stringify')
+const utils = require('./utils')
 
-const append = (queue = '', stash = '', enclose = false) => {
-  const result = [];
+function reserve(budget, value) {
+  const bytes = Buffer.byteLength(String(value))
+  if (budget.items >= MAX_EXPANSION_ITEMS || bytes > MAX_EXPANSION_BYTES - budget.bytes) {
+    throw new RangeError('brace expansion exceeds cumulative output budget.')
+  }
+  budget.items++
+  budget.bytes += bytes
+}
 
-  queue = [].concat(queue);
-  stash = [].concat(stash);
+function append(queue = '', stash = '', enclose = false, budget) {
+  const result = []
 
-  if (!stash.length) return queue;
+  queue = [].concat(queue)
+  stash = [].concat(stash)
+
+  if (queue.length > MAX_EXPANSION_ITEMS || stash.length > MAX_EXPANSION_ITEMS
+    || (queue.length && stash.length && queue.length > MAX_EXPANSION_ITEMS / stash.length)) {
+    throw new RangeError('brace expansion exceeds cumulative output budget.')
+  }
+  if (!stash.length)
+    return queue
   if (!queue.length) {
-    return enclose ? utils.flatten(stash).map(ele => `{${ele}}`) : stash;
+    const values = enclose ? utils.flatten(stash).map(ele => `{${ele}}`) : stash
+    for (const value of values) reserve(budget, value)
+    return values
   }
 
   for (const item of queue) {
     if (Array.isArray(item)) {
       for (const value of item) {
-        result.push(append(value, stash, enclose));
+        result.push(append(value, stash, enclose, budget))
       }
-    } else {
+    }
+    else {
       for (let ele of stash) {
-        if (enclose === true && typeof ele === 'string') ele = `{${ele}}`;
-        result.push(Array.isArray(ele) ? append(item, ele, enclose) : item + ele);
+        if (enclose === true && typeof ele === 'string')
+          ele = `{${ele}}`
+        if (Array.isArray(ele)) {
+          result.push(append(item, ele, enclose, budget))
+        }
+        else {
+          const value = item + ele
+          reserve(budget, value)
+          result.push(value)
+        }
       }
     }
   }
-  return utils.flatten(result);
-};
+  return utils.flatten(result)
+}
 
-const expand = (ast, options = {}) => {
-  const rangeLimit = options.rangeLimit === undefined ? 1000 : options.rangeLimit;
+function expand(ast, options = {}) {
+  const rangeLimit = options.rangeLimit === undefined ? 1000 : options.rangeLimit
+  const budget = { items: 0, bytes: 0 }
 
   const walk = (node, parent = {}, depth = 0) => {
-    assertDepth(depth);
-    node.queue = [];
+    assertDepth(depth)
+    node.queue = []
 
-    let p = parent;
-    let q = parent.queue;
+    let p = parent
+    let q = parent.queue
 
     while (p.type !== 'brace' && p.type !== 'root' && p.parent) {
-      p = p.parent;
-      q = p.queue;
+      p = p.parent
+      q = p.queue
     }
 
     if (node.invalid || node.dollar) {
-      q.push(append(q.pop(), stringify(node, options)));
-      return;
+      q.push(append(q.pop(), stringify(node, options), false, budget))
+      return
     }
 
     if (node.type === 'brace' && node.invalid !== true && node.nodes.length === 2) {
-      q.push(append(q.pop(), ['{}']));
-      return;
+      q.push(append(q.pop(), ['{}'], false, budget))
+      return
     }
 
     if (node.nodes && node.ranges > 0) {
-      const args = utils.reduce(node.nodes);
+      const args = utils.reduce(node.nodes)
 
-      if (utils.exceedsLimit(...args, options.step, rangeLimit)) {
-        throw new RangeError('expanded array length exceeds range limit. Use options.rangeLimit to increase or disable the limit.');
+      if (utils.exceedsLimit(...args, options.step, rangeLimit)
+        || utils.exceedsLimit(...args, options.step, MAX_EXPANSION_ITEMS)) {
+        throw new RangeError('expanded array length exceeds range limit. Use options.rangeLimit to increase or disable the limit.')
       }
 
-      let range = fill(...args, options);
+      let range = fill(...args, options)
       if (range.length === 0) {
-        range = stringify(node, options);
+        range = stringify(node, options)
       }
 
-      q.push(append(q.pop(), range));
-      node.nodes = [];
-      return;
+      q.push(append(q.pop(), range, false, budget))
+      node.nodes = []
+      return
     }
 
-    const enclose = utils.encloseBrace(node);
-    let queue = node.queue;
-    let block = node;
+    const enclose = utils.encloseBrace(node)
+    let queue = node.queue
+    let block = node
 
     while (block.type !== 'brace' && block.type !== 'root' && block.parent) {
-      block = block.parent;
-      queue = block.queue;
+      block = block.parent
+      queue = block.queue
     }
 
     for (let i = 0; i < node.nodes.length; i++) {
-      const child = node.nodes[i];
+      const child = node.nodes[i]
 
       if (child.type === 'comma' && node.type === 'brace') {
-        if (i === 1) queue.push('');
-        queue.push('');
-        continue;
+        if (i === 1)
+          queue.push('')
+        queue.push('')
+        continue
       }
 
       if (child.type === 'close') {
-        q.push(append(q.pop(), queue, enclose));
-        continue;
+        q.push(append(q.pop(), queue, enclose, budget))
+        continue
       }
 
       if (child.value && child.type !== 'open') {
-        queue.push(append(queue.pop(), child.value));
-        continue;
+        queue.push(append(queue.pop(), child.value, false, budget))
+        continue
       }
 
       if (child.nodes) {
-        walk(child, node, depth + 1);
+        walk(child, node, depth + 1)
       }
     }
 
-    return queue;
-  };
+    return queue
+  }
 
-  return utils.flatten(walk(ast));
-};
+  return utils.flatten(walk(ast))
+}
 
-module.exports = expand;
+module.exports = expand

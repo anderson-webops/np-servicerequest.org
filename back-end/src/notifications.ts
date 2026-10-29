@@ -3,6 +3,8 @@ import { chmod, mkdir, writeFile } from 'node:fs/promises'
 import { isAbsolute, resolve } from 'node:path'
 import { env } from 'node:process'
 
+import { isEmailAddress } from './contact.js'
+
 let hasWarnedAboutEmailConfig = false
 
 function parseBooleanFlag(value: string | undefined) {
@@ -211,7 +213,7 @@ export async function sendBoardOwnerReplyNotificationEmail(input: {
 }) {
   const settings = getEmailSettings()
 
-  if (!settings.replyNotificationsEnabled || !input.recipientEmail)
+  if (!settings.replyNotificationsEnabled || !isEmailAddress(input.recipientEmail))
     return
 
   const body = [
@@ -243,7 +245,7 @@ export async function sendBoardItemManagementLinkEmail(input: {
 }) {
   const settings = getEmailSettings()
 
-  if (!settings.managementEnabled)
+  if (!settings.managementEnabled || !isEmailAddress(input.recipientEmail))
     return
 
   const manageUrl = new URL(`/posts/${encodeURIComponent(input.itemId)}`, settings.publicWebUrl)

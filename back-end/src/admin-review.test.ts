@@ -840,3 +840,111 @@ test('public board read budget returns 429 for excess requests', async () => {
     resetRateLimitStateForTests()
   }
 })
+
+test('direct admin-key requests have a bounded client quota', async () => {
+  const { resetRateLimitStateForTests } = await import('./security.js')
+  resetRateLimitStateForTests()
+
+  try {
+    for (let index = 0; index < 120; index += 1) {
+      const { response } = await fetchJson('/api/admin/submissions', {
+        headers: { 'x-admin-key': 'invalid-admin-key' },
+      })
+      assert.equal(response.status, 401)
+    }
+
+    const { response } = await fetchJson('/api/admin/submissions', {
+      headers: { 'x-admin-key': adminKey },
+    })
+    assert.equal(response.status, 429)
+    assert.ok(Number(response.headers.get('retry-after')) >= 1)
+  }
+  finally {
+    resetRateLimitStateForTests()
+  }
+})
+
+test('recipient lists are rejected across board submission email aliases', async () => {
+  for (const [kind, contactFields] of [
+    ['service-request', { contact_method: 'email', contact_value: 'one+tag@example.com', notification_email: 'one@example.com,two@example.com', notification_preference: 'email' }],
+    ['item-request', { contact_method: 'email', contact_value: 'one@example.com;two@example.com' }],
+    ['item-lending', { contact: 'one@example.com,two@example.com', contact_method: 'email' }],
+  ] as const) {
+    const beforeFiles = await listFiles(resolve(dataDirectory, kind))
+    const antiBot = await getAgedAntiBotChallenge()
+    const { response } = await fetchJson(`/api/submissions/${kind}`, {
+      body: JSON.stringify({
+        challengeIssuedAt: String(antiBot.issuedAt),
+        challengeToken: antiBot.token,
+        name: 'Test Author',
+        project_type: 'Community project',
+        location: 'Near the library',
+        timing: 'Next week',
+        details: 'Synthetic board submission.',
+        item_needed: 'Ladder',
+        duration: 'Two days',
+        pickup_plan: 'Pickup',
+        neighborhood: 'East side',
+        item_available: 'Ladder',
+        availability: 'Next week',
+        condition: 'Good',
+        guidelines: 'Return after use',
+        ...contactFields,
+      }),
+      method: 'POST',
+    })
+    assert.equal(response.status, 400)
+    assert.deepEqual(await listFiles(resolve(dataDirectory, kind)), beforeFiles)
+  }
+})
+
+test('a reply to a previously stored recipient list does not send owner mail', async () => {
+  const antiBot = await getAgedAntiBotChallenge()
+  const { body, response } = await fetchJson('/api/submissions/service-request', {
+    body: JSON.stringify({
+      challengeIssuedAt: String(antiBot.issuedAt),
+      challengeToken: antiBot.token,
+      contact_method: 'email',
+      contact_value: 'owner@example.com',
+      details: 'Synthetic board post.',
+      location: 'Near the library',
+      name: 'Owner',
+      notification_preference: 'email',
+      project_type: 'Community project',
+      timing: 'Next week',
+    }),
+    method: 'POST',
+  })
+  assert.equal(response.status, 201)
+
+  const itemId = (body.boardItem as { id: string }).id
+  const itemPath = resolve(dataDirectory, '_board', 'items', `${itemId}.json`)
+  const storedItem = JSON.parse(await readFile(itemPath, 'utf8')) as Record<string, unknown>
+  storedItem.notificationEmail = 'one@example.com,two@example.com'
+  await writeFile(itemPath, `${JSON.stringify(storedItem)}\n`)
+
+  const captureDirectory = await mkdtemp(join(tmpdir(), 'np-stored-mail-'))
+  env.BOARD_EMAIL_CAPTURE_DIR = captureDirectory
+  env.ENABLE_BOARD_REPLY_NOTIFICATION_EMAILS = 'true'
+
+  try {
+    const replyChallenge = await getAgedAntiBotChallenge()
+    const { response: replyResponse } = await fetchJson(`/api/board/items/${itemId}/interactions`, {
+      body: JSON.stringify({
+        challengeIssuedAt: String(replyChallenge.issuedAt),
+        challengeToken: replyChallenge.token,
+        contact: 'neighbor@example.com',
+        message: 'I can help next week.',
+        name: 'Neighbor',
+      }),
+      method: 'POST',
+    })
+    assert.equal(replyResponse.status, 201)
+    assert.deepEqual(await listFiles(captureDirectory), [])
+  }
+  finally {
+    delete env.BOARD_EMAIL_CAPTURE_DIR
+    env.ENABLE_BOARD_REPLY_NOTIFICATION_EMAILS = 'false'
+    await rm(captureDirectory, { force: true, recursive: true })
+  }
+})

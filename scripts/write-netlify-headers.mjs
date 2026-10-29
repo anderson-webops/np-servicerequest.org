@@ -116,7 +116,7 @@ const contentSecurityPolicy = [
   'img-src \'self\' data: blob: https:',
   'font-src \'self\' data:',
   'style-src \'self\' \'unsafe-inline\'',
-  `script-src 'self' ${[...scriptHashes].join(' ')} https://analytics.np-servicerequest.org https://analytics.jacobdanderson.net`,
+  `script-src 'self' ${[...scriptHashes].join(' ')}`,
   'connect-src \'self\' https://analytics.np-servicerequest.org https://analytics.jacobdanderson.net',
   'frame-src \'none\'',
   'media-src \'self\' blob:',

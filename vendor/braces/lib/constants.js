@@ -1,8 +1,10 @@
-'use strict';
+'use strict'
 
 module.exports = {
   MAX_LENGTH: 10000,
   MAX_DEPTH: 256,
+  MAX_EXPANSION_ITEMS: 10000,
+  MAX_EXPANSION_BYTES: 1024 * 1024,
 
   // Digits
   CHAR_0: '0', /* 0 */
@@ -54,5 +56,5 @@ module.exports = {
   CHAR_TAB: '\t', /* \t */
   CHAR_UNDERSCORE: '_', /* _ */
   CHAR_VERTICAL_LINE: '|', /* | */
-  CHAR_ZERO_WIDTH_NOBREAK_SPACE: '\uFEFF' /* \uFEFF */
-};
+  CHAR_ZERO_WIDTH_NOBREAK_SPACE: '\uFEFF', /* \uFEFF */
+}

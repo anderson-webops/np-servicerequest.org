@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
@@ -36,4 +37,27 @@ test('analytics sends to the requested dedicated and central instances', async (
       assert.equal(contents.includes(retiredDedicatedDomain), false)
     }
   }
+})
+
+test('analytics uses immutable same-origin scripts with separate collection hosts', async () => {
+  const [config, dedicatedScript, centralScript, headers] = await Promise.all([
+    read('front-end/nuxt.config.ts'),
+    readFile(new URL('../front-end/public/vendor/analytics/dedicated-script.js', import.meta.url)),
+    readFile(new URL('../front-end/public/vendor/analytics/central-script.js', import.meta.url)),
+    read('scripts/write-netlify-headers.mjs'),
+  ])
+
+  const dedicatedHash = createHash('sha384').update(dedicatedScript).digest('base64')
+  const centralHash = createHash('sha384').update(centralScript).digest('base64')
+  assert.equal(dedicatedHash, 'OtlpAaPAGbsps9PCG+6V4bw+yXs7LvYsI2LPzOVB1F1d8lHiMWzK+xiSMoAPPahp')
+  assert.equal(centralHash, 'GCqIGuvWYg7O3NiELYWxOf/L6jh0MEUd1RXYXHaLbqZSLt7OY1ZAY8QSonb76YUk')
+  assert.match(config, /'src': '\/vendor\/analytics\/dedicated-script\.js'/u)
+  assert.match(config, /'src': '\/vendor\/analytics\/central-script\.js'/u)
+  assert.ok(config.includes(`'integrity': 'sha384-${dedicatedHash}'`))
+  assert.ok(config.includes(`'integrity': 'sha384-${centralHash}'`))
+  assert.match(config, /'data-host-url': `https:\/\/\$\{dedicatedAnalyticsDomain\}`/u)
+  assert.match(config, /'data-host-url': `https:\/\/\$\{centralAnalyticsDomain\}`/u)
+  assert.doesNotMatch(config, /'src': `https:\/\/\$\{(?:dedicated|central)AnalyticsDomain\}\/script\.js`/u)
+  assert.doesNotMatch(headers, /script-src[^\n]*https:\/\/analytics\./u)
+  assert.match(headers, /connect-src[^\n]*https:\/\/analytics\.np-servicerequest\.org/u)
 })

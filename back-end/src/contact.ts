@@ -28,7 +28,19 @@ function cleanValue(value: string | undefined) {
 }
 
 export function isEmailAddress(value: string) {
-  return value.includes('@') && !/\s/.test(value)
+  if (value.length > 254 || /[\s,;<>()[\]:"\\]/.test(value))
+    return false
+
+  const parts = value.split('@')
+  if (parts.length !== 2)
+    return false
+
+  const [localPart, domain] = parts
+  if (!localPart || localPart.length > 64 || !/^[\w!#$%&'*+/=?^`{|}~.-]+$/.test(localPart) || localPart.startsWith('.') || localPart.endsWith('.') || localPart.includes('..'))
+    return false
+
+  const labels = domain?.split('.') || []
+  return labels.length > 1 && labels.every(label => /^[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?$/i.test(label))
 }
 
 function looksLikePhoneNumber(value: string) {
@@ -87,7 +99,7 @@ export function normalizeStructuredContact(input: NormalizeStructuredContactInpu
           ? 'email'
           : null
 
-  const invalidValue = Boolean(providedValue && method && !validateStructuredContactValue(method, providedValue))
+  const invalidValue = Boolean(value && method && !validateStructuredContactValue(method, value))
   const display = usedLegacyContact
     ? legacyContact
     : method && providedValue

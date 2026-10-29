@@ -12,9 +12,17 @@ test('rate-limit churn cannot evict an active identity quota', () => {
     for (let index = 0; index < 10_000; index += 1)
       consumeRateLimit(`identity:${index}`, policy)
 
-    consumeRateLimit('overflow:first', policy)
+    consumeRateLimit('overflow:first', { ...policy, overflowIdentity: 'client:first' })
     assert.throws(() => consumeRateLimit('identity:0', policy), RateLimitError)
-    assert.throws(() => consumeRateLimit('overflow:second', policy), RateLimitError)
+    assert.throws(
+      () => consumeRateLimit('overflow:second', { ...policy, overflowIdentity: 'client:first' }),
+      RateLimitError,
+    )
+    consumeRateLimit('overflow:third', { ...policy, overflowIdentity: 'client:second' })
+    assert.throws(
+      () => consumeRateLimit('overflow:fourth', { ...policy, overflowIdentity: 'client:second' }),
+      RateLimitError,
+    )
   }
   finally {
     resetRateLimitStateForTests()
@@ -26,6 +34,7 @@ test('rate-limit policies reject invalid bounds and per-key window changes', () 
 
   try {
     assert.throws(() => consumeRateLimit('invalid', { limit: 0, windowMs: 1 }), TypeError)
+    assert.throws(() => consumeRateLimit('invalid', { limit: 1, windowMs: 1, overflowIdentity: '' }), TypeError)
     consumeRateLimit('stable-policy', { limit: 2, windowMs: 1_000 })
     assert.throws(
       () => consumeRateLimit('stable-policy', { limit: 2, windowMs: 2_000 }),
