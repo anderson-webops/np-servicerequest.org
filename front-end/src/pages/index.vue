@@ -606,6 +606,7 @@ function handleBoardOptionsKeydown(event: KeyboardEvent) {
 
 useEventListener('resize', positionBoardOptions)
 useEventListener('scroll', positionBoardOptions, { capture: true, passive: true })
+useResizeObserver(boardOptionsDialog, positionBoardOptions)
 
 onMounted(() => {
   hasHydrated.value = true

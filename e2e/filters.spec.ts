@@ -109,3 +109,18 @@ test('filter and sort selections preserve search and reset pagination', async ({
   await expect(panel.getByRole('button', { name: 'Service projects' })).toHaveAttribute('aria-pressed', 'true')
   await expect(page).toHaveURL(/q=overlay-check/)
 })
+
+test('location feedback keeps the overlay within a short phone screen', async ({ context, page }) => {
+  await context.grantPermissions([])
+  await page.setViewportSize({ width: 390, height: 568 })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Filter and sort', exact: true }).click()
+  const panel = page.getByRole('dialog', { name: 'Filter and sort', exact: true })
+  await panel.getByRole('combobox', { name: 'Sort', exact: true }).selectOption('nearby')
+  await expect(panel.getByRole('alert')).toBeVisible()
+  await expect.poll(async () => {
+    const bounds = await panel.boundingBox()
+    return Math.round((bounds?.y || 0) + (bounds?.height || 0))
+  }).toBeLessThanOrEqual(552)
+  await expect(panel.getByRole('combobox', { name: 'Sort', exact: true })).toHaveValue('recent-activity')
+})
