@@ -35,7 +35,7 @@ test('production is a confined direct Node service without Docker', async () => 
   assert.match(service, /User=np-servicerequest/u)
   assert.match(service, /HOST=127\.0\.0\.1/u)
   assert.match(service, /PORT=3016/u)
-  assert.match(service, /\/opt\/node-24\.18\.1\/bin\/node/u)
+  assert.match(service, /\/opt\/node-26\.13\.0\/bin\/node/u)
   assert.match(service, /ALLOW_PUBLIC_LISTENER=false/u)
   assert.match(service, /SUBMISSIONS_DATA_DIR=\/var\/lib\/np-servicerequest\/data/u)
   assert.match(service, /StateDirectory=np-servicerequest/u)

@@ -2,10 +2,10 @@
 	"name": "back-end",
 	"version": "1.0.0",
 	"private": true,
-	"packageManager": "npm@12.0.2",
+	"packageManager": "npm@12.2.1",
 	"engines": {
-		"node": ">=24.18.1 <25",
-		"npm": ">=12.0.2 <13"
+		"node": ">=26.13.0 <27",
+		"npm": ">=12.2.1 <13"
 	},
 	"description": "Minimal Express API for np-servicerequest.org.",
 	"type": "module",
@@ -36,9 +36,9 @@
 	"devDependencies": {
 		"@types/cors": "^2.8.19",
 		"@types/express": "^5.0.6",
-		"@types/node": "^24.19.2",
+		"@types/node": "^26.6.6",
 		"@types/nodemailer": "^8.0.2",
-		"globals": "^17.13.0",
+		"globals": "^17.14.0",
 		"tsx": "^4.23.15",
 		"typescript-eslint": "^8.72.1"
 	}

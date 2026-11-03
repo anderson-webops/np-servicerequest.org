@@ -75,6 +75,7 @@ development defaults and production exclusion have independent regressions.
 The template's independent backend lock, generic API, service unit and Netlify
 API topology do not apply here. NP retains its authoritative root workspace
 lock, account/session/role controls, loopback port 3016, external single-writer
-state and static-preview-only Netlify profile. Its established Node 24.18.1 and
-npm 12.0.2 host contract remains distinct from the template's newer toolchain;
-the inherited library and consumer updates must pass NP's exact pinned gates.
+state and static-preview-only Netlify profile. Its reviewed Node 26.13.0 and
+npm 12.2.1 source contract remains distinct from the installed host until
+protected transition and rollback acceptance. The inherited library and
+consumer updates must pass NP's exact pinned gates.

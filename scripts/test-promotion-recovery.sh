@@ -4,7 +4,7 @@ root=$(cd -- "$(dirname -- "$0")/.." && pwd)
 node=$(realpath "$(command -v node)")
 test "$(uname -s)" = Linux
 test "$(id -u)" -ne 0
-test "$(node --version)" = v24.18.1
+test "$(node --version)" = v26.13.0
 bwrap_command=(/usr/bin/bwrap)
 source_root="$root"
 if [[ "${NP_TEST_PRIVILEGED_BWRAP:-}" == 1 ]]; then

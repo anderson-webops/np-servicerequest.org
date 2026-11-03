@@ -13,8 +13,8 @@ preview and cannot operate the durable API.
 
 ## One-time host setup
 
-1. Install the isolated Node `24.18.1` runtime at
-   `/opt/node-24.18.1/bin/node`. Do not replace the host-wide `/usr/bin/node`.
+1. Install the isolated Node `26.13.0` runtime at
+   `/opt/node-26.13.0/bin/node`. Do not replace the host-wide `/usr/bin/node`.
 2. Stage a separately reviewed copy of the release helpers beneath a root-owned,
    non-writable-to-build-users path. From that copy, install the protected
    helper, checked unit, and initial fail-closed environment template. Replace
@@ -37,6 +37,8 @@ preview and cannot operate the durable API.
 The unit fixes the listener, proxy trust, active static path, and data path so
 environment-file changes cannot make Node public or move durable data into a
 release checkout.
+An installed Node 24 unit remains unchanged until a separately reviewed host
+transition establishes the Node 26 runtime and retained-release rollback.
 
 ## Migrating existing data
 

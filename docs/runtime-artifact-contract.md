@@ -11,14 +11,15 @@ in the existing service journal. No release-time data migration is permitted.
 Keep protected configuration and any downstream database, email spool, cache or
 uploads outside immutable releases. Preserve durable state on both promotion and
 rollback. Preserve the exact installed service users, paths and loopback ports;
-the existing `/srv/np-servicerequest.org`, service account, loopback port `3016`,
-and `/opt/node-24.18.1/bin/node` contract are authoritative for this host. Never
+the existing `/srv/np-servicerequest.org`, service account and loopback port `3016`
+remain authoritative. The Node 26.13.0 contract requires a separately reviewed
+host runtime transition and verified retained-release rollback. Never
 change DNS, IPv4/IPv6, certificates, another service's port, or edge configuration
 to make artifact acceptance pass.
 
 ## Build and accept away from production
 
-Use an unprivileged disposable Linux ARM64 builder with Node 24.18.1, npm 12.0.2,
+Use an unprivileged disposable Linux ARM64 builder with Node 26.13.0, npm 12.2.1,
 Python 3.11 or newer and Bubblewrap with user namespaces available. Start from a
 clean, exact source commit. Record that commit. Run the repository's clean install,
 full/production audits, signatures, lint, types, tests, build, native declarations

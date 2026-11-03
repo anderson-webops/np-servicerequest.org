@@ -35,10 +35,10 @@
     "@unocss/eslint-config": "^66.12.0",
     "@unocss/nuxt": "^66.12.0",
     "@vueuse/nuxt": "^15.0.0",
-    "nuxt": "^4.6.3",
-    "rollup": "^4.66.0",
+    "nuxt": "^4.6.4",
+    "rollup": "^4.67.4",
     "unocss": "^66.12.0",
-    "vue-tsc": "^3.3.13"
+    "vue-tsc": "^3.3.14"
   },
   "optionalDependencies": {
     "@esbuild/linux-arm64": "0.28.2",
@@ -55,10 +55,10 @@
     "@rolldown/binding-linux-arm64-musl": "1.2.16",
     "@rolldown/binding-linux-x64-gnu": "1.2.16",
     "@rolldown/binding-linux-x64-musl": "1.2.16",
-    "@rollup/rollup-linux-arm64-gnu": "4.66.0",
-    "@rollup/rollup-linux-arm64-musl": "4.66.0",
-    "@rollup/rollup-linux-x64-gnu": "4.66.0",
-    "@rollup/rollup-linux-x64-musl": "4.66.0",
+    "@rollup/rollup-linux-arm64-gnu": "4.67.4",
+    "@rollup/rollup-linux-arm64-musl": "4.67.4",
+    "@rollup/rollup-linux-x64-gnu": "4.67.4",
+    "@rollup/rollup-linux-x64-musl": "4.67.4",
     "@unrs/resolver-binding-linux-arm64-gnu": "1.12.2",
     "@unrs/resolver-binding-linux-arm64-musl": "1.12.2",
     "@unrs/resolver-binding-linux-x64-gnu": "1.12.2",
