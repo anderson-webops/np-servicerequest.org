@@ -12,13 +12,13 @@
 	"main": "dist/server.js",
 	"scripts": {
 		"server": "tsx watch -r dotenv/config src/server.ts",
-		"server:once": "tsx -r dotenv/config src/server.ts",
+		"server:once": "node --import tsx -r dotenv/config src/server.ts",
 		"start": "node dist/server.js",
-		"build": "tsc -p tsconfig.json --incremental false",
-		"watch": "tsc -w",
+		"build": "node scripts/run-typescript.mjs -p tsconfig.json --incremental false",
+		"watch": "node scripts/run-typescript.mjs -w",
 		"dev": "tsx watch -r dotenv/config src/server.ts",
-		"test": "tsx --test src/**/*.test.ts",
-		"typecheck": "tsc -p tsconfig.json --noEmit",
+		"test": "node --import tsx --test src/**/*.test.ts",
+		"typecheck": "node scripts/run-typescript.mjs -p tsconfig.json --noEmit",
 		"up": "taze major -I",
 		"lint": "eslint \"src/**/*.{js,ts}\" \"scripts/**/*.mjs\"",
 		"lint-fix": "eslint \"src/**/*.{js,ts}\" \"scripts/**/*.mjs\" --fix"
@@ -40,6 +40,7 @@
 		"@types/nodemailer": "^8.0.2",
 		"globals": "^17.14.0",
 		"tsx": "^4.23.15",
-		"typescript-eslint": "^8.72.1"
+		"typescript-eslint": "^8.72.1",
+		"typescript-native": "npm:typescript@7.0.2"
 	}
 }

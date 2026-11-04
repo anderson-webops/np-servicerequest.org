@@ -18,8 +18,12 @@ if [[ "${NP_TEST_PRIVILEGED_BWRAP:-}" == 1 ]]; then
   diff -qr "$root/deploy" "$source_root/deploy" >/dev/null
   diff -qr "$root/scripts" "$source_root/scripts" >/dev/null
 fi
+loaderMounts=()
+if test -d /usr/lib64; then
+  loaderMounts=(--symlink usr/lib64 /lib64)
+fi
 timeout -k 5 120 "${bwrap_command[@]}" --unshare-all --die-with-parent --new-session --uid 0 --gid 0 \
-  --ro-bind /usr /usr --symlink usr/bin /bin --symlink usr/lib /lib \
+  --ro-bind /usr /usr --symlink usr/bin /bin --symlink usr/lib /lib "${loaderMounts[@]}" \
   --tmpfs /usr/local --ro-bind "$node" /runtime/node --proc /proc --dev /dev --tmpfs /tmp \
   --ro-bind "$source_root/deploy" /source/deploy --ro-bind "$source_root/scripts" /source/scripts \
   --clearenv --setenv PATH /runtime:/usr/bin:/bin --setenv HOME /tmp \

@@ -9,6 +9,10 @@ test "$(id -u)" -ne 0
 test "$(uname -s)" = Linux
 test "$(uname -m)" = aarch64
 test "$(node --version)" = v26.13.0
+loaderMounts=()
+if test -d /usr/lib64; then
+  loaderMounts=(--symlink usr/lib64 /lib64)
+fi
 if [[ "$case_name" == complete ]]; then
   python3 -B "$script_dir/runtime-artifact.py" verify "$artifact"
 fi
@@ -40,7 +44,7 @@ if [[ "${NP_TEST_PRIVILEGED_BWRAP:-}" == 1 ]]; then
   fi
 fi
 timeout -k 5 90 "${bwrap_command[@]}" --unshare-all --die-with-parent --new-session \
-  --ro-bind /usr /usr --symlink usr/bin /bin --symlink usr/lib /lib \
+  --ro-bind /usr /usr --symlink usr/bin /bin --symlink usr/lib /lib "${loaderMounts[@]}" \
   --ro-bind "$node" /runtime/node --proc /proc --dev /dev --tmpfs /tmp \
   --ro-bind "$sandbox_artifact" /app \
   --ro-bind "$harness_dir/runtime.mjs" /harness/runtime.mjs \

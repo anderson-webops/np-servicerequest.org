@@ -2,10 +2,11 @@ import { spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import http from 'node:http'
 import { createRequire } from 'node:module'
-import { dirname, resolve } from 'node:path'
+import { dirname, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import puppeteer from 'puppeteer'
+import { frontendCommand } from './frontend-command.mjs'
 
 const require = createRequire(import.meta.url)
 const axeSourcePath = require.resolve('axe-core/axe.min.js')
@@ -291,13 +292,11 @@ async function waitForHttp(url, timeoutMs = 45_000) {
 }
 
 function startFrontend() {
+  const command = frontendCommand(projectRoot)
   const isNuxt = frontendKind === 'nuxt' || Object.values(frontendPackage.scripts || {}).some(script => String(script).includes('nuxt'))
   const args = isNuxt
     ? [
-        'exec',
-        '-w',
-        'front-end',
-        '--',
+        ...command.args,
         'nuxt',
         'dev',
         '--host',
@@ -306,10 +305,7 @@ function startFrontend() {
         String(frontendPort),
       ]
     : [
-        'exec',
-        '-w',
-        'front-end',
-        '--',
+        ...command.args,
         'vite',
         '--host',
         '127.0.0.1',
@@ -318,10 +314,17 @@ function startFrontend() {
         '--strictPort',
       ]
 
+  const frontendDirectory = command.cwd
+  const childTemporaryDirectory = process.env.TMPDIR
+    ? relative(frontendDirectory, resolve(process.env.TMPDIR))
+    : ''
   const child = spawn('npm', args, {
-    cwd: projectRoot,
+    cwd: frontendDirectory,
     env: {
       ...process.env,
+      ...(process.platform === 'darwin' && childTemporaryDirectory && childTemporaryDirectory.length < process.env.TMPDIR.length
+        ? { TMPDIR: childTemporaryDirectory }
+        : {}),
       BROWSER: 'none',
       DISABLE_ANALYTICS: 'true',
       NUXT_DEVTOOLS_ENABLED: 'false',
