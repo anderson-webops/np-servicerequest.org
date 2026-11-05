@@ -42,7 +42,8 @@ Treat this as a standing instruction for this site.
 
 ## Build, Test, and Development Commands
 
-- `npm install` installs all workspace dependencies. Use npm at the repo root.
+- `npm ci` installs the committed workspace dependency graph. Use Node 26.13.0 and npm 12.2.2 at the repo root; do not mix package managers for normal
+  development.
 - `npm run dev` starts the Nuxt front-end on port `3333`.
 - `npm run server` starts the Express API with `tsx watch` on port `3006`.
 - `npm run typecheck` runs both the Nuxt and back-end TypeScript checks.

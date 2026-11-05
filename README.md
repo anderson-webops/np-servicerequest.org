@@ -13,7 +13,9 @@ This repo is based on the local `vitesse-nuxt` monorepo template, which itself w
 
 ## Scripts
 
-From the repo root:
+Use Node.js `26.13.0` and npm `12.2.2` from the repository root. The committed npm lockfile includes optional native packages for Linux ARM64 glibc and musl deployments, and npm rejects unreviewed dependency install scripts.
+
+npm uses the explicit hoisted install strategy, with native bindings checked against their actual dependency ancestry. Direct build-time type and lint dependencies are declared explicitly rather than relying on accidental hoisting.
 
 ```bash
 npm ci

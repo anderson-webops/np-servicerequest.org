@@ -2,10 +2,10 @@
 	"name": "back-end",
 	"version": "1.0.0",
 	"private": true,
-	"packageManager": "npm@12.2.1",
+	"packageManager": "npm@12.2.2",
 	"engines": {
 		"node": ">=26.13.0 <27",
-		"npm": ">=12.2.1 <13"
+		"npm": ">=12.2.2 <13"
 	},
 	"description": "Minimal Express API for np-servicerequest.org.",
 	"type": "module",

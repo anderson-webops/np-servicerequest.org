@@ -81,7 +81,7 @@ private handling as the live directory.
 
 ## Deployment requirements
 
-- Use Node `26.13.0` and npm `12.2.1` and install from the committed root
+- Use Node `26.13.0` and npm `12.2.2` and install from the committed root
   lockfile with optional dependencies enabled.
 - Run the dependency, signature, native-platform, lint, type, test, build,
   accessibility, browser, and direct-runtime gates before promotion.
