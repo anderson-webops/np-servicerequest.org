@@ -1,5 +1,12 @@
 # Dependency acceptance
 
+The production artifact retains its reviewed root-only dependency layout.
+The root declares the API's existing Dotenv 18 requirement explicitly, keeping
+that runtime package at `node_modules/dotenv` under a hoisted locked install.
+C12 retains its separate supported Dotenv 17 dependency. Neither consumer's
+range is widened and the artifact verifier continues rejecting workspace-local
+dependency trees, symlinks and unrelated development packages.
+
 Builds use npm 12.2.2 with Node 26.13.0. Its bundled Undici 6.29.1 replaces
 the affected 6.29.0 copy in npm 12.2.1, covering
 https://github.com/nodejs/undici/security/advisories/GHSA-2m5v-pch6-74hx and

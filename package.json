@@ -58,6 +58,9 @@
 		"test:devtools": "node scripts/test-vue-devtools-host.mjs",
 		"audit:qs": "npm audit --prefix vendor/qs --workspaces=false --audit-level=low && npm audit --prefix vendor/qs --workspaces=false --omit=dev --audit-level=low"
 	},
+	"dependencies": {
+		"dotenv": "^18.0.9"
+	},
 	"devDependencies": {
 		"@vitejs/devtools-kit": "0.7.6",
 		"@antfu/eslint-config": "^10.0.0",
