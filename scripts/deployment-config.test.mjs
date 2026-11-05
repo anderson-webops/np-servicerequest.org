@@ -163,3 +163,19 @@ test('publication independently binds the profile and complete NP-specific accep
   assert.doesNotMatch(packageRuntime, /scripts\/direct-runtime-smoke\.mjs/u)
   assert.match(packageRuntime, /BUILD_TOOLCHAIN_RECEIPT/u)
 })
+
+test('privileged test namespaces copy the exact Node executable without exposing its private build profile', async () => {
+  for (const [filename, directory] of [
+    ['test-promotion-recovery.sh', 'source_root'],
+    ['test-unpacked-artifact.sh', 'temporary_source'],
+  ]) {
+    const source = await readFile(new URL(filename, import.meta.url), 'utf8')
+    assert.ok(source.includes(`cp "$node" "$${directory}/node"`))
+    assert.ok(source.includes(`chmod 0755 "$${directory}/node"`))
+    assert.ok(source.includes(`cmp -- "$node" "$${directory}/node"`))
+    assert.ok(source.includes(`node="$${directory}/node"`))
+    assert.match(source, /--ro-bind "\$node" \/runtime\/node/u)
+    assert.doesNotMatch(source, /chmod[^\n]*"\$node"/u)
+    assert.doesNotMatch(source, /--ro-bind[^\n]*(?:node_modules\/npm|_site-toolchains)/u)
+  }
+})

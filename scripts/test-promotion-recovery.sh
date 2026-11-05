@@ -17,6 +17,10 @@ if [[ "${NP_TEST_PRIVILEGED_BWRAP:-}" == 1 ]]; then
   chmod -R a+rX "$source_root/deploy" "$source_root/scripts"
   diff -qr "$root/deploy" "$source_root/deploy" >/dev/null
   diff -qr "$root/scripts" "$source_root/scripts" >/dev/null
+  cp "$node" "$source_root/node"
+  chmod 0755 "$source_root/node"
+  cmp -- "$node" "$source_root/node"
+  node="$source_root/node"
 fi
 loaderMounts=()
 if test -d /usr/lib64; then

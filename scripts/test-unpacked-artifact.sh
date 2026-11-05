@@ -28,6 +28,10 @@ if [[ "${NP_TEST_PRIVILEGED_BWRAP:-}" == 1 ]]; then
   mkdir "$temporary_source/harness"
   cp "$script_dir/artifact-acceptance/runtime.mjs" "$script_dir/backend-runtime-smoke.mjs" "$script_dir/post-deploy-smoke.mjs" "$temporary_source/harness/"
   chmod 0755 "$temporary_source"
+  cp "$node" "$temporary_source/node"
+  chmod 0755 "$temporary_source/node"
+  cmp -- "$node" "$temporary_source/node"
+  node="$temporary_source/node"
   chmod -R a+rX "$temporary_source/app" "$temporary_source/harness"
   diff -qr "$artifact" "$temporary_source/app" >/dev/null
   for harness_name in runtime.mjs backend-runtime-smoke.mjs post-deploy-smoke.mjs; do
