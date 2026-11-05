@@ -34,7 +34,9 @@
     "os": "linux",
     "arch": "arm64",
     "node": "26.13.0",
-    "npmBuildOnly": "12.2.2"
+    "npmBuildOnly": "12.2.2",
+    "npmBuildProfile": "webops-locked-npm-v1",
+    "npmBuildLockSha256": "f1ac1609d8e50515a9c8a8405936ce18ac3a8f827490ac5b1f31f9954deccfd5"
   },
   "deployment": {
     "schemaVersion": 1,

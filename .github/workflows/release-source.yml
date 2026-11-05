@@ -32,8 +32,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Use the repository npm version
-        run: npm install --global "npm@${NPM_VERSION}"
+      - name: Prepare the independent locked build toolchain
+        run: |
+          bin="$(node scripts/build-toolchain.mjs --print-bin)"
+          printf '%s\n' "$bin" >> "$GITHUB_PATH"
+          "$bin/node" scripts/check-build-toolchain.mjs
 
       - name: Verify annotated source release
         id: release
@@ -104,8 +107,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Use the repository npm version
-        run: npm install --global "npm@${NPM_VERSION}"
+      - name: Prepare the independent locked build toolchain
+        run: |
+          bin="$(node scripts/build-toolchain.mjs --print-bin)"
+          printf '%s\n' "$bin" >> "$GITHUB_PATH"
+          "$bin/node" scripts/check-build-toolchain.mjs
 
       - name: Verify source and build exact ARM64 archive
         env:
@@ -203,6 +209,38 @@ jobs:
               raise SystemExit('Release acceptance record does not match the archive')
           if manifest['commit'] != source_commit or manifest['contract'] != json.loads(Path('deploy/runtime-artifact.json').read_text()):
               raise SystemExit('Release manifest does not match the source contract')
+          contract = manifest['contract']
+          toolchain_lock_bytes = Path('build-toolchain/package-lock.json').read_bytes()
+          toolchain_lock = json.loads(toolchain_lock_bytes)
+          toolchain_upstream = json.loads(Path('build-toolchain/UPSTREAM.json').read_text())
+          toolchain_digest = hashlib.sha256(toolchain_lock_bytes).hexdigest()
+          if toolchain_digest != contract['runtime']['npmBuildLockSha256'] or toolchain_digest != toolchain_upstream['lockSha256']:
+              raise SystemExit('Build toolchain source and contract digests differ')
+          expected_toolchain = {
+              'profile': contract['runtime']['npmBuildProfile'],
+              'lockSha256': toolchain_digest,
+              'node': contract['runtime']['node'],
+              'versions': {
+                  name: toolchain_lock['packages'][f'node_modules/{name}']['version']
+                  for name in ['npm', 'glob', 'minimatch', 'undici']
+              },
+          }
+          if acceptance['buildToolchain'] != expected_toolchain:
+              raise SystemExit('Release acceptance used a different build toolchain')
+          expected_harness = {
+              'deploy/runtime-artifact.json', 'scripts/runtime-artifact.py',
+              'scripts/package-runtime.sh', 'scripts/test-unpacked-artifact.sh',
+              'scripts/backend-runtime-smoke.mjs', 'scripts/post-deploy-smoke.mjs',
+              'scripts/artifact-acceptance/runtime.mjs', 'scripts/write-release-metadata.mjs',
+              'deploy/systemd/install-service.sh', 'deploy/systemd/promote-release.sh',
+              'deploy/systemd/trusted-paths.py', 'scripts/test-promotion-recovery.py',
+              'scripts/test-promotion-recovery.sh', 'scripts/test-bootstrap-in-vm.py',
+              'scripts/build-toolchain.mjs', 'scripts/build-toolchain-state.mjs',
+              'scripts/check-build-toolchain.mjs', 'build-toolchain/UPSTREAM.json',
+              'build-toolchain/package.json', 'build-toolchain/package-lock.json',
+          }
+          if set(acceptance['harnessSha256']) != expected_harness:
+              raise SystemExit('Release acceptance harness differs from required source')
           for name, expected_digest in acceptance['harnessSha256'].items():
               if hashlib.sha256(Path(name).read_bytes()).hexdigest() != expected_digest:
                   raise SystemExit(f'Release harness mismatch: {name}')

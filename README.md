@@ -13,7 +13,26 @@ This repo is based on the local `vitesse-nuxt` monorepo template, which itself w
 
 ## Scripts
 
-Use Node.js `26.13.0` and npm `12.2.2` from the repository root. The committed npm lockfile includes optional native packages for Linux ARM64 glibc and musl deployments, and npm rejects unreviewed dependency install scripts.
+- Node.js `26.13.0`
+- npm `12.2.2` through the independently locked `webops-locked-npm-v1` build profile
+
+```sh
+export PATH="$(node scripts/build-toolchain.mjs --print-bin):$PATH"
+npm ci --include=optional --strict-allow-scripts
+```
+
+Bootstrap uses the selected Node's existing npm only to install the reviewed,
+locked build-tool graph. Application installation and checks use the repaired
+profile. The private installation survives application `npm ci`, and global
+tools remain unchanged. The bootstrap-only graph accepts the stock Node 26.13.0
+npm 11.20.0 seed; application and release commands still require the verified
+npm 12.2.2 profile. Each bootstrap creates a fresh private installation;
+registry download caches remain reusable. `NPM_CONFIG_CACHE` places it under
+that cache's `_site-toolchains`, otherwise it stays in repository-owned scratch.
+Windows and hosted-editor execution require their own acceptance; source CI
+and direct release acceptance target Linux, with local macOS validation.
+
+Use the repository root for all package operations. The committed npm lockfile includes optional native packages for Linux ARM64 glibc and musl deployments, and npm rejects unreviewed dependency install scripts.
 
 npm uses the explicit hoisted install strategy, with native bindings checked against their actual dependency ancestry. Direct build-time type and lint dependencies are declared explicitly rather than relying on accidental hoisting.
 

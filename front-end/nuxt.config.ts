@@ -124,6 +124,9 @@ export default defineNuxtConfig({
   compatibilityDate: '2024-08-14',
 
   nitro: {
+    commands: {
+      preview: 'serve {{ output.publicDir }}',
+    },
     esbuild: {
       options: {
         target: 'esnext',

@@ -123,3 +123,43 @@ test('source release requires an exact ARM64 artifact before publication', async
   assert.match(release, /gh release create/u)
   assert.doesNotMatch(release, /--clobber|--force/u)
 })
+
+test('each install selects the independently locked build profile instead of changing global npm', async () => {
+  const [ci, release, prepare, manifest] = await Promise.all([
+    readFile(paths.ci, 'utf8'),
+    readFile(paths.release, 'utf8'),
+    readFile(paths.prepare, 'utf8'),
+    readFile(new URL('../package.json', import.meta.url), 'utf8').then(JSON.parse),
+  ])
+  assert.equal(ci.match(/bin="\$\(node scripts\/build-toolchain\.mjs --print-bin\)"/gu)?.length, 4)
+  assert.equal(release.match(/bin="\$\(node scripts\/build-toolchain\.mjs --print-bin\)"/gu)?.length, 2)
+  for (const source of [ci, release]) {
+    assert.match(source, /GITHUB_PATH/u)
+    assert.match(source, /scripts\/check-build-toolchain\.mjs/u)
+    assert.doesNotMatch(source, /npm install --global/u)
+  }
+  assert.ok(prepare.indexOf('node scripts/build-toolchain.mjs --print-bin') < prepare.indexOf('npm ci --include=dev'))
+  assert.match(prepare, /Build-tool caches must remain outside the prepared runtime/u)
+  assert.match(manifest.scripts.audit, /^npm run audit:toolchain &&/u)
+  assert.match(manifest.scripts['audit:production'], /^npm run audit:toolchain -- --omit=dev &&/u)
+  assert.match(manifest.scripts.test, /test:build-toolchain/u)
+  assert.match(manifest.scripts.test, /test:toolchain-package/u)
+})
+
+test('publication independently binds the profile and complete NP-specific acceptance harness', async () => {
+  const [release, packageRuntime, contract] = await Promise.all([
+    readFile(paths.release, 'utf8'),
+    readFile(paths.packageRuntime, 'utf8'),
+    readFile(new URL('../deploy/runtime-artifact.json', import.meta.url), 'utf8').then(JSON.parse),
+  ])
+  assert.equal(contract.runtime.npmBuildProfile, 'webops-locked-npm-v1')
+  assert.match(contract.runtime.npmBuildLockSha256, /^[a-f0-9]{64}$/u)
+  assert.match(release, /acceptance\['buildToolchain'\] != expected_toolchain/u)
+  assert.match(release, /set\(acceptance\['harnessSha256'\]\) != expected_harness/u)
+  for (const filename of ['scripts/backend-runtime-smoke.mjs', 'scripts/post-deploy-smoke.mjs', 'scripts/build-toolchain-state.mjs']) {
+    assert.ok(release.includes(filename))
+    assert.ok(packageRuntime.includes(filename))
+  }
+  assert.doesNotMatch(packageRuntime, /scripts\/direct-runtime-smoke\.mjs/u)
+  assert.match(packageRuntime, /BUILD_TOOLCHAIN_RECEIPT/u)
+})

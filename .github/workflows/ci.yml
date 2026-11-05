@@ -29,13 +29,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Use the repository npm version
-        run: npm install --global "npm@${NPM_VERSION}"
-
-      - name: Verify pinned toolchain
+      - name: Prepare the independent locked build toolchain
         run: |
-          test "$(node --version)" = "v${NODE_VERSION}"
-          test "$(npm --version)" = "${NPM_VERSION}"
+          bin="$(node scripts/build-toolchain.mjs --print-bin)"
+          printf '%s\n' "$bin" >> "$GITHUB_PATH"
+          "$bin/node" scripts/check-build-toolchain.mjs
 
       - name: Clean locked install
         run: npm ci --include=optional --strict-allow-scripts
@@ -71,8 +69,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Use the repository npm version
-        run: npm install --global "npm@${NPM_VERSION}"
+      - name: Prepare the independent locked build toolchain
+        run: |
+          bin="$(node scripts/build-toolchain.mjs --print-bin)"
+          printf '%s\n' "$bin" >> "$GITHUB_PATH"
+          "$bin/node" scripts/check-build-toolchain.mjs
 
       - name: Install dependencies and Chromium
         run: |
@@ -95,8 +96,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Use the repository npm version
-        run: npm install --global "npm@${NPM_VERSION}"
+      - name: Prepare the independent locked build toolchain
+        run: |
+          bin="$(node scripts/build-toolchain.mjs --print-bin)"
+          printf '%s\n' "$bin" >> "$GITHUB_PATH"
+          "$bin/node" scripts/check-build-toolchain.mjs
 
       - name: Validate ARM64 install and build
         run: |
@@ -131,8 +135,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Use the repository npm version
-        run: npm install --global "npm@${NPM_VERSION}"
+      - name: Prepare the independent locked build toolchain
+        run: |
+          bin="$(node scripts/build-toolchain.mjs --print-bin)"
+          printf '%s\n' "$bin" >> "$GITHUB_PATH"
+          "$bin/node" scripts/check-build-toolchain.mjs
 
       - name: Build the direct production runtime
         run: |
