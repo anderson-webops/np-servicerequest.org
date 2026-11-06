@@ -29,7 +29,7 @@ application lockfiles. The original npm 12.2.2 distribution still bundles Glob
 13.0.6 and Minimatch 10.2.5, affected by GHSA-3g3m-2fjr-6pw4 and
 GHSA-g3hv-75wg-m249. `build-toolchain/` retains the original CLI code, license
 and documentation while removing prebundled dependencies and their packaging
-declarations. A separate locked graph selects Glob 14.0.3, Minimatch 11.0.4 and
+declarations. A separate locked graph selects Glob 14.0.3, Minimatch 11.0.5 and
 the supported registry-resolved dependencies. This is a maintained local
 distribution profile, not a claim that the original upstream bundle is clean.
 
@@ -164,6 +164,10 @@ installed 0.8 kit. Strict peer resolution and the complete installed graph must
 pass without an incompatible override. The real 0.8 host fixture remains required.
 The application respects the accessibility harness's existing DevTools opt-out;
 development defaults and production exclusion have independent regressions.
+Local macOS Playwright validation uses its matching bundled Chromium through
+the existing `PLAYWRIGHT_CHANNEL=chromium` override, retaining normal actionability
+checks. Missing-browser and headless-shell failures are not passes. The default
+Linux CI browser workflow remains independently required.
 
 The template's independent backend lock, generic API, service unit and Netlify
 API topology do not apply here. NP retains its authoritative root workspace
@@ -173,7 +177,15 @@ npm 12.2.2 source contract remains distinct from the installed host until
 protected transition and rollback acceptance. The inherited library and
 consumer updates must pass NP's exact pinned gates.
 
-Glob 14.0.3 and Minimatch 11.0.4 replace vulnerable older transitive majors.
+Glob 14.0.3 and Minimatch 11.0.5 replace vulnerable older transitive majors.
+The Minimatch regression requires oversized globstar-parent expansion to throw,
+preserving complete matching below the expansion limit rather than accepting
+silently truncated patterns. Both application and independent build graphs use
+the same reviewed patch.
+The real DevTools host fixture decodes HTML-escaped proxy URLs before fetching
+them, matching browser attribute handling after Vite 8.3.6's escaping fix. It
+still requires successful module responses, the original client hashes and HMR
+injection.
 The complete build-toolchain suite runs in a dedicated test process before the
 other Node compatibility suites. Its cold installation, executable identity,
 tampering and cancellation cases remain required, with phase diagnostics for
