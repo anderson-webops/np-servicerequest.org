@@ -11,9 +11,106 @@ verify that generated preview command and the actual selected dependency.
 The production artifact retains its reviewed root-only dependency layout.
 The root declares the API's existing Dotenv 18 requirement explicitly, keeping
 that runtime package at `node_modules/dotenv` under a hoisted locked install.
-C12 retains its separate supported Dotenv 17 dependency. Neither consumer's
-range is widened and the artifact verifier continues rejecting workspace-local
+C12 now uses its qualified Dotenv 18 dependency. The API requirement stays
+unchanged and the artifact verifier continues rejecting workspace-local
 dependency trees, symlinks and unrelated development packages.
+
+## Framework bundler and configuration parents
+
+The active framework uses Rolldown 1.3.0 and c12 4.0.0-rc.4. The c12 version is
+the publisher's current `latest` prerelease and is already embedded in Nuxt kit;
+the independently installed Nitro configuration loader is qualified on the same
+major. Original Rolldown 1.2.16, c12 3.3.4 and registry framework parents remain
+in the independently installed, audited and signature-verified reference graph.
+
+`vendor/framework-parents/UPSTREAM.json` binds 774 original files, including
+every executable mode, type, runtime and license. The reproducible distributions
+are Vite 8.3.6+webops.3, Nuxt 4.6.4+webops.2 and Nitro 2.13.6+webops.1.
+Build metadata preserves normal framework SemVer comparisons while identifying
+the reviewed local distributions. Their provider contracts select the qualified
+versions; the original metadata is retained inside each archive.
+
+Nuxt consistently bundles its `unctx` runtime because its transform emits an
+absolute helper import alongside bare application imports. This fixes the
+mixed internal/external module identity rejected by Rolldown 1.3. Vite's load
+hook declaration also accepts the new optional native load-context fields while
+preserving the existing SSR option. These are exact, source-bound corrections;
+all other upstream payload bytes and CLI permissions remain unchanged.
+
+Vite also consumes Rolldown 1.3's complete per-import preload identifiers,
+including their 32-character hexadecimal nonce. Marker association, replacement
+and cleanup preserve the complete token span instead of leaving a nonce behind
+in generated JavaScript. Both the original marker form and current native form
+remain supported; emitted syntax, nested dynamic imports and their CSS are
+verified in a real browser with normal production minification retained.
+
+`npm run test:framework-parents` compares executable native parsing, transforms,
+minification and configuration loading against the original providers. It tests
+real dynamic chunks, configuration layers, TypeScript fallback rereads, schema
+validation, isolated environment loading, invalid-config retention/recovery,
+watcher closure and the actual Nitro parent. TypeScript 6 and 7 check bundler
+and configuration APIs with library checking enabled. Nuxt configuration is
+checked separately under its real generated project aliases and existing
+compiler settings, alongside the repository's complete project type checks.
+
+C12's declaration imports Giget unconditionally although its runtime marks that
+peer optional. The application explicitly locks Giget 3.3.1 for complete public
+types. A regression binds its declaration, installed version and resolution to
+this application instead of accepting an ancestor checkout's installation.
+
+`npm run test:framework-browser` builds a real production Nuxt/Nitro application
+and verifies sixteen concurrent per-request contexts across asynchronous plugin
+boundaries, followed by client hydration, event handling and reload. The other
+browser families remain required. `check:framework-parents` reproduces archives
+and verifies every application/reference lock identity; `audit:framework-parents`
+retains full/production/reference vulnerability and signature gates. The two
+prebuilt reference-package preparation hooks are explicitly denied by their
+trusted file-source identities, with strict script review retained.
+
+## Native parser and formatter consumers
+
+The application uses Oxc parser 0.157.0 and Oxfmt 0.77.0 through qualified
+UnoCSS and ESLint parents. `vendor/native-providers/UPSTREAM.json` binds the
+complete original package inventories and registry archives. Reproduce and
+verify the maintained distributions with `npm run check:native-providers`.
+Their identities are ESLint-format 2.0.1-webops.1, UnoCSS attributify-JSX
+66.12.0-webops.1, UnoCSS Vite 66.12.0-webops.2 and Unconfig 7.5.0-webops.1.
+
+The formatter and JSX-transformer module, worker, declaration and license bytes
+remain unchanged. Their dependency ranges select the qualified native engines.
+Unconfig's single declaration correction gives `load` its actual optional
+boolean force parameter instead of referencing an undeclared `Args` type.
+Its runtime and other declarations remain unchanged.
+
+The Vite adapter gives preprocessing and build/serve extraction hooks their
+declared pre priority. This preserves valueless JSX attributes and their CSS
+before an early JSX-lowering hook runs, including Vue's built-in TypeScript
+mode. Default/post transformer behavior and the remaining adapter source remain
+unchanged. The producer verifies all original bytes before applying these exact
+source changes and rejects changed inputs, paths, links and unreviewed identities.
+
+`npm run test:native-providers` exercises native formatting, legacy option
+aliases, real ESLint workers, diagnostics, idempotence, Unicode/source maps,
+native JSX parsing, visible MDX fallback, configuration discovery/force/recovery,
+and strict positive/negative TypeScript 6 and 7 consumers without skipped library
+checking. `npm run test:jsx-browser` also tests actual CSS, SSR, events and HMR
+in both development modes, plus both production transformations.
+
+The independent original-version graph retains the registry parents and native
+providers for comparison. Its worker and matcher use patched Tinypool 2.2.0 and
+Minimatch 11.0.5. Full/production/reference audits and registry signatures remain
+required through `npm run audit:native-providers` and the aggregate audit gates.
+
+Native installation runs through exact-source-verified paired npm/npx launchers.
+They set `PYTHONDONTWRITEBYTECODE=1` so node-gyp's Python imports preserve the
+immutable SDK payload. The original npm CLI bytes and complete payload digest
+remain unchanged. Command bytes, Node/library identity, cold/warm reuse,
+concurrent creation, tampering and the three-profile cap remain checked.
+`npm run test:build-toolchain` includes real npm/npx child-Python imports with
+the inherited flag removed, verifying that both launchers supply the boundary
+and that the complete SDK payload remains unchanged afterward.
+
+## Other qualified consumers
 
 Nuxt-security's removal plugin uses the maintained Unplugin-remove
 1.0.3-webops.1 distribution with Babel 8, Magic-string 1 and Unplugin 3.7.
@@ -580,3 +677,15 @@ production audit commands retain original package identities in that separate
 graph. Application Babel providers use major 8; original-version fixtures retain
 their own reviewed dependencies. Release/provenance and host acceptance remain
 separate gates.
+
+## npm override update checks
+
+`taze.config.mjs` uses Taze's supported package-manifest extension to retain
+every nested npm override, including repeated package names, version-qualified
+selectors and self (`.`) declarations. Referenced (`$name`) declarations resolve
+through the actual direct dependency for checking and remain references when
+updates are written. The built-in parser otherwise collapses repeated names and
+tries to query `.` as a registry package. All ordinary dependency fields, registry
+resolution, filters and writing remain delegated to Taze. Metadata failures
+prevent writing, and `npm run test:dependency-check` covers read-only loading,
+selectors, references, aliases, round-trip writing and failure preservation.

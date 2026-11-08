@@ -1,7 +1,7 @@
 {
 	"name": "np-servicerequest-org-monorepo",
 	"type": "module",
-	"version": "1.3.7",
+	"version": "1.3.8",
 	"private": true,
 	"packageManager": "npm@12.2.2",
 	"engines": {
@@ -33,7 +33,7 @@
 		"lint-server": "npm run -w back-end lint-fix && npm run -w back-end server",
 		"lint-serve": "npm run -w front-end lint-fix && npm run -w front-end serve",
 		"lint": "npm run lint:root && npm run -w front-end lint && npm run -w back-end lint",
-		"lint:root": "eslint \"scripts/**/*.mjs\" eslint.config.js playwright.config.ts",
+		"lint:root": "eslint \"scripts/**/*.mjs\" eslint.config.js playwright.config.ts taze.config.mjs",
 		"lint-fix": "npm run -w front-end lint-fix && npm run -w back-end lint-fix",
 		"test:e2e": "DISABLE_ANALYTICS=true NUXT_PUBLIC_API_BASE_URL=/api npm run build && playwright test && npm run build",
 		"typecheck": "npm run -w front-end typecheck && npm run -w back-end typecheck",
@@ -42,7 +42,7 @@
 		"clean": "rm -rf node_modules front-end/node_modules front-end/.nuxt front-end/.output back-end/node_modules back-end/dist",
 		"roles:account": "node back-end/scripts/manage-account-role.mjs",
 		"sanitize:network-metadata": "node back-end/scripts/sanitize-network-metadata.mjs",
-		"test": "npm run check:build-toolchain && npm run check:toolchain-package && npm run test:build-toolchain && node --test scripts/*.test.mjs scripts/test-archiver-compat.mjs scripts/test-glob-compat.mjs scripts/test-braces-compat.mjs scripts/test-listhen-compat.mjs scripts/test-deepmerge-compat.mjs scripts/test-qs-compat.mjs scripts/test-vendored-qs-packaging.mjs scripts/test-vue-devtools-compat.mjs scripts/test-toolchain-compat.mjs scripts/test-native-bindings.mjs scripts/test-frontend-command.mjs scripts/test-devtools-provider.mjs && npm run -w back-end test && python3 -B -m unittest scripts/test_runtime_artifact.py -v && npm run test:devtools && npm run test:toolchain-package && npm run test:http-compat && npm run test:vue-jsx && npm run test:router-compiler && npm run test:remove && npm run test:magicast && npm run test:vue-compiler && npm run test:checker && npm run test:rollup-compat && npm run test:nitro-tools && npm run test:nft && npm run test:watchers && npm run test:unimport-source && python3 -B -m unittest discover -s scripts -p test_unhead_compat.py -v && npm run test:vue-devtools",
+		"test": "npm run check:build-toolchain && npm run check:toolchain-package && npm run test:build-toolchain && node --test scripts/*.test.mjs scripts/test-archiver-compat.mjs scripts/test-glob-compat.mjs scripts/test-braces-compat.mjs scripts/test-listhen-compat.mjs scripts/test-deepmerge-compat.mjs scripts/test-qs-compat.mjs scripts/test-vendored-qs-packaging.mjs scripts/test-vue-devtools-compat.mjs scripts/test-toolchain-compat.mjs scripts/test-native-bindings.mjs scripts/test-frontend-command.mjs scripts/test-devtools-provider.mjs && npm run -w back-end test && python3 -B -m unittest scripts/test_runtime_artifact.py -v && npm run test:devtools && npm run test:toolchain-package && npm run test:http-compat && npm run test:vue-jsx && npm run test:router-compiler && npm run test:remove && npm run test:magicast && npm run test:vue-compiler && npm run test:checker && npm run test:rollup-compat && npm run test:nitro-tools && npm run test:nft && npm run test:watchers && npm run test:unimport-source && python3 -B -m unittest discover -s scripts -p test_unhead_compat.py -v && npm run test:vue-devtools && npm run test:native-providers && npm run test:framework-parents && npm run test:dependency-check",
 		"up": "taze major -I && npm run -w front-end up && npm run -w back-end up",
 		"deps:check": "taze",
 		"a11y": "node scripts/a11y-smoke.mjs",
@@ -130,11 +130,19 @@
 		"package:unhead-compat": "python3 -B scripts/package-unhead-compat.py",
 		"check:unhead-package": "python3 -B scripts/package-unhead-compat.py --check",
 		"check:dependency-graph": "npm ls --all",
-		"audit:cohorts": "npm run audit:unhead && npm run audit:vue-jsx && npm run audit:vue-macros && npm run audit:remove && npm run audit:magicast && npm run audit:vue-compiler && npm run audit:checker && npm run audit:rollup-compat && npm run audit:nitro-tools && npm run audit:nft && npm run audit:watchers && npm run audit:unimport-source && npm run audit:vue-devtools",
-		"check:cohorts": "npm run check:npm-compat && npm run check:qs-package && npm run check:http-compat && npm run check:unhead-package && npm run check:vue-jsx-package && npm run check:vue-macros-package && npm run check:remove-package && npm run check:magicast-package && npm run check:vue-compiler-package && npm run check:checker-package && npm run check:rollup-package && npm run check:nitro-tool-inputs && npm run check:nft-package && npm run check:watcher-inputs && npm run check:unimport-source && npm run check:vue-devtools-package",
+		"audit:cohorts": "npm run audit:unhead && npm run audit:vue-jsx && npm run audit:vue-macros && npm run audit:remove && npm run audit:magicast && npm run audit:vue-compiler && npm run audit:checker && npm run audit:rollup-compat && npm run audit:nitro-tools && npm run audit:nft && npm run audit:watchers && npm run audit:unimport-source && npm run audit:vue-devtools && npm run audit:native-providers && npm run audit:framework-parents",
+		"check:cohorts": "npm run check:npm-compat && npm run check:qs-package && npm run check:http-compat && npm run check:unhead-package && npm run check:vue-jsx-package && npm run check:vue-macros-package && npm run check:remove-package && npm run check:magicast-package && npm run check:vue-compiler-package && npm run check:checker-package && npm run check:rollup-package && npm run check:nitro-tool-inputs && npm run check:nft-package && npm run check:watcher-inputs && npm run check:unimport-source && npm run check:vue-devtools-package && npm run check:native-providers && npm run check:framework-parents",
 		"validate": "npm run check:build-toolchain && npm run check:toolchain-package && npm run check:cohorts && npm run verify:dependency-graph && npm run verify:native-lock && npm run lint && npm run typecheck && npm test && npm run build",
 		"test:vue-devtools": "python3 -B -m unittest discover -s scripts -p test_vue_devtools.py -v && node --test scripts/test-vue-devtools-types.mjs",
-		"audit:vue-devtools": "npm audit --prefix vendor/vite-plugin-vue-devtools/upstream --workspaces=false --audit-level=low && npm audit --prefix vendor/vite-plugin-vue-devtools/upstream --workspaces=false --omit=dev --audit-level=low && npm audit signatures --prefix vendor/vite-plugin-vue-devtools/upstream --workspaces=false"
+		"audit:vue-devtools": "npm audit --prefix vendor/vite-plugin-vue-devtools/upstream --workspaces=false --audit-level=low && npm audit --prefix vendor/vite-plugin-vue-devtools/upstream --workspaces=false --omit=dev --audit-level=low && npm audit signatures --prefix vendor/vite-plugin-vue-devtools/upstream --workspaces=false",
+		"test:dependency-check": "node --test scripts/test-npm-overrides-manifest.mjs",
+		"check:native-providers": "python3 -B scripts/package-native-providers.py --check",
+		"test:native-providers": "python3 -B -m unittest discover -s scripts -p test_native_providers.py -v && node --test scripts/test-native-providers.mjs scripts/test-native-provider-types.mjs",
+		"audit:native-providers": "npm audit --prefix vendor/native-providers/upstream --workspaces=false --audit-level=low && npm audit --prefix vendor/native-providers/upstream --workspaces=false --omit=dev --audit-level=low && npm audit signatures --prefix vendor/native-providers/upstream --workspaces=false",
+		"check:framework-parents": "python3 -B scripts/package-framework-parents.py --check",
+		"test:framework-parents": "python3 -B -m unittest discover -s scripts -p test_framework_parents.py -v && node --test scripts/test-framework-parents.mjs scripts/test-framework-parent-types.mjs",
+		"test:framework-browser": "node scripts/test-framework-parents-browser.mjs",
+		"audit:framework-parents": "npm audit --prefix vendor/framework-parents/upstream --workspaces=false --audit-level=low && npm audit --prefix vendor/framework-parents/upstream --workspaces=false --omit=dev --audit-level=low && npm audit signatures --prefix vendor/framework-parents/upstream --workspaces=false"
 	},
 	"dependencies": {
 		"dotenv": "^18.0.9"
@@ -142,7 +150,7 @@
 	"devDependencies": {
 		"@nuxt/devtools": "4.1.0",
 		"@vitejs/devtools": "0.8.2",
-		"vite": "^8.3.6",
+		"vite": "file:vendor/vite-8.3.6-webops.3.tgz",
 		"@vitejs/devtools-kit": "0.8.2",
 		"@antfu/eslint-config": "^10.0.0",
 		"@playwright/test": "^1.64.1",
@@ -152,12 +160,12 @@
 		"commander": "15.1.0",
 		"deepmerge": "file:vendor/deepmerge",
 		"eslint": "^10.14.0",
-		"eslint-plugin-format": "^2.0.1",
+		"eslint-plugin-format": "file:vendor/eslint-plugin-format-2.0.1-webops.1.tgz",
 		"lint-staged": "^17.6.0",
 		"listhen": "file:vendor/listhen",
 		"puppeteer": "^25.16.0",
 		"rollup": "4.68.0",
-		"nitropack": "2.13.6",
+		"nitropack": "file:vendor/nitropack-2.13.6-webops.1.tgz",
 		"simple-git-hooks": "^2.14.0",
 		"taze": "^21.3.0",
 		"typescript": "^6.0.3",
@@ -198,7 +206,17 @@
 		"unwasm": "file:vendor/unwasm-0.6.3-webops.1.tgz",
 		"vite-plugin-checker": "file:vendor/vite-plugin-checker-0.14.5-webops.1.tgz",
 		"yaml": "^2.9.1",
-		"supertest": "^7.3.2"
+		"supertest": "^7.3.2",
+		"@unocss/transformer-attributify-jsx": "file:vendor/unocss-transformer-attributify-jsx-66.12.0-webops.1.tgz",
+		"oxc-parser": "0.157.0",
+		"oxfmt": "0.77.0",
+		"unconfig": "file:vendor/unconfig-7.5.0-webops.1.tgz",
+		"@unocss/vite": "file:vendor/unocss-vite-66.12.0-webops.2.tgz",
+		"nuxt": "file:vendor/nuxt-4.6.4-webops.2.tgz",
+		"rolldown": "1.3.0",
+		"c12": "4.0.0-rc.4",
+		"dotenv": "18.0.9",
+		"giget": "3.3.1"
 	},
 	"simple-git-hooks": {
 		"pre-commit": "test -x ./node_modules/.bin/lint-staged || { echo 'lint-staged is not installed. Run npm install.'; exit 1; }; ./node_modules/.bin/lint-staged"
@@ -223,10 +241,11 @@
 		},
 		"shell-quote": "1.12.0",
 		"vite": {
-			".": "^8.3.6",
+			".": "$vite",
 			"esbuild": "^0.28.2"
 		},
 		"nitropack": {
+			".": "$nitropack",
 			"magic-string": "1.4.5",
 			"unctx": "3.0.1",
 			"unwasm": "$unwasm"
@@ -241,7 +260,7 @@
 		},
 		"postcss": "8.5.32",
 		"qs": "$qs",
-		"rolldown": "1.2.16",
+		"rolldown": "$rolldown",
 		"rollup": "4.68.0",
 		"tinypool": "2.2.0",
 		"katex": "0.19.1",
@@ -278,7 +297,13 @@
 		"magicast": "$magicast",
 		"vite-plugin-checker": "$vite-plugin-checker",
 		"@vercel/nft": "$@vercel/nft",
-		"vite-plugin-vue-devtools": "$vite-plugin-vue-devtools"
+		"vite-plugin-vue-devtools": "$vite-plugin-vue-devtools",
+		"eslint-plugin-format": "$eslint-plugin-format",
+		"@unocss/transformer-attributify-jsx": "$@unocss/transformer-attributify-jsx",
+		"unconfig": "$unconfig",
+		"@unocss/vite": "$@unocss/vite",
+		"nuxt": "$nuxt",
+		"c12": "$c12"
 	},
 	"allowScripts": {
 		"esbuild@0.28.2": true,

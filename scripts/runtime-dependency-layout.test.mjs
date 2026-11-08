@@ -18,8 +18,10 @@ test('the root-only runtime keeps the API dotenv version at its declared artifac
   assert.equal(lock.packages['back-end/node_modules/dotenv'], undefined)
 })
 
-test('the build configuration retains its separate supported dotenv major', () => {
-  assert.match(c12('dotenv/package.json').version, /^17\./u)
-  assert.match(backend('dotenv/package.json').version, /^18\./u)
-  assert.notEqual(c12.resolve('dotenv/config'), backend.resolve('dotenv/config'))
+test('the qualified configuration loader and API share the declared current dotenv runtime', () => {
+  assert.equal(lock.packages['node_modules/c12'].version, '4.0.0-rc.4')
+  assert.equal(c12('dotenv/package.json').version, '18.0.9')
+  assert.equal(backend('dotenv/package.json').version, '18.0.9')
+  assert.equal(c12.resolve('dotenv/config'), backend.resolve('dotenv/config'))
+  assert.equal(lock.packages['node_modules/dotenv'].version, '18.0.9')
 })

@@ -3,6 +3,8 @@ set -euo pipefail
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd -- "$root"
 for graph in \
+  vendor/framework-parents/upstream \
+  vendor/native-providers/upstream \
   vendor/vite-plugin-vue-devtools/upstream \
   vendor/vue-compiler/browser-tools \
   vendor/vue-compiler/upstream \
