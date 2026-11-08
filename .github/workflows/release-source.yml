@@ -62,7 +62,9 @@ jobs:
         run: |
           test "$(node --version)" = "v${NODE_VERSION}"
           test "$(npm --version)" = "${NPM_VERSION}"
+          bash scripts/prepare-unimport-source.sh
           npm ci --include=optional --strict-allow-scripts
+          bash scripts/prepare-compiler-fixtures.sh
           npx --no-install playwright install --with-deps chromium
           npm run audit
           npm run audit:production
@@ -76,6 +78,15 @@ jobs:
           npm run build
           npm run a11y
           npm run test:e2e
+          npm run test:jsx-browser
+          npm run test:router-browser
+          npm run test:remove-host
+          npm run test:magicast-browser
+          npm run test:vue-compiler-browser
+          npm run test:checker-browser
+          npm run test:rollup-browser
+          npm run test:nitro-tools-browser
+          npm run test:nuxt-watcher-browser
           npm ci --omit=dev --include=optional --ignore-scripts
           npm run audit:production
           npm run smoke:backend-runtime
@@ -130,7 +141,9 @@ jobs:
           test "$(git rev-parse refs/remotes/origin/main)" = "${SOURCE_REVISION}"
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends bubblewrap
+          bash scripts/prepare-unimport-source.sh
           npm ci --include=optional --strict-allow-scripts
+          bash scripts/prepare-compiler-fixtures.sh
           npm run audit
           npm run audit:production
           npm run audit:signatures
@@ -219,6 +232,7 @@ jobs:
           expected_toolchain = {
               'profile': contract['runtime']['npmBuildProfile'],
               'lockSha256': toolchain_digest,
+              'payloadTreeSha256': contract['runtime']['npmBuildPayloadSha256'],
               'node': contract['runtime']['node'],
               'versions': {
                   name: toolchain_lock['packages'][f'node_modules/{name}']['version']
@@ -236,6 +250,7 @@ jobs:
               'deploy/systemd/trusted-paths.py', 'scripts/test-promotion-recovery.py',
               'scripts/test-promotion-recovery.sh', 'scripts/test-bootstrap-in-vm.py',
               'scripts/build-toolchain.mjs', 'scripts/build-toolchain-state.mjs',
+              'scripts/build-toolchain-cache.mjs', 'build-toolchain/PAYLOAD.json',
               'scripts/check-build-toolchain.mjs', 'build-toolchain/UPSTREAM.json',
               'build-toolchain/package.json', 'build-toolchain/package-lock.json',
           }

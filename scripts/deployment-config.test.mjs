@@ -154,9 +154,16 @@ test('publication independently binds the profile and complete NP-specific accep
   ])
   assert.equal(contract.runtime.npmBuildProfile, 'webops-locked-npm-v1')
   assert.match(contract.runtime.npmBuildLockSha256, /^[a-f0-9]{64}$/u)
+  assert.match(contract.runtime.npmBuildPayloadSha256, /^[a-f0-9]{64}$/u)
   assert.match(release, /acceptance\['buildToolchain'\] != expected_toolchain/u)
   assert.match(release, /set\(acceptance\['harnessSha256'\]\) != expected_harness/u)
-  for (const filename of ['scripts/backend-runtime-smoke.mjs', 'scripts/post-deploy-smoke.mjs', 'scripts/build-toolchain-state.mjs']) {
+  for (const filename of [
+    'scripts/backend-runtime-smoke.mjs',
+    'scripts/post-deploy-smoke.mjs',
+    'scripts/build-toolchain-state.mjs',
+    'scripts/build-toolchain-cache.mjs',
+    'build-toolchain/PAYLOAD.json',
+  ]) {
     assert.ok(release.includes(filename))
     assert.ok(packageRuntime.includes(filename))
   }

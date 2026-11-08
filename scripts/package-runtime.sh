@@ -25,7 +25,9 @@ cp package.json package-lock.json "$stage/"
 cp front-end/.output/public/release.json "$stage/.np-servicerequest-release-prepared.json"
 cp back-end/package.json "$stage/back-end/"
 mkdir -p "$stage/back-end/vendor"
-cp back-end/vendor/qs-6.17.2-webops.4.tgz "$stage/back-end/vendor/"
+for archive in qs-6.17.2-webops.4 cookie-2.0.2-webops.2 encodeurl-3.0.0-webops.2 raw-body-4.0.0-webops.2 type-is-3.0.0-webops.2; do
+  cp "back-end/vendor/$archive.tgz" "$stage/back-end/vendor/"
+done
 cp -R front-end/.output/public "$stage/front-end/.output/"
 python3 -B - "$root" "$stage" <<'PY'
 import json
@@ -50,7 +52,9 @@ npm ci --prefix "$stage" --workspace back-end --omit=dev --omit=optional --ignor
 npm audit --prefix "$stage" --workspace back-end --omit=dev --omit=optional --audit-level=low
 npm audit signatures --prefix "$stage"
 npm ls --prefix "$stage" --workspace back-end --omit=dev --omit=optional --all > "$output/dependency-tree.txt"
-rm -- "$stage/back-end/vendor/qs-6.17.2-webops.4.tgz"
+for archive in qs-6.17.2-webops.4 cookie-2.0.2-webops.2 encodeurl-3.0.0-webops.2 raw-body-4.0.0-webops.2 type-is-3.0.0-webops.2; do
+  rm -- "$stage/back-end/vendor/$archive.tgz"
+done
 rmdir -- "$stage/back-end/vendor"
 # Keep frontend-only native build bindings out of the backend runtime install.
 cp front-end/package.json "$stage/front-end/"
@@ -95,7 +99,7 @@ receipt["bytes"] = (output / receipt["archive"]).stat().st_size
 receipt["checks"] = ["production-only locked install", "full and production backend audits", "registry signatures", "manifest and required paths", "isolated unpacked runtime", "readiness failure and recovery", "GET and HEAD minimal probes", "repeated-signal drain", "restart", "post-copier verification", "missing-module rejection"]
 receipt["harnessSha256"] = {
     name: hashlib.sha256(Path(name).read_bytes()).hexdigest()
-    for name in ["deploy/runtime-artifact.json", "scripts/runtime-artifact.py", "scripts/package-runtime.sh", "scripts/test-unpacked-artifact.sh", "scripts/backend-runtime-smoke.mjs", "scripts/post-deploy-smoke.mjs", "scripts/artifact-acceptance/runtime.mjs", "scripts/write-release-metadata.mjs", "deploy/systemd/install-service.sh", "deploy/systemd/promote-release.sh", "deploy/systemd/trusted-paths.py", "scripts/test-promotion-recovery.py", "scripts/test-promotion-recovery.sh", "scripts/test-bootstrap-in-vm.py", "scripts/build-toolchain.mjs", "scripts/build-toolchain-state.mjs", "scripts/check-build-toolchain.mjs", "build-toolchain/UPSTREAM.json", "build-toolchain/package.json", "build-toolchain/package-lock.json"]
+    for name in ["deploy/runtime-artifact.json", "scripts/runtime-artifact.py", "scripts/package-runtime.sh", "scripts/test-unpacked-artifact.sh", "scripts/backend-runtime-smoke.mjs", "scripts/post-deploy-smoke.mjs", "scripts/artifact-acceptance/runtime.mjs", "scripts/write-release-metadata.mjs", "deploy/systemd/install-service.sh", "deploy/systemd/promote-release.sh", "deploy/systemd/trusted-paths.py", "scripts/test-promotion-recovery.py", "scripts/test-promotion-recovery.sh", "scripts/test-bootstrap-in-vm.py", "scripts/build-toolchain.mjs", "scripts/build-toolchain-state.mjs", "scripts/build-toolchain-cache.mjs", "build-toolchain/PAYLOAD.json", "scripts/check-build-toolchain.mjs", "build-toolchain/UPSTREAM.json", "build-toolchain/package.json", "build-toolchain/package-lock.json"]
 }
 (output / "acceptance.json").write_text(json.dumps(receipt, indent=2) + "\n")
 PY

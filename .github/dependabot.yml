@@ -46,3 +46,6 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+        exclude-patterns: ["github/codeql-action/*"]
+      codeql-actions:
+        patterns: ["github/codeql-action/*"]

@@ -36,7 +36,10 @@ jobs:
           "$bin/node" scripts/check-build-toolchain.mjs
 
       - name: Clean locked install
-        run: npm ci --include=optional --strict-allow-scripts
+        run: |
+          bash scripts/prepare-unimport-source.sh
+          npm ci --include=optional --strict-allow-scripts
+          bash scripts/prepare-compiler-fixtures.sh
 
       - name: Dependency and supply-chain gates
         run: |
@@ -77,11 +80,23 @@ jobs:
 
       - name: Install dependencies and Chromium
         run: |
+          bash scripts/prepare-unimport-source.sh
           npm ci --include=optional --strict-allow-scripts
+          bash scripts/prepare-compiler-fixtures.sh
           npx --no-install playwright install --with-deps chromium
 
       - name: Browser workflow tests
-        run: npm run test:e2e
+        run: |
+          npm run test:e2e
+          npm run test:jsx-browser
+          npm run test:router-browser
+          npm run test:remove-host
+          npm run test:magicast-browser
+          npm run test:vue-compiler-browser
+          npm run test:checker-browser
+          npm run test:rollup-browser
+          npm run test:nitro-tools-browser
+          npm run test:nuxt-watcher-browser
 
   native-arm64:
     runs-on: ubuntu-24.04-arm
@@ -104,7 +119,9 @@ jobs:
 
       - name: Validate ARM64 install and build
         run: |
+          bash scripts/prepare-unimport-source.sh
           npm ci --include=optional --strict-allow-scripts
+          bash scripts/prepare-compiler-fixtures.sh
           npm run verify:native-lock
           npm run typecheck
           npm test
@@ -143,7 +160,9 @@ jobs:
 
       - name: Build the direct production runtime
         run: |
+          bash scripts/prepare-unimport-source.sh
           npm ci --include=optional --strict-allow-scripts
+          bash scripts/prepare-compiler-fixtures.sh
           npm run build
 
       - name: Exercise the production-only dependency surface

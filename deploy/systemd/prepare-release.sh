@@ -110,7 +110,9 @@ PATH="$toolchain_bin:$PATH"
 export PATH
 unset npm_execpath npm_node_execpath
 node scripts/check-build-toolchain.mjs
+bash scripts/prepare-unimport-source.sh
 npm ci --include=dev --include=optional --strict-allow-scripts
+bash scripts/prepare-compiler-fixtures.sh
 npm run audit
 npm run audit:production
 npm run audit:signatures

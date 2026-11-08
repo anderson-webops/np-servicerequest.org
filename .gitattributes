@@ -9,3 +9,8 @@ vendor/*/LICENSE text eol=lf
 *.png binary
 *.webp binary
 *.woff2 binary
+
+*.tgz binary
+*.git binary
+*.gpg binary
+*.cjs text eol=lf

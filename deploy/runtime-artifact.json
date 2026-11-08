@@ -28,7 +28,17 @@
     "front-end/.output/public/index.html",
     "front-end/.output/public/200.html",
     "front-end/.output/public/404.html",
-    "front-end/.output/public/release.json"
+    "front-end/.output/public/release.json",
+    "node_modules/cookie/compat.cjs",
+    "node_modules/cookie/dist/index.js",
+    "node_modules/encodeurl/compat.cjs",
+    "node_modules/encodeurl/dist/index.js",
+    "node_modules/raw-body/compat.cjs",
+    "node_modules/raw-body/dist/index.js",
+    "node_modules/type-is/compat.cjs",
+    "node_modules/type-is/dist/index.js",
+    "node_modules/iconv-lite/lib/index.js",
+    "node_modules/mime-types/index.js"
   ],
   "runtime": {
     "os": "linux",
@@ -36,7 +46,8 @@
     "node": "26.13.0",
     "npmBuildOnly": "12.2.2",
     "npmBuildProfile": "webops-locked-npm-v1",
-    "npmBuildLockSha256": "963255f96855279c04af4f11412d4e0952b36b3fc37261ed58e1697f23b2acaa"
+    "npmBuildLockSha256": "bcfa34772389911542075e02943bc92a1165badd00729b606810f6d934f4e4fe",
+    "npmBuildPayloadSha256": "ff91fd6a363203289928568eaa9500dc36648f5851f395bfd302b47a819f314c"
   },
   "deployment": {
     "schemaVersion": 1,
@@ -51,13 +62,40 @@
       "dual-stack-release-identity-v1"
     ],
     "probes": {
-      "apiHealth": { "path": "/api/health", "methods": ["GET", "HEAD"], "success": 200 },
-      "apiReadiness": { "path": "/api/readyz", "methods": ["GET", "HEAD"], "success": 200, "failure": 503 },
-      "staticIdentity": { "path": "/release.json", "field": "revision", "addressFamilies": ["ipv4", "ipv6"] }
+      "apiHealth": {
+        "path": "/api/health",
+        "methods": [
+          "GET",
+          "HEAD"
+        ],
+        "success": 200
+      },
+      "apiReadiness": {
+        "path": "/api/readyz",
+        "methods": [
+          "GET",
+          "HEAD"
+        ],
+        "success": 200,
+        "failure": 503
+      },
+      "staticIdentity": {
+        "path": "/release.json",
+        "field": "revision",
+        "addressFamilies": [
+          "ipv4",
+          "ipv6"
+        ]
+      }
     },
     "migrations": "none",
     "rollback": "verify-retained-artifact-and-identity",
-    "hostControlled": ["service-user", "listener", "reverse-proxy", "protected-environment"]
+    "hostControlled": [
+      "service-user",
+      "listener",
+      "reverse-proxy",
+      "protected-environment"
+    ]
   },
   "modulesOutsideDist": [],
   "generatedClients": [],

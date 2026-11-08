@@ -43,7 +43,12 @@
     "rollup": "^4.67.5",
     "serve": "^14.2.6",
     "unocss": "^66.12.0",
-    "vue-tsc": "^3.3.14"
+    "vue-tsc": "^3.3.14",
+    "@nuxt/eslint": "^1.17.0",
+    "@types/node": "^26.6.6",
+    "c12": "^3.3.4",
+    "nuxt-security": "^2.7.0",
+    "vue-router": "^5.4.0"
   },
   "optionalDependencies": {
     "@esbuild/linux-arm64": "0.28.2",
