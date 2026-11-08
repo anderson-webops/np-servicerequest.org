@@ -139,7 +139,7 @@
 	},
 	"devDependencies": {
 		"@nuxt/devtools": "4.1.0",
-		"@vitejs/devtools": "0.7.6",
+		"@vitejs/devtools": "0.8.2",
 		"vite": "^8.3.6",
 		"@vitejs/devtools-kit": "0.8.2",
 		"@antfu/eslint-config": "^10.0.0",
