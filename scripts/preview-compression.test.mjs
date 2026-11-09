@@ -5,6 +5,7 @@ import https from 'node:https'
 import { createRequire } from 'node:module'
 import { Socket } from 'node:net'
 import test from 'node:test'
+import { pathToFileURL } from 'node:url'
 import zlib from 'node:zlib'
 import { listen as listenSecure } from 'listhen'
 
@@ -12,6 +13,41 @@ const frontend = createRequire(new URL('../front-end/package.json', import.meta.
 const preview = createRequire(frontend.resolve('serve/package.json'))
 const compression = preview('compression')
 const body = 'controlled static preview content\n'.repeat(4096)
+
+test('the actual preview schema uses the qualified current validator and URI provider', async () => {
+  const application = createRequire(new URL('../package.json', import.meta.url))
+  assert.equal(preview.resolve('ajv'), application.resolve('ajv'))
+  assert.equal(preview('ajv/package.json').version, '8.20.0+webops.2')
+  const validator = createRequire(preview.resolve('ajv'))
+  assert.equal(validator.resolve('fast-uri'), application.resolve('fast-uri'))
+  assert.equal(validator('fast-uri/package.json').version, '4.2.3')
+  const { default: schema } = await import(pathToFileURL(preview.resolve('@zeit/schemas/deployment/config-static.js')))
+  const Ajv = preview('ajv')
+  const validate = new Ajv({ allowUnionTypes: true }).compile(schema)
+  assert.equal(validate({ cleanUrls: true, directoryListing: false }), true)
+  assert.equal(validate({
+    headers: [
+      {
+        source: '/fixture',
+        headers: [
+          { key: 'X-Fixture', value: 'synthetic' },
+        ],
+      },
+    ],
+  }), true)
+  assert.equal(validate({ cleanUrls: 'invalid' }), false)
+  assert.equal(validate({
+    headers: [
+      {
+        source: '/fixture',
+        headers: [
+          { key: 42, value: 'synthetic' },
+        ],
+      },
+    ],
+  }), false)
+  assert.equal(validate({ unexpected: true }), false)
+})
 
 function captureCompressors() {
   const factories = ['createGzip', 'createDeflate', 'createBrotliCompress']
