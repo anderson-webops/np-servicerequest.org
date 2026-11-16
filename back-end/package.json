@@ -44,7 +44,7 @@
 		"@types/nodemailer": "^8.0.2",
 		"globals": "^17.14.0",
 		"tsx": "^4.23.15",
-		"typescript-eslint": "^8.72.1",
+		"typescript-eslint": "^8.72.2",
 		"typescript-native": "npm:typescript@7.0.2"
 	}
 }
