@@ -76,7 +76,11 @@ else {
     const { createApp } = await import('/app/back-end/dist/app.js')
     createApp()
     `], {
-      env: { NODE_ENV: 'production', DOTENV_CONFIG_PATH: '/absent' },
+      env: {
+        NODE_ENV: 'production',
+        DOTENV_CONFIG_PATH: '/absent',
+        ANTI_BOT_SECRET: 'synthetic-runtime-guard-secret-for-private-test-only',
+      },
       encoding: 'utf8',
       timeout: 5000,
     })
