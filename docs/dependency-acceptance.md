@@ -7,7 +7,7 @@ The template's strict-import demonstration configuration, generic read-only API,
 separate backend lock and service identity remain outside NP's runtime contract.
 The shared provider packages retain their complete compatibility checks.
 
-Static preview uses locked Serve 14.2.7, including its supported TLS options.
+Static preview uses locked Serve 14.2.8, including its supported TLS options.
 The parent-scoped override selects Compression 1.8.2 for
 GHSA-vc2v-76pw-4v95, preserving the middleware API while releasing native
 compressors on response closure. Disconnect regressions exercise gzip, deflate
