@@ -43,11 +43,17 @@ remain intact. Complete source, browser and native release checks still apply.
 ## Immutable maintained local libraries
 
 The application installs maintained Braces 3.0.4-webops.3, Deepmerge
-4.3.2-webops.2 and Listhen 1.10.1-webops.3 from reproducible archives.
+4.3.2-np.3 and Listhen 1.10.1-webops.3 from reproducible archives.
 Their reviewed source, licenses and original manifests remain intact under
 `vendor/`; `vendor/local-libraries/INPUTS.json` binds all 39 original files
 to the exact source revision. Only distribution version/private metadata and
 provenance members are added. Earlier framework reference archives stay exact.
+
+Deepmerge retains NP's previously qualified unsafe-key omission before getters
+and custom merge hooks run. Its six original source files match NP commit
+`f451bc863b34d1e429c3454f7732e8a1305b9393`; the site-specific distribution
+identity distinguishes this stricter contract from the template's own-key
+preservation behavior. Both original archives and all behavior regressions remain.
 
 These archives replace folder links, which npm treats as separate projects
 during updates. Linked Listhen could acquire a raw Jiti dependency and resolve

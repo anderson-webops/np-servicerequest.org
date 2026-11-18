@@ -38,7 +38,7 @@
     "vite-plugin-checker": "file:../../../vendor/vite-plugin-checker-0.14.5-webops.1.tgz",
     "@vercel/nft": "file:../../../vendor/vercel-nft-1.11.7-webops.1.tgz",
     "unwasm": "file:../../../vendor/unwasm-0.6.3-webops.1.tgz",
-    "deepmerge": "file:../../../vendor/deepmerge-4.3.2-webops.2.tgz",
+    "deepmerge": "file:../../../vendor/deepmerge-4.3.2-np.3.tgz",
     "vite-plugin-vue-devtools": "file:../../../vendor/vite-plugin-vue-devtools-9.0.0-rc.3-webops.1.tgz",
     "eslint-plugin-format": "file:../../../vendor/eslint-plugin-format-2.0.1-webops.1.tgz",
     "@unocss/transformer-attributify-jsx": "file:../../../vendor/unocss-transformer-attributify-jsx-66.12.0-webops.1.tgz",

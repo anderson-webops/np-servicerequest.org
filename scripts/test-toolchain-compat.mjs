@@ -33,7 +33,7 @@ function codeqlVersion(workflow) {
 }
 
 test('release tags cover the site version and future majors while retaining native preparation', () => {
-  const workflow = parseYaml(readFileSync(path.join(root, '.github/workflows/direct-release.yml'), 'utf8'))
+  const workflow = parseYaml(readFileSync(path.join(root, '.github/workflows/release-source.yml'), 'utf8'))
   const manifest = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'))
   const patterns = workflow.on.push.tags
   assert.ok(Array.isArray(patterns) && patterns.length > 0)
@@ -46,7 +46,9 @@ test('release tags cover the site version and future majors while retaining nati
     assert.ok(patterns.some(pattern => path.matchesGlob(tag, pattern)), tag)
   for (const tag of ['main', 'v1', 'v1.2'])
     assert.equal(patterns.some(pattern => path.matchesGlob(tag, pattern)), false, tag)
-  assert.equal(workflow.jobs.artifact.needs, 'prepare')
+  assert.equal(workflow.jobs['package-arm64'].needs, 'validate')
+  assert.equal(workflow.jobs['package-arm64']['runs-on'], 'ubuntu-24.04-arm')
+  assert.deepEqual(workflow.jobs.publish.needs, ['validate', 'package-arm64'])
 })
 
 test('CodeQL actions share one immutable version and one dependency-update group', () => {

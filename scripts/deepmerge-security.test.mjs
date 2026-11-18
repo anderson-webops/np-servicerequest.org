@@ -9,10 +9,13 @@ test('all locked deepmerge consumers use the guarded distribution', async () => 
   const lock = JSON.parse(await readFile(new URL('../package-lock.json', import.meta.url), 'utf8'))
   const entries = Object.entries(lock.packages).filter(([name]) => name.endsWith('node_modules/deepmerge'))
   assert.ok(entries.length > 0)
-  for (const [, entry] of entries)
-    assert.equal(entry.resolved, 'vendor/deepmerge')
+  for (const [, entry] of entries) {
+    assert.equal(entry.resolved, 'file:vendor/deepmerge-4.3.2-np.3.tgz')
+    assert.equal(entry.version, '4.3.2-np.3')
+    assert.equal(entry.link, undefined)
+  }
   const require = createRequire(import.meta.url)
-  assert.equal(require.resolve('deepmerge'), fileURLToPath(new URL('../vendor/deepmerge/dist/cjs.js', import.meta.url)))
+  assert.equal(require.resolve('deepmerge'), fileURLToPath(new URL('../node_modules/deepmerge/dist/cjs.js', import.meta.url)))
   assert.equal(require('deepmerge'), merge)
 })
 

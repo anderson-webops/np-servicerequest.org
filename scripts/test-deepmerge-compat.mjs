@@ -99,8 +99,8 @@ test('all locked deepmerge consumers use the reviewed guarded fork', async () =>
   const consumers = Object.entries(lock.packages).filter(([name]) => name.endsWith('node_modules/deepmerge'))
   assert.ok(consumers.length > 0)
   for (const [, entry] of consumers) {
-    assert.equal(entry.resolved, 'file:vendor/deepmerge-4.3.2-webops.2.tgz')
-    assert.equal(entry.version, '4.3.2-webops.2')
+    assert.equal(entry.resolved, 'file:vendor/deepmerge-4.3.2-np.3.tgz')
+    assert.equal(entry.version, '4.3.2-np.3')
     assert.equal(entry.link, undefined)
   }
   assert.equal(lock.packages['vendor/deepmerge'], undefined)

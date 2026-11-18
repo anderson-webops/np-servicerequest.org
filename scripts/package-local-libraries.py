@@ -13,7 +13,7 @@ ARCHIVES = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(ARCHIVES)
 IDENTITIES = {
     "braces": ("3.0.4-webops.2", "3.0.4-webops.3", "LICENSE", "index.js"),
-    "deepmerge": ("4.3.2-webops.1", "4.3.2-webops.2", "license.txt", "dist/cjs.js"),
+    "deepmerge": ("4.3.2-webops.2", "4.3.2-np.3", "license.txt", "dist/cjs.js"),
     "listhen": ("1.10.1-webops.2", "1.10.1-webops.3", "LICENSE", "dist/index.mjs"),
 }
 FILES = {

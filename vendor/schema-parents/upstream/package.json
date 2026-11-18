@@ -76,7 +76,7 @@
     "valibot": "1.5.0",
     "devalue@^5": "5.9.4",
     "simple-git@^3": "3.36.0",
-    "deepmerge": "file:../../../vendor/deepmerge-4.3.2-webops.2.tgz",
+    "deepmerge": "file:../../../vendor/deepmerge-4.3.2-np.3.tgz",
     "katex": "0.19.1",
     "tinypool": "2.2.0",
     "vite-plugin-vue-devtools": "file:../../../vendor/vite-plugin-vue-devtools-9.0.0-rc.3-webops.1.tgz",

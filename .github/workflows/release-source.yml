@@ -253,12 +253,22 @@ jobs:
               'scripts/build-toolchain-cache.mjs', 'build-toolchain/PAYLOAD.json',
               'scripts/check-build-toolchain.mjs', 'build-toolchain/UPSTREAM.json',
               'build-toolchain/package.json', 'build-toolchain/package-lock.json',
+              'scripts/test-retained-runtime.sh', 'scripts/build-toolchain-seed.mjs',
           }
           if set(acceptance['harnessSha256']) != expected_harness:
               raise SystemExit('Release acceptance harness differs from required source')
           for name, expected_digest in acceptance['harnessSha256'].items():
               if hashlib.sha256(Path(name).read_bytes()).hexdigest() != expected_digest:
                   raise SystemExit(f'Release harness mismatch: {name}')
+          expected_checks = [
+              'production-only locked install', 'full and production backend audits',
+              'registry signatures', 'manifest and required paths', 'isolated unpacked runtime',
+              'readiness failure and recovery', 'GET and HEAD minimal probes',
+              'repeated-signal drain', 'restart', 'post-copier verification',
+              'missing-module rejection', 'exact retained NP v1.3.9 artifact on secured Node',
+          ]
+          if acceptance['checks'] != expected_checks:
+              raise SystemExit('Release acceptance omits a required runtime or retained recovery check')
           with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
               output.write(f'archive={archive_name}\n')
               output.write(f'sha256={digest}\n')
