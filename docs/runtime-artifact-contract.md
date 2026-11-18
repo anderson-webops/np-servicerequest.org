@@ -12,14 +12,14 @@ Keep protected configuration and any downstream database, email spool, cache or
 uploads outside immutable releases. Preserve durable state on both promotion and
 rollback. Preserve the exact installed service users, paths and loopback ports;
 the existing `/srv/np-servicerequest.org`, service account and loopback port `3016`
-remain authoritative. The Node 26.13.0 contract requires a separately reviewed
+remain authoritative. The Node 26.13.1 contract requires a separately reviewed
 host runtime transition and verified retained-release rollback. Never
 change DNS, IPv4/IPv6, certificates, another service's port, or edge configuration
 to make artifact acceptance pass.
 
 ## Build and accept away from production
 
-Use an unprivileged disposable Linux ARM64 builder with Node 26.13.0 and npm
+Use an unprivileged disposable Linux ARM64 builder with Node 26.13.1 and npm
 12.2.2 selected through the locked `webops-locked-npm-v1` profile. Python 3.11 or
 newer, GnuPG's `gpgv`, libatomic and Bubblewrap with user namespaces must be available. Start from a
 clean, exact source commit. Record that commit. Run the repository's clean install,
@@ -69,6 +69,13 @@ hashes and completed artifact checks. Full source-gate logs remain separate
 evidence. Download and compare published files before claiming delivery.
 
 ## Operator acceptance and rollback
+
+Artifact qualification also runs the exact published v2.1.28 archive under
+Node 26.13.1 in the isolated ARM64 fixture. Its reviewed archive digest and
+original verifier/contract digests remain fixed. The current contract still
+requires the new compiled runtime guard. Earlier application bytes remain
+unchanged; rollback compatibility is tested with the secured host runtime.
+Protected host runtime admission and activation retain their separate gates.
 
 After any deployment copier, use the root-installed verifier and independently
 reviewed archive hash/commit. Never execute a verifier from a build-owned tree:

@@ -73,6 +73,7 @@ import {
 } from './security.js'
 import { searchServiceDirectory, ServiceDirectoryValidationError } from './service-directory.js'
 import { resolveReleaseIdentity } from './release-identity.js'
+import { assertSupportedRuntime } from './runtime-version.js'
 import {
   AccountValidationError,
   isSubmissionKind,
@@ -362,6 +363,7 @@ interface AppOptions {
 }
 
 export function createApp(options?: AppOptions) {
+  assertSupportedRuntime()
   const app = express()
   const staticDirectory = options?.staticDirectory
     ? resolve(options.staticDirectory)

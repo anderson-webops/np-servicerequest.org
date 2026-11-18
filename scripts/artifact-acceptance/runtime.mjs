@@ -9,8 +9,9 @@ import { Readable } from 'node:stream'
 
 assert.equal(process.platform, 'linux')
 assert.equal(process.arch, 'arm64')
-assert.equal(process.version, 'v26.13.0')
+assert.equal(process.version, 'v26.13.1')
 assert.equal(process.cwd(), '/app')
+assert.ok(['complete', 'missing-module', 'retained-v1.3.9'].includes(process.argv[2]))
 for (const absent of [
   '/home/builder',
   '/mnt/input',
@@ -41,6 +42,15 @@ else {
   const metadata = JSON.parse(await readFile('/app/front-end/.output/public/release.json', 'utf8'))
   const manifest = JSON.parse(await readFile('/app/runtime-manifest.json', 'utf8'))
   assert.equal(metadata.revision, manifest.commit)
+  const retained = process.argv[2] === 'retained-v1.3.9'
+  if (retained) {
+    assert.equal(manifest.commit, 'f451bc863b34d1e429c3454f7732e8a1305b9393')
+    assert.equal(metadata.version, '1.3.9')
+    assert.equal(manifest.contract.runtime.node, '26.13.0')
+  }
+  else {
+    assert.equal(manifest.contract.runtime.node, '26.13.1')
+  }
   const runtimeRequire = createRequire('/app/back-end/package.json')
   const expressRequire = createRequire(runtimeRequire.resolve('express'))
   const bodyParserRequire = createRequire(expressRequire.resolve('body-parser'))
@@ -60,6 +70,20 @@ else {
     Buffer.alloc(3),
   ]), { limit: 2 }), { status: 413, type: 'entity.too.large' })
   const { createApp } = await import('/app/back-end/dist/app.js')
+  if (!retained) {
+    const guard = spawnSync(process.execPath, ['--input-type=module', '-e', `
+    Object.defineProperty(process, 'version', { value: 'v26.13.0' })
+    const { createApp } = await import('/app/back-end/dist/app.js')
+    createApp()
+    `], {
+      env: { NODE_ENV: 'production', DOTENV_CONFIG_PATH: '/absent' },
+      encoding: 'utf8',
+      timeout: 5000,
+    })
+    assert.equal(guard.signal, null)
+    assert.notEqual(guard.status, 0)
+    assert.match(guard.stderr, /requires Node.js 26.13.1/)
+  }
   let ready = false
   const server = createServer(createApp({
     readinessCheck: async () => {
@@ -111,5 +135,7 @@ else {
     readinessRecovery: true,
     restart: true,
     modernHttpCompatibility: true,
+    unsupportedRuntimeRejected: !retained,
+    retainedRuntimeOnSecuredNode: retained,
   }))
 }

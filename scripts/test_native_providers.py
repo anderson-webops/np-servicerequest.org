@@ -31,6 +31,8 @@ class NativeProviderPackages(unittest.TestCase):
                 original = PRODUCER.archive_files(payload)
                 archive = PRODUCER.build_archive(payload, record)
                 self.assertEqual(archive, PRODUCER.build_archive(payload, record))
+                with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as bundle:
+                    self.assertEqual({member.name for member in bundle if member.isfile() and member.mode & 0o111}, PRODUCER.PACKAGES[name].get("executables", set()))
                 maintained = PRODUCER.archive_files(archive)
                 self.assertEqual(set(maintained), set(original) | {"package/UPSTREAM-PACKAGE.json", "package/WEBOPS-COMPAT.json"})
                 for filename, contents in original.items():
@@ -73,6 +75,23 @@ class NativeProviderPackages(unittest.TestCase):
                 changed["registryArchiveSha256"] = "0" * 64
                 with self.assertRaises(ValueError):
                     PRODUCER.build_archive(payload, changed)
+
+    def test_native_family_upgrade_rejects_previous_ranges_and_maintained_identities(self):
+        previous = {
+            "eslint-plugin-format": ("^0.78.0", "2.0.1-webops.2"),
+            "@unocss/transformer-attributify-jsx": ("^0.158.0", "66.13.0-webops.1"),
+            "nuxt-explicit-imports": ("^0.158.0", "0.1.0"),
+        }
+        for name, payload, record in self.originals():
+            if name not in previous:
+                continue
+            old_range, old_version = previous[name]
+            for field, value in [("qualifiedRange", old_range), ("patchedVersion", old_version)]:
+                with self.subTest(name=name, field=field):
+                    changed = copy.deepcopy(record)
+                    changed[field] = value
+                    with self.assertRaises(ValueError):
+                        PRODUCER.build_archive(payload, changed)
 
     def test_independent_required_types_workers_and_license(self):
         for name, payload, record in self.originals():
@@ -135,6 +154,29 @@ class NativeProviderPackages(unittest.TestCase):
             PRODUCER.archive_files(gzip.compress(b"a" * (PRODUCER.MAX_EXPANDED + 1)))
         with self.assertRaises(ValueError):
             PRODUCER.archive_files(b"a" * (PRODUCER.MAX_COMPRESSED + 1))
+
+    def test_fresh_outputs_are_private_under_permissive_umasks(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".ai-work/runs") as directory:
+            for mask in [0, 0o022, 0o077]:
+                filename = Path(directory) / ("output-" + str(mask))
+                previous = os.umask(mask)
+                try:
+                    PRODUCER.write_regular(filename, b"public distribution fixture")
+                finally:
+                    os.umask(previous)
+                self.assertEqual(stat.S_IMODE(filename.stat().st_mode), 0o600)
+                self.assertEqual(filename.read_bytes(), b"public distribution fixture")
+
+            legacy = Path(directory) / "existing-public-output"
+            previous = os.umask(0o022)
+            try:
+                legacy.write_bytes(b"public distribution fixture")
+            finally:
+                os.umask(previous)
+            self.assertEqual(stat.S_IMODE(legacy.stat().st_mode), 0o644)
+            PRODUCER.write_regular(legacy, b"retained public distribution")
+            self.assertEqual(stat.S_IMODE(legacy.stat().st_mode), 0o644)
+            self.assertEqual(legacy.read_bytes(), b"retained public distribution")
 
     def test_descriptor_reads_and_writes_preserve_private_modes(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".ai-work/runs") as directory:

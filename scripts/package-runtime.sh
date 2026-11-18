@@ -5,7 +5,7 @@ root=$(cd -- "$(dirname -- "$0")/.." && pwd)
 cd -- "$root"
 test "$(uname -s)" = Linux
 test "$(uname -m)" = aarch64
-test "$(node --version)" = v26.13.0
+test "$(node --version)" = v26.13.1
 test "$(npm --version)" = 12.2.2
 toolchain_receipt=$(node scripts/check-build-toolchain.mjs)
 test -z "$(git status --porcelain)"
@@ -25,7 +25,7 @@ cp package.json package-lock.json "$stage/"
 cp front-end/.output/public/release.json "$stage/.np-servicerequest-release-prepared.json"
 cp back-end/package.json "$stage/back-end/"
 mkdir -p "$stage/back-end/vendor"
-for archive in qs-6.17.2-webops.4 cookie-2.0.2-webops.2 encodeurl-3.0.0-webops.2 raw-body-4.0.0-webops.2 type-is-3.0.0-webops.2; do
+for archive in qs-6.17.2-webops.5 cookie-2.0.2-webops.2 encodeurl-3.0.1-webops.2 raw-body-4.0.0-webops.2 type-is-3.0.0-webops.2; do
   cp "back-end/vendor/$archive.tgz" "$stage/back-end/vendor/"
 done
 cp -R front-end/.output/public "$stage/front-end/.output/"
@@ -52,7 +52,7 @@ npm ci --prefix "$stage" --workspace back-end --omit=dev --omit=optional --ignor
 npm audit --prefix "$stage" --workspace back-end --omit=dev --omit=optional --audit-level=low
 npm audit signatures --prefix "$stage"
 npm ls --prefix "$stage" --workspace back-end --omit=dev --omit=optional --all > "$output/dependency-tree.txt"
-for archive in qs-6.17.2-webops.4 cookie-2.0.2-webops.2 encodeurl-3.0.0-webops.2 raw-body-4.0.0-webops.2 type-is-3.0.0-webops.2; do
+for archive in qs-6.17.2-webops.5 cookie-2.0.2-webops.2 encodeurl-3.0.1-webops.2 raw-body-4.0.0-webops.2 type-is-3.0.0-webops.2; do
   rm -- "$stage/back-end/vendor/$archive.tgz"
 done
 rmdir -- "$stage/back-end/vendor"
@@ -84,6 +84,8 @@ if python3 -B scripts/runtime-artifact.py verify "$output/copied" --archive "$ar
   exit 1
 fi
 bash scripts/test-unpacked-artifact.sh "$output/copied" missing-module
+bash scripts/test-retained-runtime.sh "$output"
+bash scripts/test-retained-runtime.sh "$output"
 BUILD_TOOLCHAIN_RECEIPT="$toolchain_receipt" python3 -B - "$output" <<'PY'
 import datetime
 import hashlib
@@ -96,11 +98,13 @@ receipt = json.loads((output / "pack.json").read_text())
 receipt["acceptedAt"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
 receipt["buildToolchain"] = json.loads(os.environ["BUILD_TOOLCHAIN_RECEIPT"])
 receipt["bytes"] = (output / receipt["archive"]).stat().st_size
-receipt["checks"] = ["production-only locked install", "full and production backend audits", "registry signatures", "manifest and required paths", "isolated unpacked runtime", "readiness failure and recovery", "GET and HEAD minimal probes", "repeated-signal drain", "restart", "post-copier verification", "missing-module rejection"]
+receipt["checks"] = ["production-only locked install", "full and production backend audits", "registry signatures", "manifest and required paths", "isolated unpacked runtime", "readiness failure and recovery", "GET and HEAD minimal probes", "repeated-signal drain", "restart", "post-copier verification", "missing-module rejection", "exact retained NP v1.3.9 artifact on secured Node"]
 receipt["harnessSha256"] = {
     name: hashlib.sha256(Path(name).read_bytes()).hexdigest()
     for name in ["deploy/runtime-artifact.json", "scripts/runtime-artifact.py", "scripts/package-runtime.sh", "scripts/test-unpacked-artifact.sh", "scripts/backend-runtime-smoke.mjs", "scripts/post-deploy-smoke.mjs", "scripts/artifact-acceptance/runtime.mjs", "scripts/write-release-metadata.mjs", "deploy/systemd/install-service.sh", "deploy/systemd/promote-release.sh", "deploy/systemd/trusted-paths.py", "scripts/test-promotion-recovery.py", "scripts/test-promotion-recovery.sh", "scripts/test-bootstrap-in-vm.py", "scripts/build-toolchain.mjs", "scripts/build-toolchain-state.mjs", "scripts/build-toolchain-cache.mjs", "build-toolchain/PAYLOAD.json", "scripts/check-build-toolchain.mjs", "build-toolchain/UPSTREAM.json", "build-toolchain/package.json", "build-toolchain/package-lock.json"]
 }
+receipt["harnessSha256"]["scripts/test-retained-runtime.sh"] = hashlib.sha256(Path("scripts/test-retained-runtime.sh").read_bytes()).hexdigest()
+receipt["harnessSha256"]["scripts/build-toolchain-seed.mjs"] = hashlib.sha256(Path("scripts/build-toolchain-seed.mjs").read_bytes()).hexdigest()
 (output / "acceptance.json").write_text(json.dumps(receipt, indent=2) + "\n")
 PY
 echo "Exact unpacked production artifact accepted: $archive"
