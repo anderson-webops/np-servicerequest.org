@@ -108,9 +108,10 @@ test('privileged deployment commands select protected helpers outside build chec
 })
 
 test('source release requires an exact ARM64 artifact before publication', async () => {
-  const [ci, release] = await Promise.all([
+  const [ci, release, packaging] = await Promise.all([
     readFile(paths.ci, 'utf8'),
     readFile(paths.release, 'utf8'),
+    readFile(new URL('../scripts/package-runtime.sh', import.meta.url), 'utf8'),
   ])
 
   assert.match(ci, /npm run test:promotion/u)
@@ -122,6 +123,7 @@ test('source release requires an exact ARM64 artifact before publication', async
   assert.match(release, /runtime-artifact\.py unpack/u)
   assert.match(release, /gh release create/u)
   assert.doesNotMatch(release, /--clobber|--force/u)
+  assert.equal(packaging.match(/^bash scripts\/test-retained-runtime\.sh "\$output"$/gm)?.length, 1)
 })
 
 test('each install selects the independently locked build profile instead of changing global npm', async () => {

@@ -85,7 +85,6 @@ if python3 -B scripts/runtime-artifact.py verify "$output/copied" --archive "$ar
 fi
 bash scripts/test-unpacked-artifact.sh "$output/copied" missing-module
 bash scripts/test-retained-runtime.sh "$output"
-bash scripts/test-retained-runtime.sh "$output"
 BUILD_TOOLCHAIN_RECEIPT="$toolchain_receipt" python3 -B - "$output" <<'PY'
 import datetime
 import hashlib
