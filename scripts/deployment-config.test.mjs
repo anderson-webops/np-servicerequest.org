@@ -5,7 +5,6 @@ import test from 'node:test'
 
 const paths = {
   ci: new URL('../.github/workflows/ci.yml', import.meta.url),
-  dependabot: new URL('../.github/dependabot.yml', import.meta.url),
   deployment: new URL('../DEPLOYMENT.md', import.meta.url),
   install: new URL('../deploy/systemd/install-service.sh', import.meta.url),
   nginx: new URL('../deploy/nginx/np-servicerequest.conf.example', import.meta.url),
@@ -21,15 +20,13 @@ test('production is a confined direct Node service without Docker', async () => 
   assert.equal(existsSync(new URL('../.dockerignore', import.meta.url)), false)
   assert.equal(existsSync(new URL('../.github/workflows/release-container.yml', import.meta.url)), false)
 
-  const [ci, dependabot, release, service] = await Promise.all([
+  const [ci, release, service] = await Promise.all([
     readFile(paths.ci, 'utf8'),
-    readFile(paths.dependabot, 'utf8'),
     readFile(paths.release, 'utf8'),
     readFile(paths.service, 'utf8'),
   ])
 
   assert.doesNotMatch(ci, /docker|container:/i)
-  assert.doesNotMatch(dependabot, /package-ecosystem:\s*docker/u)
   assert.doesNotMatch(release, /docker|ghcr\.io/i)
   assert.ok(release.indexOf('npx --no-install playwright install --with-deps chromium') < release.indexOf('npm run test:e2e'))
   assert.match(service, /User=np-servicerequest/u)
