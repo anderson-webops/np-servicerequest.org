@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import process from 'node:process'
@@ -8,10 +8,10 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import puppeteer from 'puppeteer-core'
 import { build, createServer, preview } from 'vite'
-import routerPlugin from 'vue-router/vite'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const frontend = createRequire(path.join(root, 'front-end/package.json'))
+const { default: routerPlugin } = frontend('vue-router/vite')
 const { default: vue } = await import(pathToFileURL(frontend.resolve('@vitejs/plugin-vue')))
 const executablePath = [
   process.env.PUPPETEER_EXECUTABLE_PATH,
@@ -114,6 +114,8 @@ async function updateDetailPage() {
 }
 
 try {
+  await mkdir(path.join(scratch, 'node_modules'))
+  await symlink(path.dirname(frontend.resolve('vue-router/package.json')), path.join(scratch, 'node_modules/vue-router'), 'dir')
   await mkdir(path.dirname(personFile), { recursive: true })
   await writeFile(path.join(scratch, 'index.html'), '<!doctype html><html><head><title>Router fixture</title><link rel="icon" href="data:,"></head><body><div id="app"></div><script type="module" src="/main.js"></script></body></html>')
   await writeFile(path.join(pages, 'index.vue'), '<script setup lang="ts">definePage({name:"compiler-home",meta:{label:"home"}})</script><template><h1>home</h1></template>')

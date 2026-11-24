@@ -71,10 +71,12 @@ test('every actual parent resolves the current native watcher and Nuxt kit witho
     'vue-router',
   ]
   const selected = require.resolve('chokidar')
+  const entries = {
+    '@eslint/config-inspector': path.join(root, 'node_modules/@eslint/config-inspector/bin.mjs'),
+    'vue-router': createRequire(path.join(root, 'front-end/package.json')).resolve('vue-router'),
+  }
   for (const name of names) {
-    const entry = name === '@eslint/config-inspector'
-      ? path.join(root, 'node_modules/@eslint/config-inspector/bin.mjs')
-      : fileURLToPath(import.meta.resolve(name))
+    const entry = entries[name] ?? fileURLToPath(import.meta.resolve(name))
     assert.ok(existsSync(entry), name)
     const consumer = createRequire(entry)
     assert.equal(consumer.resolve('chokidar'), selected, name)

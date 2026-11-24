@@ -31,17 +31,16 @@ assert.ok(expected.length >= 20, 'Expected explicit Linux native package coverag
 
 const missing = []
 for (const [dependency, expectedVersion] of expected) {
-  const match = Object.entries(packages).find(
-    ([packagePath]) =>
-      packagePath === `node_modules/${dependency}` || packagePath.endsWith(`/node_modules/${dependency}`),
-  )
+  const rootBinding = packages[`node_modules/${dependency}`]
+  const frontendBinding = packages[`front-end/node_modules/${dependency}`] ?? rootBinding
 
-  if (!match || match[1].version !== expectedVersion)
+  if (frontendBinding?.version !== expectedVersion)
     missing.push(`${dependency}@${expectedVersion}`)
 
   const parentPath = [...parentPackages]
     .find(([prefix]) => dependency.startsWith(prefix))?.[1]
-  if (!parentPath || packages[parentPath]?.version !== expectedVersion) {
+  const parentBinding = parentPath && (packages[`${parentPath}/node_modules/${dependency}`] ?? rootBinding)
+  if (!parentPath || packages[parentPath]?.version !== expectedVersion || parentBinding?.version !== expectedVersion) {
     missing.push(
       `${dependency}@${expectedVersion} does not match ${parentPath || 'a reviewed parent package'}`,
     )

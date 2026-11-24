@@ -13,7 +13,8 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const require = createRequire(path.join(root, 'package.json'))
 
 test('the real router and scope walker consume current Ast-kit3 and Magic-string-ast2', async () => {
-  const router = createRequire(require.resolve('vue-router/vite'))
+  const frontend = createRequire(path.join(root, 'front-end/package.json'))
+  const router = createRequire(frontend.resolve('vue-router/vite'))
   const common = createRequire(router.resolve('@vue-macros/common'))
   const walker = createRequire(router.resolve('ast-walker-scope'))
   assert.equal(router.resolve('@vue-macros/common'), require.resolve('@vue-macros/common'))
