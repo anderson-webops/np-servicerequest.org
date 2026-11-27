@@ -66,8 +66,7 @@ jobs:
           bash scripts/prepare-unimport-source.sh
           npm ci --include=optional --strict-allow-scripts
           bash scripts/prepare-compiler-fixtures.sh
-          npm run audit:all
-          npm run audit:prod
+          npm run audit:release
           npm run audit:api
           npm audit signatures
           npm run validate

@@ -47,8 +47,7 @@ jobs:
 
       - name: Audit development and production dependencies
         run: |
-          npm run audit:all
-          npm run audit:prod
+          npm run audit:release
           npm run audit:api
           npm audit signatures
 
