@@ -64,8 +64,7 @@ jobs:
           npm ci --include=optional --strict-allow-scripts
           bash scripts/prepare-compiler-fixtures.sh
           npx --no-install playwright install --with-deps chromium
-          npm run audit
-          npm run audit:production
+          npm run audit:release
           npm run audit:signatures
           npm run verify:dependency-graph
           npm run verify:native-lock
@@ -140,8 +139,7 @@ jobs:
           bash scripts/prepare-unimport-source.sh
           npm ci --include=optional --strict-allow-scripts
           bash scripts/prepare-compiler-fixtures.sh
-          npm run audit
-          npm run audit:production
+          npm run audit:release
           npm run audit:signatures
           npm run verify:dependency-graph
           npm run verify:native-lock

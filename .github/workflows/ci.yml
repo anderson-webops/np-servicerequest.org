@@ -41,8 +41,7 @@ jobs:
 
       - name: Dependency and supply-chain gates
         run: |
-          npm run audit
-          npm run audit:production
+          npm run audit:release
           npm run audit:signatures
           npm run verify:dependency-graph
           npm run verify:native-lock

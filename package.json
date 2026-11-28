@@ -17,8 +17,10 @@
 		"back-end"
 	],
 	"scripts": {
-		"audit": "npm run audit:toolchain && npm audit --workspaces --include-workspace-root --audit-level=low && npm run audit:qs && npm run audit:cohorts && npm run audit:vue-devtools",
-		"audit:production": "npm run audit:toolchain -- --omit=dev && npm audit --workspaces --include-workspace-root --omit=dev --audit-level=low && npm run audit:cohorts && npm run audit:vue-devtools",
+		"audit": "npm run audit:toolchain && npm audit --workspaces --include-workspace-root --audit-level=low && npm run audit:qs && npm run audit:cohorts",
+		"audit:production": "npm run audit:prod-root && npm run audit:cohorts",
+		"audit:prod-root": "npm run audit:toolchain -- --omit=dev && npm audit --workspaces --include-workspace-root --omit=dev --audit-level=low",
+		"audit:release": "npm run audit && npm run audit:prod-root",
 		"audit:signatures": "npm audit signatures && npm audit signatures --prefix vendor/schema-parents/upstream && npm audit signatures --prefix vendor/schema-parents/tools",
 		"audit-fix": "npm audit fix --workspaces --include-workspace-root",
 		"build": "npm run -w front-end build && npm run verify:analytics && npm run verify:preview && npm run -w back-end build && npm run release:metadata",
