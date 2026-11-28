@@ -263,14 +263,8 @@
 		"glob": "14.0.6",
 		"minimatch": "11.0.9",
 		"esbuild": "^0.28.2",
-		"launch-editor": {
-			".": "2.14.2",
-			"shell-quote": "1.12.0"
-		},
-		"shell-quote": "1.12.0",
 		"@nuxt/devtools": {
-			".": "4.2.2",
-			"launch-editor": "2.14.2"
+			".": "4.2.2"
 		},
 		"@nuxt/devtools-kit": "4.2.2",
 		"@vueuse/nuxt": {
@@ -328,9 +322,7 @@
 		"serialize-javascript": "7.1.4",
 		"postcss": "$postcss",
 		"picomatch": "$picomatch",
-		"svgo": "4.1.0",
 		"tar": "7.5.23",
-		"valibot": "1.5.0",
 		"deepmerge": "$deepmerge",
 		"katex": "0.19.1",
 		"tinypool": "2.2.0",
