@@ -7,13 +7,28 @@ import Tinypool from 'tinypool'
 
 const requireBackend = createRequire(new URL('../back-end/package.json', import.meta.url))
 
-test('release audits include root tooling as well as application workspaces', async () => {
-  const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
-  for (const name of ['audit', 'audit:production']) {
-    assert.match(manifest.scripts[name], /--workspaces\b/)
-    assert.match(manifest.scripts[name], /--include-workspace-root\b/)
-    assert.match(manifest.scripts[name], /--audit-level=low\b/)
+test('release and standalone audits cover root tooling and application workspaces', async () => {
+  const { scripts } = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
+  function commands(name, ancestors = []) {
+    assert.ok(scripts[name] && !ancestors.includes(name), name)
+    return scripts[name].split(/\s+&&\s+/u).flatMap((command) => {
+      const alias = /^npm run ([\w:-]+)$/u.exec(command)?.[1]
+      if (alias && alias !== 'audit:toolchain')
+        return commands(alias, [...ancestors, name])
+      return [command]
+    })
   }
+  const full = commands('audit')
+  const production = commands('audit:production')
+  const release = commands('audit:release')
+  const workspace = 'npm audit --workspaces --include-workspace-root --audit-level=low'
+  const productionWorkspace = 'npm audit --workspaces --include-workspace-root --omit=dev --audit-level=low'
+  assert.ok(full.includes(workspace))
+  assert.ok(production.includes(productionWorkspace))
+  assert.ok(full.includes('npm run audit:toolchain'))
+  assert.ok(production.includes('npm run audit:toolchain -- --omit=dev'))
+  assert.deepEqual(new Set(release), new Set(full.concat(production)))
+  assert.equal(release.length, new Set(release).size)
 })
 
 test('mail generation preserves recipient domains across nested comments and quoted angle brackets', async () => {

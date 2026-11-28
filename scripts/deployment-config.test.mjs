@@ -139,8 +139,6 @@ test('each install selects the independently locked build profile instead of cha
   }
   assert.ok(prepare.indexOf('node scripts/build-toolchain.mjs --print-bin') < prepare.indexOf('npm ci --include=dev'))
   assert.match(prepare, /Build-tool caches must remain outside the prepared runtime/u)
-  assert.match(manifest.scripts.audit, /^npm run audit:toolchain &&/u)
-  assert.match(manifest.scripts['audit:production'], /^npm run audit:toolchain -- --omit=dev &&/u)
   assert.match(manifest.scripts.test, /test:build-toolchain/u)
   assert.match(manifest.scripts.test, /test:toolchain-package/u)
 })
