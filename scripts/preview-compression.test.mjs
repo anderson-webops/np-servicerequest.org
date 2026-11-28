@@ -20,7 +20,8 @@ test('the actual preview schema uses the qualified current validator and URI pro
   assert.equal(preview('ajv/package.json').version, '8.20.0+webops.2')
   const validator = createRequire(preview.resolve('ajv'))
   assert.equal(validator.resolve('fast-uri'), application.resolve('fast-uri'))
-  assert.equal(validator('fast-uri/package.json').version, '4.2.3')
+  const lockedUriProvider = application('./package-lock.json').packages['node_modules/fast-uri']
+  assert.equal(validator('fast-uri/package.json').version, lockedUriProvider.version)
   const { default: schema } = await import(pathToFileURL(preview.resolve('@zeit/schemas/deployment/config-static.js')))
   const Ajv = preview('ajv')
   const validate = new Ajv({ allowUnionTypes: true }).compile(schema)

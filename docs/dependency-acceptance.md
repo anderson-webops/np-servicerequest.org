@@ -112,7 +112,7 @@ application validation remain separate required gates.
 
 ## Framework bundler and configuration parents
 
-The active framework uses Vite 8.3.8, Rolldown 1.3.3 and c12 4.0.0-rc.4. The
+The active framework uses Vite 8.3.8, Rolldown 1.3.4 and c12 4.0.0-rc.4. The
 circular Nuxt 4.7 peers share the maintained Nuxt package. The inactive
 Nitro 3 adapter keeps its declared Rolldown 1.2.19 scope; the installed
 runtime uses Nitro 2.
